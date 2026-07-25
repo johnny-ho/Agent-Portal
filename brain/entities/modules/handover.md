@@ -28,7 +28,7 @@ status: stale
 
 ⚠️ **刪除時不可連 `handoverRecord` / `onHandoverSubmit` / `showHandoverModal` 一起清**——那是觸點 2 的線，仍在使用。
 
-### ⚠️ 發現（2026-07-25 刪除時實測）：ShiftHandoverModal 目前沒有觸發入口
+### 發現（2026-07-25 刪除時實測）：ShiftHandoverModal 原本沒有觸發入口（已補）
 
 原以為「Home header 的『發起交班』按鈕開啟 Modal」，實測**該按鈕所在的 `SectionHeader`（`SectionPage.jsx:403`）是死碼**——`src/` 內零引用，Home 頂端那條 header 早已由 `App.jsx` 自繪取代。故 `setShowHandoverModal(true)` **全專案無人呼叫**，Modal 進不去。此為刪除前既有狀態（在 `main` 上已如此），非本次刪除造成。
 
@@ -40,7 +40,7 @@ status: stale
 
 ```
 SOP「整理當班交接報告」（Seed 對話式建立，唯讀、零 LLM）
-      ↓ 排程每日 19:30 自動執行
+      ↓ 排程每班一次自動執行（15:30 / 23:30 / 07:30）
 產出 ──┬─→ Schedule 執行紀錄        ＝ 檔案櫃（可回溯所有班次、看有沒有跑失敗）
        └─→ Home 課佈告欄置頂公告     ＝ 今天這份（接班第一眼觸達）
               ↓
