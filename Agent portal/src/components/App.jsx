@@ -27,12 +27,6 @@ const NavIcons = {
       <path d="M2 10 L7 7 L12 5 L17 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" opacity="0.7"/>
     </svg>
   ),
-  handover: (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-      <path d="M3 10h14M13 6l4 4-4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.9"/>
-      <path d="M7 4l-4 4 4 4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" opacity="0.5"/>
-    </svg>
-  ),
   setting: (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
       <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -72,7 +66,6 @@ const NAV_BASE = [
   { key: 'tasks',      label: 'Task' },
   { key: 'chat',       label: 'AI' },
   { key: 'scheduling', label: 'Schedule' },
-  // { key: 'handover', label: 'Handover' }, // 隱藏：大老闆決議 2026-04-30
 ];
 const NAV_SEED = [
   { key: 'setting',   label: 'Setting' },
@@ -628,12 +621,6 @@ function App() {
               <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.name}</div>
             </div>
           )}
-          {nav === 'handover' && (
-            <div>
-              <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>班對班交班中心</div>
-              <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.name}</div>
-            </div>
-          )}
           {nav === 'tasks' && (
             <div>
               <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>任務管理</div>
@@ -699,7 +686,6 @@ function App() {
         {nav === 'apps'       && <AppCenterPage p={p} pinnedAppIds={pinnedAppIds} onTogglePin={handleTogglePin} functionTree={functionTree} legacyMode={legacyMode} />}
         {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} />}
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
-        {nav === 'handover'   && <HandoverPage p={p} onHandoverSubmit={handleHandoverSubmit} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}
         {nav === 'scheduling' && <SchedulingPage p={p} onAskAI={handleAskAI} expandRunReq={expandRunReq} />}

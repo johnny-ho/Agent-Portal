@@ -97,3 +97,13 @@ PO×AI 討論 codify graph 涵蓋率不足、需補 skill.md 彈性路徑。結�
 PO 補充實際開發中的 SOP 流程（對話式生成 → 試跑 → promote → dry run → 簽核 → 可被 agent 調用或設排程；執行時零 LLM，主場景是資料彙整如當班交接報告），並裁決三項：(1) **HandoverPage 廢除**，交班降級為一個 SOP 的排程產出——Schedule 內檢視（檔案櫃）＋ Home 佈告欄觸達（今天這份），`ShiftHandoverModal` 改為預填後人補判斷；(2) **寫入行為一律強制人工確認**，故不需擔心 agent 生成的 code 偷藏寫入，**把關永遠在 runtime**（收回前一版「移到 authoring time」的說法）；(3) code node **自由式 + sub graph 混用**，成熟行為做成標準元件避免錯用與重複試錯 → 帶出白話說明的標準／自訂標記、簽核只聚焦自訂部分、以及第二個飛輪（自訂 node → 標準元件，對應 widget-governance 的平台引力模型）。詞彙定案為 **知識／輔助判斷／SOP**。
 
 受影響頁面：`concepts/agent-skill-tiering.md`（大改重寫）、`entities/modules/handover.md`（改標 status: stale + 功能去向與刪除注意事項）、`concepts/antd-migration-plan.md`（Phase 6 縮為只剩 App.jsx）、`entities/modules/scheduling.md`（+ SOP 檔案櫃定位與排程暫停行為）、`entities/sitemap.md`（移除 Handover 節點、改寫第三股互動流）、`concepts/ecp-strategy.md`（切入點載體變更）、`open-questions.md`（W-2 解決）、`decisions.md`（+3 決議）、`index.md`。
+
+## [2026-07-25] decision | 三層模型改造 Step 1：HandoverPage 刪除
+
+依 [agent-skill-tiering](concepts/agent-skill-tiering.md) 開發第 1 步，刪 `HandoverPage.jsx`（1,011 行）＋ App.jsx 路由（`nav === 'handover'` header 區塊與頁面路由兩處）、`ICONS.handover`、NAV_BASE 已註解的 handover 項、build.py `JS_MODULES` 一列。build 通過：20 → 19 模組，655,248 → **592,297 bytes（−62,951，−9.6%）**。瀏覽器實測 Home / KPI / App / Task / AI / Schedule / Setting 全數正常渲染、零 runtime error（僅 Babel >500KB 的 deoptimise 提示）。`handoverRecord` / `onHandoverSubmit` / `showHandoverModal` 三者依交代保留未動。
+
+**發現（已回填 [handover](entities/modules/handover.md)）**：`ShiftHandoverModal` 的預期入口「Home header 發起交班按鈕」其實**進不去**——按鈕所在的 `SectionHeader`（`SectionPage.jsx:403`）是死碼，`src/` 內零引用（Home 頂端 header 由 App.jsx 自繪），`setShowHandoverModal(true)` 全專案無人呼叫。此為 `main` 上既有狀態，非本次刪除造成。以強制開啟的 probe build 驗證，**Modal → `handoverRecord` → `BulletinWidget` 置頂公告這條線本身完好**。→ 第 6 步（Home 接線）順路補入口：入口改為佈告欄那則 SOP 產出公告上的「補充交代事項」，`SectionHeader` 死碼可一併清。
+
+**環境註記**：本 session 的沙箱封鎖 unpkg / cdn.tailwindcss.com（CONNECT 403），產物直開會白畫面。瀏覽器實測改用 scratchpad harness：npm 裝同版 react/react-dom/dayjs/antd/@babel/standalone + @tailwindcss/browser，以 Playwright `page.route` 攔截 CDN 請求改餵本地檔（不動 `src/`、不動 shell.html）。
+
+受影響頁面：[entities/modules/handover.md](entities/modules/handover.md)、[concepts/antd-migration-plan.md](concepts/antd-migration-plan.md)、index.md。
