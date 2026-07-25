@@ -17,7 +17,7 @@ const SKILL_STAGE_CFG = {
 };
 
 /* 清單欄寬（Table columns 共用常數）*/
-const SK_COL_W = { stage: 104, importer: 112, date: 104, action: 232 };
+const SK_COL_W = { tier: 96, stage: 104, importer: 112, date: 104, action: 232 };
 
 /* ── 以下為純函式：不得呼叫 hooks（原檔誤呼叫 useTheme 已移除）── */
 
@@ -29,6 +29,24 @@ function getStageActionLabel(stage) {
     case 'pirun':     return '確認通過，升為 Production';
     default:          return null;
   }
+}
+
+/* 送簽前的硬條件（回傳擋下的原因，null = 可送）：
+   SOP —— 試跑第二層「每個數字怎麼算的」至少要展開過一次，避免簽核淪為蓋章
+   輔助判斷 —— 測試題必須全數通過（含系統自動出的負面題）
+   見 brain/concepts/agent-skill-tiering.md 風險 2 與「簽核驗收」 */
+function getSubmitGateReason(skill, calcOpened) {
+  if (skill.stage !== 'testing') return null;
+  if (skill.tier === 'sop' && skill.dryRun && !calcOpened) {
+    return '請先展開試跑結果的「每個數字怎麼算的」，確認過再送審批';
+  }
+  if (skill.tier === 'guided') {
+    var cases  = skill.evalCases || [];
+    var passed = cases.filter(function(c) { return c.result === 'pass'; }).length;
+    if (cases.length === 0) return '尚未建立測試題，無法送審批';
+    if (passed < cases.length) return '測試題需全數通過才能送審批（目前 ' + passed + ' / ' + cases.length + '）';
+  }
+  return null;
 }
 
 function getDescription(skill) {
@@ -317,11 +335,17 @@ function OperationStepsSection({ skill }) {
         </div>
       )}
 
-      {/* 執行步驟標題 */}
-      <SkillSectionHeader icon="📋" title="Skill 執行步驟" badge={steps.length > 0 ? steps.length + ' 個步驟' : null} />
+      {/* 執行步驟標題（輔助判斷沒有固定步驟，只有指引）*/}
+      {!(skill.tier === 'guided' && steps.length === 0) && (
+        <SkillSectionHeader
+          icon="📋"
+          title={skill.tier === 'guided' ? '判斷指引' : 'Skill 執行步驟'}
+          badge={steps.length > 0 ? steps.length + ' 個步驟' : null}
+        />
+      )}
 
-      {/* 步驟為空時 */}
-      {steps.length === 0 && (
+      {/* 步驟為空時（輔助判斷不顯示，因為它本來就沒有固定步驟）*/}
+      {steps.length === 0 && skill.tier !== 'guided' && (
         <antd.Empty
           image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
           description={<span style={{ fontSize: fz(13), color: C.textMuted }}>尚無執行步驟內容</span>}
@@ -475,6 +499,439 @@ function ManagementSection({ skill, p, signingSubmitted, setSigningSubmitted }) 
 }
 
 /* ════════════════════════════════════════
+   TierSummaryBar — 類型是什麼、能不能排程
+   ════════════════════════════════════════ */
+function TierSummaryBar({ skill }) {
+  var { C, fz } = useTheme();
+  var cfg = SKILL_TIER_CFG[skill.tier] || SKILL_TIER_CFG.knowledge;
+  return (
+    <div style={{
+      marginBottom: 24, padding: 16, borderRadius: 8,
+      background: cfg.bg, border: '1px solid ' + cfg.border,
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SkillTierTag tier={skill.tier} />
+        <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>{cfg.oneLiner}</span>
+      </div>
+      <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.6 }}>{cfg.detail}</div>
+      {skill.tier === 'sop' && skill.hasWrite && (
+        <div style={{ fontSize: fz(12), color: '#F59E0B', fontWeight: 600 }}>
+          ⚠️ 本 SOP 含 {(skill.plainSteps || []).filter(function(s) { return s.needsConfirm; }).length} 個需確認步驟，執行到那幾步會停下來等人。
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   PlainStepsSection — 白話步驟（SOP 型）
+   白話說明是簽核契約，code 只是實作。
+   標出「標準元件」與「本次自訂」，讓簽核只需聚焦自訂的那幾步。
+   ════════════════════════════════════════ */
+function PlainStepsSection({ skill }) {
+  var { C, fz } = useTheme();
+  var steps = skill.plainSteps || [];
+  var customCnt = steps.filter(function(s) { return s.source === 'custom'; }).length;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader
+        icon="📋"
+        title="白話步驟"
+        badge={steps.length + ' 步 · 其中 ' + customCnt + ' 步為本次自訂'}
+      />
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+        標準元件已經驗證過，簽核時只需要重點看「本次自訂」的步驟。
+      </div>
+      {steps.length === 0 && (
+        <antd.Empty
+          image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
+          description={<span style={{ fontSize: fz(13), color: C.textMuted }}>尚無白話步驟</span>}
+          style={{ padding: 24, background: C.bgPanel, borderRadius: 8, border: '1px solid ' + C.border, margin: 0 }}
+        />
+      )}
+      {steps.length > 0 && (
+        <antd.Timeline
+          items={steps.map(function(step) {
+            var isCustom = step.source === 'custom';
+            return {
+              key: step.num,
+              dot: (
+                <span style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: isCustom ? '#F59E0B' : '#2563EB', color: '#FFFFFF',
+                  fontSize: fz(12), fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{step.num}</span>
+              ),
+              children: (
+                <div style={{ background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: fz(14), color: C.text, fontWeight: 500 }}>{step.label}</span>
+                    {isCustom
+                      ? <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#F59E0B', background: 'rgba(245,158,11,0.08)' }}>✎ 本次自訂</antd.Tag>
+                      : <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#2563EB', background: 'rgba(37,99,235,0.08)' }}>📦 標準元件 {step.version}</antd.Tag>
+                    }
+                    {step.needsConfirm && (
+                      <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>需人工確認</antd.Tag>
+                    )}
+                  </div>
+                  {(step.note || step.component) && (
+                    <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 8, lineHeight: 1.6 }}>
+                      {step.note || ('使用標準元件「' + step.component + '」' + step.version)}
+                    </div>
+                  )}
+                </div>
+              ),
+            };
+          })}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   ToolAuthSection — 會碰到哪些系統、讀還是寫
+
+   體驗原則：唯讀是預設且廉價；寫入要有摩擦。
+   輔助判斷的寫入區「看得到但鎖住」——不能隱藏，
+   Seed 看見它才知道邊界在哪。
+   ════════════════════════════════════════ */
+function ToolAuthSection({ skill }) {
+  var { C, fz } = useTheme();
+  var tools     = skill.tools || [];
+  var readOnes  = tools.filter(function(t) { return t.mode === 'read'; });
+  var writeOnes = tools.filter(function(t) { return t.mode === 'write'; });
+  var isGuided  = skill.tier === 'guided';
+
+  function toolRow(t, locked) {
+    return (
+      <div key={t.name} style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 16px', borderBottom: '1px solid ' + C.border,
+        opacity: locked ? 0.6 : 1,
+      }}>
+        <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500, width: 128, flexShrink: 0 }}>{t.label}</span>
+        <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+        <span style={{ fontSize: fz(11), color: C.textMuted, flexShrink: 0 }}>{t.system}</span>
+        <antd.Tag bordered={false} style={{
+          marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), fontWeight: 600,
+          color: t.mode === 'read' ? '#22C55E' : '#EF4444',
+          background: t.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+        }}>{t.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="🔑" title="會碰到哪些系統" badge={tools.length > 0 ? (tools.length + ' 項') : null} />
+
+      {/* 唯讀區 */}
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ padding: '8px 16px', background: C.bgPanel, fontSize: fz(12), fontWeight: 600, color: C.textSub }}>
+          只讀取資料（不會改到任何東西）
+        </div>
+        {readOnes.length === 0
+          ? <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>
+              {skill.tier === 'knowledge' ? '本類型只查課上的文件內容，不會連到任何系統。' : '尚未授權任何讀取項目。'}
+            </div>
+          : readOnes.map(function(t) { return toolRow(t, false); })
+        }
+      </div>
+
+      {/* 寫入區：輔助判斷鎖住但不隱藏 */}
+      <div style={{
+        border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden',
+        background: isGuided ? C.bgPanel : 'transparent',
+      }}>
+        <div style={{ padding: '8px 16px', background: C.bgPanel, fontSize: fz(12), fontWeight: 600, color: C.textSub, display: 'flex', alignItems: 'center', gap: 8 }}>
+          會異動系統的動作
+          {isGuided && <span style={{ fontSize: fz(12) }}>🔒</span>}
+        </div>
+        {isGuided && (
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted, lineHeight: 1.7 }}>
+            「輔助判斷」不能異動系統，這一區已鎖定。<br />
+            需要 AI 代為執行動作，請改建一個 <span style={{ fontWeight: 600, color: C.textSub }}>SOP</span>：SOP 的每個異動步驟都會停下來等人確認。
+          </div>
+        )}
+        {!isGuided && writeOnes.length === 0 && (
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本 Skill 不會異動任何系統。</div>
+        )}
+        {!isGuided && writeOnes.length > 0 && (
+          <React.Fragment>
+            {writeOnes.map(function(t) { return toolRow(t, false); })}
+            <div style={{ padding: '8px 16px', fontSize: fz(12), color: '#F59E0B', lineHeight: 1.6 }}>
+              執行到這些步驟一律停下來等人確認，排程也一樣。
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   DryRunSection — 試跑結果三層（SOP 型）
+
+   1 產出 / 2 中間計算 / 3 資料來源。
+   第 2、3 層不能省：輸出看起來對，不代表來源對。
+   ════════════════════════════════════════ */
+function DryRunOutput({ output }) {
+  var { C, fz } = useTheme();
+  if (!output) return null;
+  return (
+    <div>
+      <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>{output.title}</div>
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
+        {output.shiftLabel ? output.shiftLabel + ' · ' : ''}{output.generatedAt}
+      </div>
+      {(output.metrics || []).length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          {output.metrics.map(function(m) {
+            return (
+              <div key={m.label} style={{ flex: '1 1 144px', border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg }}>
+                <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 8 }}>{m.label}</div>
+                <div style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{m.value}<span style={{ fontSize: fz(12), color: C.textMuted, marginLeft: 4 }}>{m.unit}</span></div>
+                {m.note && <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8 }}>{m.note}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {[['本班課況', output.situation], ['待交接事項', output.pending]].map(function(pair) {
+        if (!pair[1]) return null;
+        return (
+          <div key={pair[0]} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{pair[0]}</div>
+            <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, whiteSpace: 'pre-wrap', background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16 }}>{pair[1]}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DryRunSection({ skill, onOpenCalc }) {
+  var { C, fz } = useTheme();
+  var dr = skill.dryRun;
+  if (!dr) return null;
+
+  var items = [
+    {
+      key: 'output',
+      label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>1 · 產出長什麼樣</span>,
+      children: <DryRunOutput output={dr.output} />,
+    },
+    {
+      key: 'calc',
+      label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>2 · 每個數字怎麼算的</span>,
+      children: (
+        <antd.List
+          size="small"
+          dataSource={dr.calculations || []}
+          renderItem={function(c) {
+            return (
+              <antd.List.Item style={{ alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>{c.label}</span>
+                    <antd.Tag bordered={false} style={{
+                      marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600,
+                      color: c.custom ? '#F59E0B' : '#2563EB',
+                      background: c.custom ? 'rgba(245,158,11,0.08)' : 'rgba(37,99,235,0.08)',
+                    }}>步驟 {c.stepNum}{c.custom ? ' · 自訂' : ' · 標準'}</antd.Tag>
+                  </div>
+                  <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.7 }}>算法：{c.how}</div>
+                  <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>資料：{c.from}</div>
+                </div>
+              </antd.List.Item>
+            );
+          }}
+        />
+      ),
+    },
+    {
+      key: 'src',
+      label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>3 · 資料是從哪裡取的</span>,
+      children: (
+        <antd.List
+          size="small"
+          dataSource={dr.sources || []}
+          renderItem={function(s) {
+            return (
+              <antd.List.Item style={{ gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>{s.system}</div>
+                  <div style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>{s.tool}</div>
+                  <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 4 }}>{s.note}</div>
+                </div>
+                <antd.Space size={8}>
+                  <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#22C55E', background: 'rgba(34,197,94,0.08)' }}>唯讀</antd.Tag>
+                  <span style={{ fontSize: fz(12), color: C.textSub }}>取 {s.rows} 筆</span>
+                </antd.Space>
+              </antd.List.Item>
+            );
+          }}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="🧪" title="試跑結果" badge={dr.ranAt} />
+      {dr.diffNote && (
+        <antd.Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>與{dr.comparedWith}比對</span>}
+          description={<span style={{ fontSize: fz(12), lineHeight: 1.6 }}>{dr.diffNote}</span>}
+        />
+      )}
+      <antd.Collapse
+        defaultActiveKey={['output']}
+        items={items}
+        size="small"
+        onChange={function(keys) {
+          /* 簽核最常見的失敗是「看起來對就簽」，所以第二層至少要被打開過一次 */
+          if (keys.indexOf('calc') !== -1 && onOpenCalc) onOpenCalc();
+        }}
+      />
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   EvalCasesSection — 測試題（輔助判斷型）
+
+   同一份指引換個問法就走不同路，dry run 沒有意義，
+   改用固定測試題。Seed 會寫「該做什麼」，不會想到寫「不該做什麼」，
+   所以負面題由系統依適用範圍與類型自動出，且不可刪。
+   ════════════════════════════════════════ */
+function EvalCasesSection({ skill }) {
+  var { C, fz } = useTheme();
+  var cases    = skill.evalCases || [];
+  var passCnt  = cases.filter(function(c) { return c.result === 'pass'; }).length;
+  var allPass  = cases.length > 0 && passCnt === cases.length;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="✅" title="測試題" badge={passCnt + ' / ' + cases.length + ' 通過'} />
+      {!allPass && cases.length > 0 && (
+        <antd.Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>測試題未全數通過，還不能送簽</span>}
+        />
+      )}
+      <antd.List
+        bordered
+        size="small"
+        dataSource={cases}
+        locale={{ emptyText: <span style={{ fontSize: fz(13), color: C.textMuted }}>尚無測試題</span> }}
+        renderItem={function(c) {
+          var isPass = c.result === 'pass';
+          return (
+            <antd.List.Item style={{ alignItems: 'flex-start', gap: 8 }}>
+              <antd.Tag bordered={false} style={{
+                marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), fontWeight: 700,
+                color: isPass ? '#22C55E' : '#F97316',
+                background: isPass ? 'rgba(34,197,94,0.08)' : 'rgba(249,115,22,0.08)',
+              }}>{isPass ? 'PASS' : 'FAIL'}</antd.Tag>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, marginBottom: 4 }}>「{c.input}」</div>
+                <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.6 }}>預期：{c.expect}</div>
+              </div>
+              {c.origin === 'system'
+                ? <antd.Tooltip title="系統依適用範圍與類型自動出題，不可刪除">
+                    <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>🔒 系統出題</antd.Tag>
+                  </antd.Tooltip>
+                : <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>課內出題</antd.Tag>
+              }
+            </antd.List.Item>
+          );
+        }}
+      />
+      <antd.Button size="small" type="dashed" style={{ marginTop: 16 }}>＋ 新增測試題</antd.Button>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   TraceSection — 一次實際互動的紀錄（輔助判斷型）
+
+   「已拒絕」那一行比任何架構圖都能說明這套東西在幹嘛，
+   所以它必須看得到。
+   ════════════════════════════════════════ */
+function TraceSection({ skill }) {
+  var { C, fz } = useTheme();
+  var tr = skill.traceSample;
+  if (!tr) return null;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="🧾" title="最近一次的處理紀錄" badge={tr.askedAt} />
+      <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, marginBottom: 16, background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 16px' }}>
+        {tr.askedBy}：「{tr.question}」
+      </div>
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+        {tr.steps.map(function(s, i) {
+          var isDenied = s.kind === 'tool' && !s.allowed;
+          return (
+            <div key={i} style={{
+              padding: 16,
+              borderBottom: i < tr.steps.length - 1 ? '1px solid ' + C.border : 'none',
+              background: isDenied ? 'rgba(239,68,68,0.04)' : 'transparent',
+            }}>
+              {s.kind === 'tool' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: fz(14), fontWeight: 700, color: s.allowed ? '#22C55E' : '#EF4444', width: 16 }}>{s.allowed ? '✓' : '✗'}</span>
+                  <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>{s.label}</span>
+                  <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>{s.tool}</span>
+                  <antd.Tag bordered={false} style={{
+                    marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+                    color: s.mode === 'read' ? '#22C55E' : '#EF4444',
+                    background: s.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                  }}>{s.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
+                  {!s.allowed && (
+                    <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>已拒絕</antd.Tag>
+                  )}
+                </div>
+              )}
+              {s.kind === 'match' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: fz(14), fontWeight: 700, color: '#2563EB', width: 16 }}>◆</span>
+                  <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>比對適用範圍</span>
+                </div>
+              )}
+              {s.kind === 'answer' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: fz(14), fontWeight: 700, color: '#2563EB', width: 16 }}>💬</span>
+                  <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>回覆給提問者</span>
+                </div>
+              )}
+              <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, paddingLeft: 24 }}>
+                {s.text || s.result}
+              </div>
+              {s.reason && (
+                <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, paddingLeft: 24, marginTop: 4 }}>
+                  原因：{s.reason}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
    SkillDetailModal — 主彈窗（AntD Modal）
    ════════════════════════════════════════ */
 function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
@@ -484,7 +941,10 @@ function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
   var [editSource, setEditSource]             = React.useState(skill.sourceKM || '');
   var [editTags, setEditTags]                 = React.useState(skill.tags || []);
   var [signingSubmitted, setSigningSubmitted] = React.useState(skill.submittedToSigning || false);
+  var [calcOpened, setCalcOpened]             = React.useState(false);
   var actionLabel = getStageActionLabel(skill.stage);
+
+  var gateReason = getSubmitGateReason(skill, calcOpened);
 
   function handleSave() {
     onSave(Object.assign({}, skill, { title: editTitle.trim(), sourceKM: editSource.trim(), tags: editTags }));
@@ -529,7 +989,9 @@ function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
         : <React.Fragment>
             <antd.Button onClick={function() { setEditMode(true); }}>✎ 編輯</antd.Button>
             {actionLabel && (
-              <antd.Button type="primary" onClick={onAdvance}>▶ {actionLabel}</antd.Button>
+              <antd.Tooltip title={gateReason || ''}>
+                <antd.Button type="primary" onClick={onAdvance} disabled={!!gateReason}>▶ {actionLabel}</antd.Button>
+              </antd.Tooltip>
             )}
           </React.Fragment>
       }
@@ -573,8 +1035,22 @@ function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
           </div>
         )}
 
-        {/* 操作步驟 */}
-        <OperationStepsSection skill={skill} />
+        {/* 類型：這是什麼、能不能排程 */}
+        <TierSummaryBar skill={skill} />
+
+        {/* 內容依類型分岔：SOP 看白話步驟，知識／輔助判斷看指引內容 */}
+        {skill.tier === 'sop'
+          ? <PlainStepsSection skill={skill} />
+          : <OperationStepsSection skill={skill} />
+        }
+
+        {/* 會碰到哪些系統、讀還是寫 */}
+        <ToolAuthSection skill={skill} />
+
+        {/* SOP：試跑三層；輔助判斷：測試題 + 處理紀錄 */}
+        {skill.tier === 'sop'    && <DryRunSection skill={skill} onOpenCalc={function() { setCalcOpened(true); }} />}
+        {skill.tier === 'guided' && <EvalCasesSection skill={skill} />}
+        {skill.tier === 'guided' && <TraceSection skill={skill} />}
 
         {/* 管理狀態 */}
         <ManagementSection
@@ -648,6 +1124,10 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
 
   return [
     {
+      title: '類型', dataIndex: 'tier', key: 'tier', width: SK_COL_W.tier,
+      render: function(v) { return <SkillTierTag tier={v} />; },
+    },
+    {
       title: '狀態', dataIndex: 'stage', key: 'stage', width: SK_COL_W.stage,
       render: function(v) { return <StatusTag stage={v} />; },
     },
@@ -684,6 +1164,8 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
       render: function(_, r) {
         var actionLabel = getStageActionLabel(r.stage);
         var cfg = SKILL_STAGE_CFG[r.stage];
+        /* 清單上的推進鈕同樣受送簽條件約束；SOP 需先進詳情看過試跑第二層 */
+        var gate = getSubmitGateReason(r, false);
         return (
           <antd.Space size={8} onClick={function(e) { e.stopPropagation(); }}>
             <antd.Popconfirm
@@ -697,7 +1179,9 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
             </antd.Popconfirm>
             <antd.Button size="small" title="編輯" onClick={function() { onOpen(r); }}>✎</antd.Button>
             {actionLabel && (
-              <antd.Button size="small" type="primary" onClick={function() { onAdvance(r.id); }}>▶ {cfg.label}</antd.Button>
+              <antd.Tooltip title={gate || ''}>
+                <antd.Button size="small" type="primary" disabled={!!gate} onClick={function() { onAdvance(r.id); }}>▶ {cfg.label}</antd.Button>
+              </antd.Tooltip>
             )}
           </antd.Space>
         );
@@ -712,6 +1196,7 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
 function SOPManagementPage({ p, onBack }) {
   var { C, fz } = useTheme();
   var [filter, setFilter]           = React.useState('all');
+  var [tierFilter, setTierFilter]   = React.useState('all');
   var [skills, setSkills]           = React.useState(p.knowledge.sopManagement || []);
   var [showImport, setShowImport]   = React.useState(false);
   var [selectedSkill, setSelected]  = React.useState(null);
@@ -750,6 +1235,11 @@ function SOPManagementPage({ p, onBack }) {
       importedBy: p.user.name,
       stage: 'draft',
       tags: ['新引入'],
+      tier: 'knowledge',
+      tools: [],
+      hasWrite: false,
+      scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+      consumedBy: { calledByAgent: false, scheduleId: null },
       ragChunks: [
         { id: 'c1', label: 'AI 解析中', content: '正在將 Confluence 頁面內容轉換為知識內容，請稍候…' },
       ],
@@ -770,6 +1260,7 @@ function SOPManagementPage({ p, onBack }) {
 
   var displayed = skills
     .filter(function(s) { return filter === 'all' || s.stage === filter; })
+    .filter(function(s) { return tierFilter === 'all' || s.tier === tierFilter; })
     .filter(function(s) {
       if (!searchQuery.trim()) return true;
       var q = searchQuery.toLowerCase();
@@ -801,6 +1292,14 @@ function SOPManagementPage({ p, onBack }) {
   var stageOptions = [{ value: 'all', label: stageLabel('全部', skills.length, filter === 'all') }].concat(
     SKILL_STAGES.map(function(s) {
       return { value: s, label: stageLabel(SKILL_STAGE_CFG[s].label, counts[s] || 0, filter === s) };
+    })
+  );
+
+  var tierCounts = {};
+  SKILL_TIERS.forEach(function(t) { tierCounts[t] = skills.filter(function(x) { return x.tier === t; }).length; });
+  var tierOptions = [{ value: 'all', label: stageLabel('全部類型', skills.length, tierFilter === 'all') }].concat(
+    SKILL_TIERS.map(function(t) {
+      return { value: t, label: stageLabel(SKILL_TIER_CFG[t].label, tierCounts[t] || 0, tierFilter === t) };
     })
   );
 
@@ -844,17 +1343,27 @@ function SOPManagementPage({ p, onBack }) {
         />
       </div>
 
-      {/* Stage filter → Segmented（選中背景 #2563EB 依 guideline，以巢狀 ConfigProvider 侷限於本頁）*/}
-      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
-        <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+      {/* 類型 / 階段 filter → Segmented（選中背景 #2563EB 依 guideline，以巢狀 ConfigProvider 侷限於本頁）*/}
+      <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
+          <span style={toolLabel}>類型</span>
+          <antd.Segmented
+            size="small"
+            value={tierFilter}
+            onChange={setTierFilter}
+            options={tierOptions}
+          />
+        </div>
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
+          <span style={toolLabel}>階段</span>
           <antd.Segmented
             size="small"
             value={filter}
             onChange={setFilter}
             options={stageOptions}
           />
-        </antd.ConfigProvider>
-      </div>
+        </div>
+      </antd.ConfigProvider>
 
       {/* Skill List → Table */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 16px' }} className="scrollbar-thin">
