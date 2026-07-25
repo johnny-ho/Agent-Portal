@@ -1,25 +1,65 @@
 ---
 type: entity
-title: 交班中心（隱藏）
-description: 班對班的結構化交班流程 — 戰略切入點功能，已完成 Sprint 1+2 但不掛主 Nav
-tags: [module, handover]
-updated: 2026-07-11
-sources: [PRODUCT_BASELINE.md §13.2, §13.5, scrum_teaming.md O3]
-status: current
+title: 交班中心（已廢除）
+description: 獨立交班模組於 2026-07-25 決議廢除 — 交班降級為一個 SOP 的排程產出，功能去向見本頁
+tags: [module, handover, deprecated]
+updated: 2026-07-25
+sources: [PO 決議 2026-07-25, PRODUCT_BASELINE.md §13.2, §13.5]
+status: stale
 ---
 
-# 交班中心（Sprint 1 + 2，Nav 隱藏）
+# 交班中心（❌ 已廢除，2026-07-25）
 
-**戰略地位**：整個 Portal 的切入點功能（[ecp-strategy](../../concepts/ecp-strategy.md)）——對老手無侵入、天然驅動跨系統整合、成效可量化。⚠️ 弔詭之處：戰略上最重要，Nav 上卻隱藏（功能保留），值得在 roadmap 討論時追問定位。
+> **PO 決議（2026-07-25）**：`HandoverPage` 未來不會存在，直接刪除。Schedule 的產物最終在 **Schedule 內檢視**，而非獨立的 handover page。
 
-## 核心設計
+**這個決定刪的是模組，不是功能。** 交班從「一個模組」降級為「**一個 SOP 的排程產出 + 既有觸點**」——本來就不該為一份報表開一個模組。
 
-- **班對班，不是人對人**：交接單位是班；全頁面設計（不用 Modal），標題如「日班 → 小夜班」。三班制：日（08–16）/ 小夜（16–00）/ 大夜（00–08）
-- 交班內容依課別差異化（機台事件 EE only、製程事件 PE only、產線事件 MFG only；KPI / Case / 交辦三課共通）
-- **Case Center 五欄格式不可簡化**：問題描述 / 已做檢查 / 檢查結果 / 已做處置 / 後續動作
-- Sprint 1：4 階段狀態機、區塊獨立確認、進度條、重新發起。Sprint 2：歷史記錄 tab（雙欄、搜尋、班別 filter、時間線）
-- Dashboard 整合：`handoverRecord` 提升至 App 層，送出後即時置頂於課佈告欄
+## 原設計（保留備查）
 
-## 缺口
+班對班（不是人對人）的結構化交班，全頁面設計，三班制（日 08–16 / 小夜 16–00 / 大夜 00–08）。交班內容依課別差異化（機台事件 EE only、製程事件 PE only、產線事件 MFG only；KPI / Case / 交辦三課共通）。**Case Center 五欄格式不可簡化**：問題描述 / 已做檢查 / 檢查結果 / 已做處置 / 後續動作。Sprint 1 四階段狀態機、區塊獨立確認、進度條；Sprint 2 歷史記錄 tab。Nav 自 2026-04-30 大老闆決議起即隱藏。
 
-歷史持久化為 mock（KR3.1 目標 2026-07-31 前完成，**時程緊迫**）；bulletin 整合後端同期。
+## 實際盤點：交班有三個觸點，只刪第一個
+
+| # | 位置 | 處置 |
+|---|---|---|
+| 1 | `HandoverPage.jsx`（62KB / 1,011 行，獨立頁、Nav 隱藏；App.jsx:631、702 兩處路由） | **刪除** |
+| 2 | `ShiftHandoverModal`（`SectionPage.jsx:1874`，Home header 按鈕開啟）→ 提交後經 `handoverRecord`（App 層 state）進 `BulletinWidget` 成置頂公告 `type:'handover'` | **保留並換角色** |
+| 3 | ChatPage 的「準備交班摘要」quick prompt（三 persona 皆有） | 保留 |
+
+⚠️ **刪除時不可連 `handoverRecord` / `onHandoverSubmit` / `showHandoverModal` 一起清**——那是觸點 2 的線，仍在使用。
+
+## 新的交班樣貌
+
+```
+SOP「整理當班交接報告」（Seed 對話式建立，唯讀、零 LLM）
+      ↓ 排程每日 19:30 自動執行
+產出 ──┬─→ Schedule 執行紀錄        ＝ 檔案櫃（可回溯所有班次、看有沒有跑失敗）
+       └─→ Home 課佈告欄置頂公告     ＝ 今天這份（接班第一眼觸達）
+              ↓
+        ShiftHandoverModal 開啟時已預填 → 人補判斷與交代事項 → 送出
+```
+
+### 為什麼需要兩個出口：檢視 ≠ 觸達
+
+Schedule 在 Nav 第 6 位（最後一個），而交班是「開班第一眼」的事——那是 [overview](../../overview.md) 的核心價值主張。**沒有人接班會先去點 Schedule。**
+
+- **Schedule = 檔案櫃**：回溯所有班次的產出、確認排程有沒有失敗
+- **Home 佈告欄 = 今天這份**：第一眼觸達。這條路**已經存在**（`SectionPage.jsx:1066`、`2167–2175`），原本由人填 Modal 產生，改由 SOP 產出填即可，不需新設計
+
+### `ShiftHandoverModal` 換角色
+
+| | 原本 | 之後 |
+|---|---|---|
+| 開啟時 | 空白表單，人從零填 | **SOP 已產出的資料彙整預填好** |
+| 人要做什麼 | 全部自己寫 | 補判斷與交代事項 |
+
+比純自動更好，且正好是 HITL 的體現：**數字機器算，判斷人給**（[design-principles](../../concepts/design-principles.md) 第 4 條）。
+
+## 對其他頁面的影響
+
+- **[antd-migration-plan](../../concepts/antd-migration-plan.md)**：Phase 6 原為 HandoverPage(1,011) + App.jsx(634)，現**只剩 App.jsx**，淨省 1,011 行不必遷移
+- **[ecp-strategy](../../concepts/ecp-strategy.md)**：「值班交接是戰略切入點」的定位**不變**，但載體從獨立模組改為 SOP 產出
+- **[sitemap](../sitemap.md)**：產品地圖移除 Handover 節點；第三股互動流改寫
+- **[open-questions](../../open-questions.md)**：W-2（交班何時恢復主 Nav）→ **已解決：不恢復，廢除**
+- **[scheduling](scheduling.md)**：執行紀錄需能展示產出物本身，不只步驟
+- **[agent-skill-tiering](../../concepts/agent-skill-tiering.md)**：交接報告是 SOP 型的旗艦範例（唯讀、可排程、零 LLM）

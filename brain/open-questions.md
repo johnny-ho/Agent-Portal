@@ -34,7 +34,7 @@ status: current
 | # | 問題 | 來源 |
 |---|------|------|
 | W-1 | **入口權限 Gate 與 Setting 課內權限管理的關係未整合**：二元 gate（有/無）與三角色（Seed/Member/Viewer）如何銜接？OQ-5（AD/LDAP）也相關 | [權限 Gate backlog](sources/backlog-access-permission-gate.md) |
-| W-2 | 交班中心戰略上是切入點、Nav 上卻隱藏 — 何時恢復主 Nav？ | [handover](entities/modules/handover.md) |
+| ~~W-2~~ | ~~交班中心戰略上是切入點、Nav 上卻隱藏 — 何時恢復主 Nav？~~ **✅ 已解決（2026-07-25）：不恢復，廢除**。交班降級為一個 SOP 的排程產出，在 Schedule 檢視＋Home 佈告欄觸達 | [handover](entities/modules/handover.md) |
 | W-3 | scrum_teaming 仍為草稿且未反映 v3.8/v3.9 — 需 PO 確認 + 更新 | [scrum-teaming](sources/scrum-teaming.md) |
 | W-4 | 2026-07-25 OKR 中期檢核在即，多個 KR 目標日為 2026-07-31（KB 掛 Nav、交班持久化、Widget Contract v1、Must-be-zero）— 現況全 mock，達成風險高 | [teams](entities/teams.md) |
 | W-5 | Teams 通知真實整合機制未定（Incoming Webhook vs Graph API、租戶授權、逐則推送頻率上限）— v1 僅做設定 UI | [notification](entities/modules/notification.md) |

@@ -22,7 +22,6 @@ flowchart TD
     Shell --> AI["5 AI Chat"]
     Shell --> S["6 Schedule 排程中心"]
     Shell --> ST["⚙ Setting（底部）"]
-    Shell -.-> HO["交班中心（隱藏）"]
     Shell -.-> KB["Knowledge Base（未掛）"]
 
     H --> H1["Section Zone（Seed 配置）：佈告欄 / Tool Status / Case / Lot Hold / KPI Summary / 課的應用"]
@@ -32,10 +31,11 @@ flowchart TD
     A --> A1["應用目錄 / 個人釘選(≤20) / Function Tree"]
     T --> T1["成員總覽 / 快速派工 / 列表+Drawer / 歷史7天"]
     AI --> AI1["課上下文對話 / 歷史 / Context Badge"]
-    S --> S1["排程清單 / 執行紀錄 / HITL Banner"]
+    S --> S1["排程清單 / 執行紀錄+產出物 / HITL Banner"]
     ST --> ST1["Personal 區(全員) / Section 七 tabs(Seed) / IT 區(IT Admin)"]
-    HO --> HO1["本班交班(4 階段) / 歷史記錄"]
 ```
+
+> **2026-07-25**：交班中心已廢除（PO 決議），節點自地圖移除。交班改為一個 SOP 的排程產出，在 Schedule 檢視、Home 佈告欄觸達，見 [handover](modules/handover.md)。
 
 ## 2. 堆疊模型（誰疊在誰上面）
 
@@ -55,6 +55,6 @@ flowchart TD
 
 **② Ask AI 匯流（四處 → AI Chat）**：Priority Feed 卡片（帶 Task context）、KPI toolbar（帶報表定位）、AmbientBar（課上下文快問）、Schedule 延伸討論——一律開新對話 + Context Badge，規範見 [ai-chat](modules/ai-chat.md)。
 
-**③ 任務／交班寫入流**：Task 派工 → 成員的 My Tasks 面板；交班中心送出 → `handoverRecord`（App 層）→ Home 課佈告欄置頂 + 未讀高亮。這是「資料反向流回 Home」的兩條路。
+**③ 任務／交班寫入流**：Task 派工 → 成員的 My Tasks 面板；SOP「整理當班交接報告」排程產出 → `handoverRecord`（App 層）→ Home 課佈告欄置頂 + 未讀高亮（同時進 Schedule 執行紀錄存查），`ShiftHandoverModal` 開啟時已預填、人補判斷後送出。這是「資料反向流回 Home」的兩條路。
 
 **觀察**：Home 是所有流的匯聚點（① 的目的地、② 的起點、③ 的終點），符合「工作站」定位；AI Chat 是唯一的純匯入 hub。任何新功能規劃時先問：它接到哪股流？三股都接不上的功能要質疑其必要性。

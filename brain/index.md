@@ -33,7 +33,7 @@
 | [task-management](entities/modules/task-management.md) | 課長派工；P1 缺口 AI 自動標記；AntD Phase 2 已遷移 | 4 |
 | [ai-chat](entities/modules/ai-chat.md) | 被動查詢原則 + 四個 Ask AI 入口；AntD Phase 5 已遷移 | 5 |
 | [scheduling](entities/modules/scheduling.md) | 唯一 AI 主動場景，HITL 三重約束；AntD Phase 4 已遷移 | 6 |
-| [handover](entities/modules/handover.md) | 戰略切入點；班對班交接（Nav 隱藏） | — |
+| [handover](entities/modules/handover.md) | ❌ **已廢除（2026-07-25）**；交班改為 SOP 排程產出，Schedule 檢視＋Home 佈告欄觸達 | — |
 | [knowledge-base](entities/modules/knowledge-base.md) | RAG + 五段簽核（未掛 Nav，7/31 目標）；AntD Phase 4 已遷移 | — |
 | [setting](entities/modules/setting.md) | 後台：Personal + Seed 七 tabs + IT 區 | 底部 |
 | [notification](entities/modules/notification.md) | 通知中心 v1 已實作（三類通知 + 鈴鐺 + Teams 設定），AntD 試點 | Header |
@@ -41,7 +41,7 @@
 ## Concepts
 
 - [concepts/design-principles.md](concepts/design-principles.md) — 八條設計原則（需求評審檢查表）
-- [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md) — **Agent Skill 三層模型**（知識型／引導型／執行型）+ Tool Gateway 授權機制 + 結構化 scope + 評測集簽核；SCH-OQ-2 解方
+- [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md) — **Agent Skill 三層模型**（知識／輔助判斷／SOP）+ 對話式建立流程 + Tool Gateway runtime 把關 + sub graph 混用 + 兩個飛輪；**下一階段開發主依據**，SCH-OQ-2 解方
 - [concepts/widget-governance.md](concepts/widget-governance.md) — 四層治理 + Widget Contract
 - [concepts/ecp-strategy.md](concepts/ecp-strategy.md) — ECP 下一代、交接切入點、平台引力模型
 - [concepts/antd-migration-plan.md](concepts/antd-migration-plan.md) — AntD 全面遷移計畫（8 Phase、token 映射、每頁 DoD）；**Phase 0–5 ✅ 完成**（Setting 系列、TaskManagement、SkillManagement、Scheduling、KPI、Knowledge、Chat、AppCenter）＋ Phase 8 死檔清理 ✅，下一棒 **Phase 6（HandoverPage + App.jsx nav/header）**

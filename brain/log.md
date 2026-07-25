@@ -91,3 +91,9 @@ PO 核准後刪除 **`Agent portal/src/components/SOPManagementPage.jsx`（560 �
 ## [2026-07-25] decision | Agent Skill 三層模型 + Tool Gateway 授權機制
 
 PO×AI 討論 codify graph 涵蓋率不足、需補 skill.md 彈性路徑。結論寫入 [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)：(1) 切分軸為**副作用範圍**而非「是否用 LLM」，分知識型／引導型（唯讀工具，新增）／執行型三層，簽核強度 ∝ blast radius；(2) 隔離**不用 sub agent**，做在 Tool Gateway（進場 allowlist + 出場檢查），三層差別濃縮成 `run.allowlist = skill.tools` 一行；(3) `sopManagement[]` 加 `tier`／`tools`／結構化 `scope`（取代自由文字 `scenario`／`productionScope`，PO 決議現在改）；(4) 簽核由 dry run 改**評測集**，PO 決議由課上 Seed 出題、LLM 輔助、驗證與簽核強制，負面案例由系統從 scope 自動生成；(5) 六條風險與體驗設計六原則（含「回收飛輪」：引導型成功後回填 codify graph 草稿）。PO 確認本專案為**個人原型**，治理設計目標為「讓人看得見它擋住了」而非真防護。受影響頁面：index.md、open-questions.md（SCH-OQ-2 標記已有解方）。
+
+## [2026-07-25] decision | Skill 三層模型定案 + SOP 對話式建立 + 交班中心廢除
+
+PO 補充實際開發中的 SOP 流程（對話式生成 → 試跑 → promote → dry run → 簽核 → 可被 agent 調用或設排程；執行時零 LLM，主場景是資料彙整如當班交接報告），並裁決三項：(1) **HandoverPage 廢除**，交班降級為一個 SOP 的排程產出——Schedule 內檢視（檔案櫃）＋ Home 佈告欄觸達（今天這份），`ShiftHandoverModal` 改為預填後人補判斷；(2) **寫入行為一律強制人工確認**，故不需擔心 agent 生成的 code 偷藏寫入，**把關永遠在 runtime**（收回前一版「移到 authoring time」的說法）；(3) code node **自由式 + sub graph 混用**，成熟行為做成標準元件避免錯用與重複試錯 → 帶出白話說明的標準／自訂標記、簽核只聚焦自訂部分、以及第二個飛輪（自訂 node → 標準元件，對應 widget-governance 的平台引力模型）。詞彙定案為 **知識／輔助判斷／SOP**。
+
+受影響頁面：`concepts/agent-skill-tiering.md`（大改重寫）、`entities/modules/handover.md`（改標 status: stale + 功能去向與刪除注意事項）、`concepts/antd-migration-plan.md`（Phase 6 縮為只剩 App.jsx）、`entities/modules/scheduling.md`（+ SOP 檔案櫃定位與排程暫停行為）、`entities/sitemap.md`（移除 Handover 節點、改寫第三股互動流）、`concepts/ecp-strategy.md`（切入點載體變更）、`open-questions.md`（W-2 解決）、`decisions.md`（+3 決議）、`index.md`。
