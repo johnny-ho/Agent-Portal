@@ -41,6 +41,7 @@
 ## Concepts
 
 - [concepts/design-principles.md](concepts/design-principles.md) — 八條設計原則（需求評審檢查表）
+- [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md) — **Agent Skill 三層模型**（知識型／引導型／執行型）+ Tool Gateway 授權機制 + 結構化 scope + 評測集簽核；SCH-OQ-2 解方
 - [concepts/widget-governance.md](concepts/widget-governance.md) — 四層治理 + Widget Contract
 - [concepts/ecp-strategy.md](concepts/ecp-strategy.md) — ECP 下一代、交接切入點、平台引力模型
 - [concepts/antd-migration-plan.md](concepts/antd-migration-plan.md) — AntD 全面遷移計畫（8 Phase、token 映射、每頁 DoD）；**Phase 0–5 ✅ 完成**（Setting 系列、TaskManagement、SkillManagement、Scheduling、KPI、Knowledge、Chat、AppCenter）＋ Phase 8 死檔清理 ✅，下一棒 **Phase 6（HandoverPage + App.jsx nav/header）**
