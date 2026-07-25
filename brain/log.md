@@ -107,3 +107,17 @@ PO 補充實際開發中的 SOP 流程（對話式生成 → 試跑 → promote 
 **環境註記**：本 session 的沙箱封鎖 unpkg / cdn.tailwindcss.com（CONNECT 403），產物直開會白畫面。瀏覽器實測改用 scratchpad harness：npm 裝同版 react/react-dom/dayjs/antd/@babel/standalone + @tailwindcss/browser，以 Playwright `page.route` 攔截 CDN 請求改餵本地檔（不動 `src/`、不動 shell.html）。
 
 受影響頁面：[entities/modules/handover.md](entities/modules/handover.md)、[concepts/antd-migration-plan.md](concepts/antd-migration-plan.md)、index.md。
+
+## [2026-07-25] decision | 三層模型改造 Step 2：資料層（personas.js）
+
+`sopManagement[]` 依 [agent-skill-tiering](concepts/agent-skill-tiering.md)「資料模型變更」補齊：19 筆全數有 `tier`／`tools`／結構化 `scope`／`hasWrite`／`consumedBy`；SOP 型另有 `plainSteps`（standard/custom 標記）／`dryRun` 三層快照／`genChatId`。**自由文字 `scenario`／`productionScope`／`pirunScope` 全數移除**（原 3 筆），改由結構化 scope 取代。
+
+新增 **`EQUIPMENT_MASTER`**（設備/站點主檔，equipment 16 台、process 8、mfg 6）與 **`matchScopeTargets(personaKey, scope)`**：適用範圍勾選畫面「目前符合 N 台」的計算來源，也是「這個 skill 根本不會進候選池」那段 demo 的資料基礎。
+
+新增 4 筆 mock：`sm-eq-006` ERR-4421 冷卻異常研判（輔助判斷，3 唯讀工具）、`sm-pr-006` CP 值下滑趨勢研判（輔助判斷，跨 persona 證明不限設備課）、`sm-eq-007` 整理當班交接報告（SOP 唯讀、`consumedBy.scheduleId: 'sch-eq-004'`）、`sm-eq-008` SPC 異常日報與開單（SOP 含寫入、綁既有 `sch-eq-001`，供第 5 步「含 N 個需確認步驟」demo）。
+
+**兩個 doc 未定義、實作時補上的欄位**：`evalCases[]`（測試題，`origin: seed|system` + `locked`，系統出的負面題不可刪）與 `traceSample`（一次互動的逐步紀錄，含被拒絕的寫入工具那一行）——原型定位是「讓人看得見治理在運作」，這兩者是唯一能把它顯示出來的資料。
+
+⚠️ **暫時的前向參照**：`sm-eq-007.consumedBy.scheduleId = 'sch-eq-004'` 指向的排程於第 5 步才會加進 `scheduling.js`。
+
+同步改 `SkillManagementPage.jsx` 兩處渲染（左欄適用範圍改結構化條件 + 目前符合 N 台、生效資訊列出符合機台），避免資料改了畫面空白。build 617,475 bytes，瀏覽器實測 Skill 管理清單 8 筆、詳情 Modal 正常、零 error。

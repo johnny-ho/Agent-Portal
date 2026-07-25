@@ -78,6 +78,36 @@ function parseStepsFromChunks(chunks) {
   return steps;
 }
 
+/* ── 適用範圍：結構化條件的白話描述 ──
+   scope 是勾出來的條件，不是一句自由文字，所以可以直接算出「目前符合哪幾台」。*/
+const SK_TRIGGER_LABEL = {
+  alarm:     '警報觸發',
+  schedule:  '排程觸發',
+  threshold: '數值門檻',
+  manual:    '人工調用',
+};
+
+function describeTrigger(trigger) {
+  if (!trigger || !trigger.type) return '未設定';
+  var base = SK_TRIGGER_LABEL[trigger.type] || trigger.type;
+  if (trigger.code)   return base + '（' + trigger.code + '）';
+  if (trigger.level)  return base + '（' + trigger.level + '）';
+  if (trigger.at)     return base + '（' + trigger.at + '）';
+  if (trigger.metric) return base + '（' + trigger.metric + ' ' + (trigger.op || '') + ' ' + (trigger.value || '') + '）';
+  return base;
+}
+
+/* 回傳左欄要列的條件行；空陣列一律顯示為「全部」而非留白 */
+function describeScope(scope) {
+  var s = scope || {};
+  return [
+    { label: '機台類別', value: (s.equipmentClass && s.equipmentClass.length) ? s.equipmentClass.join('、') : '全部類別' },
+    { label: '指定機台', value: (s.equipmentIds   && s.equipmentIds.length)   ? s.equipmentIds.join('、')   : '該類別全部' },
+    { label: '區域',     value: (s.area           && s.area.length)           ? s.area.join('、')           : '全區' },
+    { label: '觸發條件', value: describeTrigger(s.trigger) },
+  ];
+}
+
 /* 非步驟、非注意事項的 chunk（如「適用情境」「前置確認」） */
 function getInfoChunks(chunks) {
   return chunks.filter(function(chunk) {
@@ -221,12 +251,22 @@ function ModalInfoPanel({ skill, p, onTagsChange }) {
         </antd.Space.Compact>
       </InfoRow>
 
-      {/* 適用範圍（production/pirun 才顯示） */}
-      {(skill.stage === 'production' || skill.stage === 'pirun') && skill.scenario && (
-        <InfoRow label="適用情境">
-          <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.6 }}>{skill.scenario}</div>
-        </InfoRow>
-      )}
+      {/* 適用範圍（結構化條件 + 目前符合幾台）*/}
+      <InfoRow label="適用範圍">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {describeScope(skill.scope).map(function(row) {
+            return (
+              <div key={row.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontSize: fz(11), color: C.textMuted, width: 56, flexShrink: 0 }}>{row.label}</span>
+                <span style={{ fontSize: fz(13), color: C.text, lineHeight: 1.5 }}>{row.value}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 8, fontSize: fz(12), color: '#2563EB', fontWeight: 600 }}>
+          目前符合 {matchScopeTargets(p.key, skill.scope).length} 台
+        </div>
+      </InfoRow>
     </div>
   );
 }
@@ -409,8 +449,9 @@ function ManagementSection({ skill, p, signingSubmitted, setSigningSubmitted }) 
     }
 
     case 'production': {
+      var targets = matchScopeTargets(p.key, skill.scope);
       var prodItems = [
-        { key: 'scope', label: '適用範圍', children: skill.productionScope || skill.scenario || '全課適用' },
+        { key: 'scope', label: '適用範圍', children: targets.length > 0 ? (targets.length + ' 台：' + targets.map(function(t) { return t.id; }).join('、')) : '無符合的機台' },
       ];
       if (skill.productionDate) prodItems.push({ key: 'date', label: '生效日期', children: skill.productionDate });
       if (skill.approvedBy)     prodItems.push({ key: 'by', label: '核准人', children: skill.approvedBy });

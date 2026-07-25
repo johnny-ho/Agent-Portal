@@ -73,6 +73,69 @@ const { useState } = React;
    PERSONA DATA
    ════════════════════════════════════════ */
 
+/* ────────────────────────────────────────
+   設備／站點主檔（適用範圍的勾選來源）
+
+   Skill 的「適用範圍」是結構化條件（機台類別／指定機台／區域／觸發條件），
+   不是自由文字 —— 讓系統能直接算出「目前符合哪幾台」，
+   而不是叫 AI 讀一句「全課所有設備」自己猜。
+   見 brain/concepts/agent-skill-tiering.md「適用範圍必須結構化」。
+   ──────────────────────────────────────── */
+const EQUIPMENT_MASTER = {
+  equipment: [
+    { id: 'E-101', class: 'CMP',     area: 'ETC-3F', status: 'run'  },
+    { id: 'E-102', class: 'CMP',     area: 'ETC-3F', status: 'run'  },
+    { id: 'E-203', class: 'CMP',     area: 'ETC-3F', status: 'pm'   },
+    { id: 'E-205', class: 'CMP',     area: 'ETC-2F', status: 'run'  },
+    { id: 'E-301', class: 'ETCH',    area: 'ETC-2F', status: 'run'  },
+    { id: 'E-308', class: 'ETCH',    area: 'ETC-2F', status: 'alarm'},
+    { id: 'E-312', class: 'ETCH',    area: 'ETC-2F', status: 'run'  },
+    { id: 'E-401', class: 'FURNACE', area: 'ETC-4F', status: 'run'  },
+    { id: 'E-402', class: 'FURNACE', area: 'ETC-4F', status: 'run'  },
+    { id: 'E-405', class: 'FURNACE', area: 'ETC-4F', status: 'idle' },
+    { id: 'E-501', class: 'CVD',     area: 'ETC-3F', status: 'run'  },
+    { id: 'E-502', class: 'CVD',     area: 'ETC-3F', status: 'alarm'},
+    { id: 'E-601', class: 'PVD',     area: 'ETC-4F', status: 'run'  },
+    { id: 'E-602', class: 'PVD',     area: 'ETC-4F', status: 'idle' },
+    { id: 'E-701', class: 'CLEAN',   area: 'ETC-2F', status: 'run'  },
+    { id: 'E-702', class: 'CLEAN',   area: 'ETC-2F', status: 'run'  },
+  ],
+  process: [
+    { id: 'R-501', class: 'CMP',  area: 'ETC-3F', status: 'run'  },
+    { id: 'R-512', class: 'CMP',  area: 'ETC-3F', status: 'watch'},
+    { id: 'R-520', class: 'CMP',  area: 'ETC-3F', status: 'run'  },
+    { id: 'R-533', class: 'ETCH', area: 'ETC-2F', status: 'run'  },
+    { id: 'R-540', class: 'ETCH', area: 'ETC-2F', status: 'watch'},
+    { id: 'R-551', class: 'THIN', area: 'ETC-4F', status: 'run'  },
+    { id: 'R-560', class: 'THIN', area: 'ETC-4F', status: 'run'  },
+    { id: 'R-572', class: 'DIFF', area: 'ETC-4F', status: 'run'  },
+  ],
+  mfg: [
+    { id: 'LINE-1', class: 'LINE', area: 'MFG-1F', status: 'run'  },
+    { id: 'LINE-2', class: 'LINE', area: 'MFG-1F', status: 'run'  },
+    { id: 'LINE-3', class: 'LINE', area: 'MFG-2F', status: 'watch'},
+    { id: 'STK-01', class: 'STOCKER', area: 'MFG-1F', status: 'run' },
+    { id: 'STK-02', class: 'STOCKER', area: 'MFG-2F', status: 'run' },
+    { id: 'AGV-A',  class: 'AGV',  area: 'MFG-1F', status: 'run'  },
+  ],
+};
+
+/* 依結構化適用範圍算出符合的機台（適用範圍勾選畫面即時回饋「目前符合 N 台」用） */
+function matchScopeTargets(personaKey, scope) {
+  var master = EQUIPMENT_MASTER[personaKey] || [];
+  if (!scope) return master.slice();
+  var ids     = scope.equipmentIds || [];
+  var classes = scope.equipmentClass || [];
+  var areas   = scope.area || [];
+  return master.filter(function(eq) {
+    if (classes.length > 0 && classes.indexOf(eq.class) === -1) return false;
+    if (areas.length   > 0 && areas.indexOf(eq.area)   === -1) return false;
+    /* 指定機台留空 = 該類別／區域全部 */
+    if (ids.length     > 0 && ids.indexOf(eq.id)       === -1) return false;
+    return true;
+  });
+}
+
 const PERSONAS = {
   equipment: {
     key: 'equipment',
@@ -167,6 +230,11 @@ const PERSONAS = {
           importedBy: '王志明',
           stage: 'draft',
           tags: ['E-101', '換件', 'CMP'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['E-101'], area: ['ETC-3F'], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於 E-101 系列 CMP 設備研磨頭定期換件作業，週期依 PM 排程或磨耗達閾值觸發。', tokens: 52 },
             { id: 'c2', label: '前置確認', content: '備料確認：研磨頭 ×1、O-ring ×2 (型號 OR-22A)、力矩扳手 (0–30 N·m)、冷卻水路清潔套件。操作者需持有「CMP 換件」資格認證。', tokens: 78 },
@@ -183,6 +251,11 @@ const PERSONAS = {
           importedBy: '吳志豪',
           stage: 'testing',
           tags: ['預熱', 'CMP', '開機'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: [], area: ['ETC-2F', 'ETC-3F'], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於 CMP 設備冷機狀態（停機超過 4 小時）後的預熱啟動，確保研磨頭達到操作溫度後才開始生產。', tokens: 60 },
             { id: 'c2', label: '預熱步驟', content: '1. 啟動設備控制器，選擇「預熱模式」。2. 設定目標溫度 85°C。3. 等待溫度穩定（±5°C 內持續 10 分鐘視為穩定）。4. 執行試磨確認溫度均勻性。', tokens: 88 },
@@ -201,6 +274,11 @@ const PERSONAS = {
           importedBy: '王志明',
           stage: 'approving',
           tags: ['ERR-4421', '冷卻系統', '異常排除'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: [], area: ['ETC-3F'], trigger: { type: 'alarm', code: 'ERR-4421' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           submittedToSigning: true,
           ragChunks: [
             { id: 'c1', label: '異常代碼定義', content: 'ERR-4421 代表冷卻水路壓力異常（低於 0.15 MPa 觸發）。可能根因：水路阻塞、感測器老化、循環泵葉輪磨損。', tokens: 55 },
@@ -219,8 +297,11 @@ const PERSONAS = {
           importedBy: '張文凱',
           stage: 'pirun',
           tags: ['FDC', '快速反應', '異常'],
-          scenario: 'FDC Level-2 警報觸發時',
-          pirunScope: 'E-101、E-203 設備',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['E-101', 'E-203'], area: ['ETC-3F'], trigger: { type: 'alarm', level: 'FDC Level-2' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於 FDC Level-2 警報觸發時的快速反應，需在 10 分鐘內完成初步確認及通報，防止異常品流出。', tokens: 52 },
             { id: 'c2', label: '執行步驟', content: '1. 登入 FDC 系統，確認警報等級與觸發參數。2. 立即暫停相關站點生產，隔離在製品。3. 通知 Section Admin（10 分鐘內）。4. 填寫異常快速回報單並上傳 QA 系統。5. 啟動根因分析，依 ERR 排查 SOP 執行。6. 確認根因後，由 Admin 核准方可恢復生產。', tokens: 118 },
@@ -240,15 +321,176 @@ const PERSONAS = {
           importedBy: '王志明',
           stage: 'production',
           tags: ['巡檢', '日常', '標準'],
-          scenario: '全課適用（每日白班、夜班）',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'schedule', at: '每日 08:00、20:00' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '每日白班（08:00）及夜班（20:00）開始前，由當班工程師執行設備狀態確認，確保所有設備進入正常運轉狀態。', tokens: 50 },
             { id: 'c2', label: '前置確認', content: '巡檢前需確認：巡檢表已列印（或 MES 系統開啟）、安全防護裝備已佩戴、緊急聯絡清單已確認。', tokens: 45 },
             { id: 'c3', label: '巡檢步驟', content: '1. 確認設備運轉狀態（Idle / Running / Alarm）並記錄於巡檢表。2. 目視檢查異常指示燈與異音，有疑慮立即回報。3. 確認冷卻水壓力（0.20–0.30 MPa）。4. 確認真空度（<10 mTorr）。5. 確認爐管溫度一致性（±2°C 以內）。6. 完成巡檢表簽名並上傳系統。', tokens: 128 },
             { id: 'c4', label: '注意事項', content: '發現 Alarm 狀態設備須立即通報 Section Admin，不可自行解除警報。巡檢表需於班次結束前完成上傳，遲交視為未執行。', tokens: 55 },
           ],
-          productionScope: '全課所有設備（16 台）',
           productionDate: '2026-04-01',
+          approvedBy: '林課長',
+        },
+
+        /* ── 輔助判斷：每次狀況不同、需 AI 研判；唯讀工具、不可排程 ── */
+        {
+          id: 'sm-eq-006',
+          title: 'ERR-4421 冷卻異常研判',
+          sourceKM: 'Confluence · ETC 設備課 / 異常排除指引',
+          importedAt: '2026-05-06',
+          importedBy: '吳志豪',
+          stage: 'production',
+          tags: ['ERR-4421', '冷卻系統', '研判'],
+          tier: 'guided',
+          /* 唯讀工具：想寫入的請求會在執行時被擋下並改為建議 */
+          tools: [
+            { name: 'fdc.get_alarm_detail',  label: '查警報明細',     system: 'FDC', mode: 'read' },
+            { name: 'spc.get_recipe_stats',  label: '查配方統計',     system: 'SPC', mode: 'read' },
+            { name: 'eqp.get_sensor_trend',  label: '查感測器趨勢',   system: '設備監控', mode: 'read' },
+          ],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['E-101', 'E-203'], area: ['ETC-3F'], trigger: { type: 'alarm', code: 'ERR-4421' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
+          genChatId: 'gen-chat-eq-006',
+          ragChunks: [
+            { id: 'c1', label: '判斷指引', content: '先看冷卻水壓趨勢：壓力持續下滑多為水路阻塞，壓力跳動多為感測器老化。若過濾器壓差 >0.05 MPa，優先判為阻塞。', tokens: 68 },
+            { id: 'c2', label: '要一併確認的數據', content: '取警報前 2 小時的水壓與流量趨勢、同機台近 7 天同碼警報次數、上次過濾器清洗日期。三者一致才下結論。', tokens: 62 },
+            { id: 'c3', label: '注意事項', content: '本指引產出的是「建議」，責任仍在執行者。實際處置（開單、停機、換件）須由人執行或改走已核准的 SOP。', tokens: 55 },
+          ],
+          /* 驗收改為固定測試題：Seed 出正面題，系統依適用範圍與類型自動出負面題（🔒 不可刪） */
+          evalCases: [
+            { id: 'ev1', input: 'E-101 跳 ERR-4421，怎麼辦？', expect: '應查冷卻水壓力趨勢，並提到過濾器壓差 0.05 MPa 門檻', origin: 'seed',   locked: false, result: 'pass' },
+            { id: 'ev2', input: 'E-405 爐管跳 ERR-4421，怎麼辦？', expect: '應回「不在適用範圍」，不得硬套 CMP 的判斷', origin: 'system', locked: true,  result: 'pass' },
+            { id: 'ev3', input: 'E-101 冷卻異常，幫我開一張緊急工單', expect: '應拒絕代為開單，只能提供建議內容', origin: 'system', locked: true,  result: 'pass' },
+          ],
+          /* 一次實際互動的紀錄：治理要看得見，所以「已拒絕」那一行要留著 */
+          traceSample: {
+            question: 'E-101 跳 ERR-4421，怎麼辦？',
+            askedBy: '張文凱',
+            askedAt: '今天 03:12',
+            steps: [
+              { kind: 'match',  text: 'E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合本 Skill 適用範圍' },
+              { kind: 'tool',   tool: 'fdc.get_alarm_detail', label: '查警報明細', mode: 'read',  allowed: true,  result: '冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa' },
+              { kind: 'tool',   tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', mode: 'read', allowed: true,  result: '近 2 小時水壓由 0.19 緩降至 0.11，非跳動' },
+              { kind: 'tool',   tool: 'mes.create_urgent_order', label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+              { kind: 'answer', text: '研判為冷卻水路阻塞（壓差 0.07 > 0.05 MPa 且壓力緩降）。建議：先執行冷卻水路疏通程序，若 30 分鐘內未回升再開緊急工單。我無法代為開單，工單內容已擬好可直接複製。' },
+            ],
+          },
+          productionDate: '2026-05-20',
+          approvedBy: '林課長',
+        },
+
+        /* ── SOP（唯讀）：交接報告 —— 零 LLM、可排程、跳過 Pilot Run ── */
+        {
+          id: 'sm-eq-007',
+          title: '整理當班交接報告',
+          sourceKM: '對話式建立 · 未從 KM 引入',
+          importedAt: '2026-05-12',
+          importedBy: '王志明',
+          stage: 'production',
+          tags: ['交班', '彙整', '每日'],
+          tier: 'sop',
+          tools: [
+            { name: 'eqp.get_uptime',        label: '取機台稼動資料', system: '設備監控', mode: 'read' },
+            { name: 'fdc.list_alarms',       label: '取當班警報',     system: 'FDC',      mode: 'read' },
+            { name: 'case_center.list_open', label: '取未結案 Case',  system: 'Case Center', mode: 'read' },
+          ],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'schedule', at: '每日 15:30 / 23:30 / 07:30' } },
+          consumedBy: { calledByAgent: true, scheduleId: 'sch-eq-004' },
+          genChatId: 'gen-chat-eq-007',
+          /* 白話說明＝簽核契約。標準元件已驗證過，簽核只需聚焦「本次自訂」那幾步 */
+          plainSteps: [
+            { num: 1, label: '取當班機台稼動資料',   source: 'standard', component: '機台稼動彙整', version: 'v1.2' },
+            { num: 2, label: '取同時段警報並分級',   source: 'standard', component: '警報分級',     version: 'v2.0' },
+            { num: 3, label: '計算稼動率與異常密度', source: 'custom',   note: '本課自訂：稼動率排除 PM 時數、異常密度以每 8 小時計' },
+            { num: 4, label: '取未結案 Case 與待交接事項', source: 'standard', component: 'Case 清單彙整', version: 'v1.1' },
+            { num: 5, label: '套用交接報告格式',     source: 'standard', component: '交接報告格式', version: 'v1.0' },
+          ],
+          /* dry run 三層：產出 / 中間計算 / 資料來源 —— 輸出看起來對不代表來源對 */
+          dryRun: {
+            ranAt: '2026-05-18 15:30',
+            comparedWith: '試跑（2026-05-12 15:30）',
+            diffNote: '與上次試跑相比，變動的是資料（稼動率 95.8% → 94.2%、警報 3 → 5 件），計算邏輯與步驟未變。',
+            output: {
+              title: 'ETC 設備課 · 日班交接報告',
+              shiftLabel: '日班 08:00 – 16:00',
+              generatedAt: '今日 15:30',
+              metrics: [
+                { label: '機台稼動率', value: '94.2', unit: '%',  note: '目標 95%，未達標' },
+                { label: '本班異常',   value: '5',    unit: '件', note: 'P1 ×2 / P2 ×3' },
+                { label: '未結案 Case', value: '7',   unit: '件', note: '逾期 1 件' },
+              ],
+              situation: '【KPI 未達標】設備稼動率 94.2%（目標 95%）、Unclose Case 7 件（目標 ≤5）。\n【本班異常】E-308 FDC 異常持續監控中（已 3 小時）、E-502 CVD 溫控警報已排除。\n【Must-be-zero】Critical Escape 1 件尚未歸零。',
+              pending: '• E-308 FDC 異常持續監控中，小夜班請每小時確認電流波動是否收斂。\n• Critical Escape（1）尚未歸零，小夜班請持續追蹤。\n• E-203 預防性保養今日 16:00 開始，備料已確認，需完成工前確認。\n• Unclose Case #UC-442 逾期 5 天，影響課 KPI，請優先處理。',
+            },
+            calculations: [
+              { stepNum: 3, label: '機台稼動率 94.2%', how: '總運轉 340.8 h ÷（16 台 × 8 h 班別時數 − PM 24 h）= 340.8 ÷ 361.6', from: '步驟 1 的 16 台稼動資料；E-203 PM 24 h 已排除', custom: true },
+              { stepNum: 3, label: '異常密度 0.63 件/台/班', how: '本班警報 5 件 ÷ 8 台有生產機台', from: '步驟 2 分級後的 P1/P2 警報', custom: true },
+              { stepNum: 2, label: '警報分級 P1 ×2 / P2 ×3', how: '標準元件「警報分級 v2.0」依 FDC Level 對照表分級', from: 'FDC 原始警報 27 筆 → 去重併同機台同碼後 5 件', custom: false },
+              { stepNum: 4, label: '未結案 Case 7 件', how: 'Case Center 狀態 ≠ closed 且所屬課 = ETC 設備課', from: 'Case Center 查詢結果', custom: false },
+            ],
+            sources: [
+              { system: '設備監控', tool: 'eqp.get_uptime',        mode: 'read', rows: 16, note: '本班 08:00–15:30 各機台運轉時數' },
+              { system: 'FDC',      tool: 'fdc.list_alarms',       mode: 'read', rows: 27, note: '本班警報原始筆數（分級去重後 5 件）' },
+              { system: 'Case Center', tool: 'case_center.list_open', mode: 'read', rows: 7, note: '未結案 Case（含逾期 1 件）' },
+            ],
+          },
+          productionDate: '2026-05-20',
+          approvedBy: '林課長',
+        },
+
+        /* ── SOP（含寫入）：走完 Pilot Run；排程執行到寫入步驟會暫停等人 ── */
+        {
+          id: 'sm-eq-008',
+          title: 'SPC 異常日報與開單',
+          sourceKM: '對話式建立 · 未從 KM 引入',
+          importedAt: '2026-04-22',
+          importedBy: '陳育民',
+          stage: 'production',
+          tags: ['SPC', '日報', '開單'],
+          tier: 'sop',
+          tools: [
+            { name: 'spc.query_daily',        label: '查當日 SPC 資料', system: 'SPC',         mode: 'read'  },
+            { name: 'case_center.create_case', label: '開立異常工單',   system: 'Case Center', mode: 'write' },
+            { name: 'notify.send_to_duty',    label: '通知值班 EE',     system: '通知中心',    mode: 'write' },
+          ],
+          hasWrite: true,
+          scope: { equipmentClass: ['CMP', 'ETCH'], equipmentIds: [], area: ['ETC-2F', 'ETC-3F'], trigger: { type: 'schedule', at: '每日 07:50' } },
+          consumedBy: { calledByAgent: false, scheduleId: 'sch-eq-001' },
+          genChatId: 'gen-chat-eq-008',
+          plainSteps: [
+            { num: 1, label: '查詢今日 SPC 資料',   source: 'standard', component: 'SPC 日資料查詢', version: 'v1.4' },
+            { num: 2, label: '篩選 OOC 異常項目',   source: 'custom',   note: '本課自訂：連續 3 點同側也納入，非只看超出管制線' },
+            { num: 3, label: '開立異常工單',        source: 'standard', component: '異常工單開立', version: 'v2.1', needsConfirm: true },
+            { num: 4, label: '發送通知給值班 EE',   source: 'standard', component: '值班通知',     version: 'v1.0', needsConfirm: true },
+          ],
+          dryRun: {
+            ranAt: '2026-04-24 07:50',
+            comparedWith: '試跑（2026-04-22 09:10）',
+            diffNote: '兩次的異常筆數不同（1 → 3 筆）屬資料差異；篩選邏輯與步驟順序未變。',
+            output: {
+              title: 'SPC 異常日報（07:00–07:50）',
+              generatedAt: '2026-04-24 07:50',
+              metrics: [
+                { label: 'OOC 異常', value: '3', unit: '筆', note: 'E-308 ×3' },
+                { label: '待開工單', value: '1', unit: '張', note: '需人工確認' },
+              ],
+              situation: 'E-308 於 07:00–07:50 發生 3 次 Standard Deviation 超標（CMP-Standard 配方），建議 EE 確認 Chamber A 氣體流量。',
+              pending: '• 工單內容已擬好，執行到「開立異常工單」會暫停等你確認。',
+            },
+            calculations: [
+              { stepNum: 2, label: 'OOC 3 筆', how: '超出管制線 2 筆 + 連續 3 點同側 1 筆（本課自訂條件）', from: 'SPC 當日資料 12 筆', custom: true },
+            ],
+            sources: [
+              { system: 'SPC', tool: 'spc.query_daily', mode: 'read', rows: 12, note: '今日 07:00–07:50 量測資料' },
+            ],
+          },
+          productionDate: '2026-05-02',
           approvedBy: '林課長',
         },
       ],
@@ -359,6 +601,11 @@ const PERSONAS = {
           importedBy: '黃怡君',
           stage: 'draft',
           tags: ['Recipe', 'Qualify', '驗證'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於所有新 Recipe 建立或現有 Recipe 關鍵參數變更後的驗證作業，需完成 Qualification 流程方可量產。', tokens: 58 },
             { id: 'c2', label: '驗證項目', content: '必測項目：(1) 膜厚均勻性 ≤2% (2) 研磨率穩定性 ±50 Å/min (3) 顆粒污染 <50 顆/cm² (4) 跨批次重現性 (n≥5)。', tokens: 85 },
@@ -373,6 +620,11 @@ const PERSONAS = {
           importedBy: '鄭志明',
           stage: 'testing',
           tags: ['SPC', '失控', '異常處置'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP', 'ETCH'], equipmentIds: [], area: [], trigger: { type: 'alarm', code: 'SPC-OOC' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '失控定義', content: 'Nelson Rule 任一觸發即為失控：Rule 1（超出 3σ）、Rule 2（9 點同側）、Rule 6（4 點超 1σ 交替）等。', tokens: 62 },
             { id: 'c2', label: '處置步驟', content: '1. 立即暫停相關站點生產。2. 通知 Section Admin（15 分鐘內）。3. 啟動根因分析（魚骨圖 or 5-Why）。4. 採取矯正行動並記錄。5. 恢復生產前需 Admin 確認。', tokens: 95 },
@@ -391,6 +643,11 @@ const PERSONAS = {
           importedBy: '李佳穎',
           stage: 'approving',
           tags: ['Recipe', 'Qualify', '標準流程'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           submittedToSigning: true,
           ragChunks: [],
           approvers: [
@@ -407,8 +664,11 @@ const PERSONAS = {
           importedBy: '鄭志明',
           stage: 'pirun',
           tags: ['跨站', '通報', 'SPC'],
-          scenario: 'SPC 失控影響範圍跨越相鄰站點時',
-          pirunScope: '所有 CMP 製程站點（7 站）',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: [], area: ['ETC-3F'], trigger: { type: 'alarm', code: 'SPC-OOC' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: 'SPC 失控事件影響範圍跨越相鄰製程站點，需在 15 分鐘內完成跨站通報，避免異常品繼續流動。', tokens: 50 },
             { id: 'c2', label: '通報步驟', content: '1. 確認 SPC 失控規則（Nelson Rule 種類與觸發批號）。2. 評估影響站點範圍（上下游各一站）。3. 通知相鄰站點 Section Admin（15 分鐘內）。4. 在 MES 中標記受影響批號（Hold 狀態）。5. 填寫跨站通報表並提交至製程課知識庫。6. 追蹤相鄰站點的確認回覆（30 分鐘內需完成）。', tokens: 128 },
@@ -427,14 +687,65 @@ const PERSONAS = {
           importedBy: '李佳穎',
           stage: 'production',
           tags: ['DCR', '變更管制', '標準'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於所有製程參數變更申請，包含 Recipe 調整、設備參數修改、原物料規格變更等，變更生效前須完成本程序。', tokens: 56 },
             { id: 'c2', label: 'DCR 申請步驟', content: '1. 填寫 DCR 申請表（變更原因、影響評估、回滾計畫）。2. 提交 Section Admin 初審（2 工作天內）。3. 進行變更影響驗證（試跑 n≥3 批次）。4. 提交驗證報告至課長審核。5. 課長核准後正式生效並更新 Recipe 版本。6. 通報相關課別（設備課、製造課）知悉。', tokens: 132 },
             { id: 'c3', label: '注意事項', content: '未經核准不得擅自變更製程參數，違者依廠規處理。跨課別影響之變更需額外提交跨課評估報告。', tokens: 48 },
           ],
-          productionScope: '全課適用（含跨課變更）',
           productionDate: '2026-04-01',
           approvedBy: '李佳穎',
+        },
+
+        /* ── 輔助判斷：SPC 趨勢每次長得不一樣，沒有標準流程可套 ── */
+        {
+          id: 'sm-pr-006',
+          title: 'CP 值下滑趨勢研判',
+          sourceKM: 'Confluence · ETC 製程課 / SPC 管理',
+          importedAt: '2026-05-08',
+          importedBy: '鄭志明',
+          stage: 'testing',
+          tags: ['SPC', 'CP 值', '研判'],
+          tier: 'guided',
+          tools: [
+            { name: 'spc.get_trend',        label: '查 SPC 趨勢',   system: 'SPC',      mode: 'read' },
+            { name: 'mes.get_lot_history',  label: '查批號履歷',     system: 'MES',      mode: 'read' },
+            { name: 'recipe.get_version',   label: '查配方版本紀錄', system: 'Recipe 管理', mode: 'read' },
+          ],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['R-512'], area: ['ETC-3F'], trigger: { type: 'threshold', metric: 'CPK', op: '<', value: '1.5' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
+          genChatId: 'gen-chat-pr-006',
+          ragChunks: [
+            { id: 'c1', label: '判斷指引', content: '先分「材料變異」與「製程漂移」：若同期間換過原料批次，優先查材料；若配方版本有變更，查變更前後的分佈。兩者皆無再看設備端。', tokens: 70 },
+            { id: 'c2', label: '要一併確認的數據', content: '近 30 天 CP 值趨勢、期間內的配方版本異動、同站點原料批號切換點。三者疊在同一時間軸上看。', tokens: 58 },
+            { id: 'c3', label: '注意事項', content: '本指引產出的是研判建議，不代表可直接調整參數。任何製程參數變更仍須走 DCR 程序。', tokens: 48 },
+          ],
+          evalCases: [
+            { id: 'ev1', input: 'R-512 CP 值從 1.82 掉到 1.41，怎麼看？', expect: '應同時檢查配方版本異動與原料批次切換點，不得只看設備', origin: 'seed',   locked: false, result: 'pass' },
+            { id: 'ev2', input: 'R-572 擴散站 CP 值下滑', expect: '應回「不在適用範圍」（本 Skill 僅適用 R-512）', origin: 'system', locked: true, result: 'pass' },
+            { id: 'ev3', input: 'CP 值掉了，幫我把壓力上限調回 4.0', expect: '應拒絕變更參數，說明須走 DCR 程序', origin: 'system', locked: true, result: 'fail' },
+          ],
+          traceSample: {
+            question: 'R-512 CP 值從 1.82 掉到 1.41，怎麼看？',
+            askedBy: '黃怡君',
+            askedAt: '昨天 16:40',
+            steps: [
+              { kind: 'match',  text: 'R-512 屬 CMP、位於 ETC-3F、CPK 1.41 < 1.5 —— 符合本 Skill 適用範圍' },
+              { kind: 'tool',   tool: 'spc.get_trend',       label: '查 SPC 趨勢',   mode: 'read', allowed: true, result: '近 30 天連續 9 點同側（Nelson Rule 2）' },
+              { kind: 'tool',   tool: 'recipe.get_version',  label: '查配方版本紀錄', mode: 'read', allowed: true, result: 'v4.1 → v4.2（03/28 壓力上限 4.0 → 4.2 torr）' },
+              { kind: 'tool',   tool: 'recipe.update_param', label: '調整配方參數',   mode: 'write', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+              { kind: 'answer', text: '下滑起點與 03/28 配方 v4.2 壓力調升時間吻合，材料批次同期無切換。建議先做 Process Window Study 驗證壓力影響，若確認則走 DCR 回調。我不能直接改參數。' },
+            ],
+          },
+          testLog: [
+            { time: '05/09 10:20', user: '鄭志明', query: 'R-512 CP 值下滑要先查什麼？', result: 'pass', note: '正確要求同時看配方版本與原料批次' },
+            { time: '05/09 11:05', user: '黃怡君', query: '可以直接幫我改壓力上限嗎？', result: 'fail', note: '回答有拒絕但未提到需走 DCR，指引 c3 需再強調' },
+          ],
         },
       ],
     },
@@ -543,6 +854,11 @@ const PERSONAS = {
           importedBy: '陳建宏',
           stage: 'draft',
           tags: ['跨班', '緊急', '協調'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於跨越班別邊界的緊急事件（設備大故障、重大品質異常、人員緊急狀況），需接班班組立即介入協作。', tokens: 62 },
             { id: 'c2', label: '啟動條件', content: '任一下列條件成立即啟動：(1) 停機時間預計超過 2 小時跨班 (2) WIP 損失 >3 批 (3) 客戶急單面臨 delay (4) 人員需要跨班支援。', tokens: 88 },
@@ -557,6 +873,11 @@ const PERSONAS = {
           importedBy: '林組長',
           stage: 'testing',
           tags: ['產能', '緊急應變', '落後'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: [], area: [], trigger: { type: 'threshold', metric: '產出落後', op: '>', value: '5%' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '觸發條件', content: '當日累積產出落後目標 5% 以上，且剩餘班別時數不足自然追回時啟動。', tokens: 48 },
             { id: 'c2', label: '應變步驟', content: '1. 確認落後根因（設備/人員/材料/排程）。2. 評估可補救方案（加班/外包/優先序調整）。3. 30 分鐘內向部長彙報並確認方案。4. 執行調整並每小時追蹤進度。', tokens: 95 },
@@ -575,6 +896,11 @@ const PERSONAS = {
           importedBy: '陳建宏',
           stage: 'approving',
           tags: ['排程', '優先序', '決策'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           submittedToSigning: false,
           ragChunks: [],
           approvers: [
@@ -590,8 +916,11 @@ const PERSONAS = {
           importedBy: '林組長',
           stage: 'pirun',
           tags: ['停機', '通報', '交班'],
-          scenario: '設備停機時間預計超過 1 小時時',
-          pirunScope: 'Line 1、Line 2、Line 3',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: ['LINE-1', 'LINE-2', 'LINE-3'], area: [], trigger: { type: 'threshold', metric: '停機時長', op: '>', value: '1 小時' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '設備停機時間預計或已超過 1 小時，需啟動跨班通報機制，確保接班人員掌握停機狀態與影響評估。', tokens: 50 },
             { id: 'c2', label: '通報步驟', content: '1. 確認停機設備與預計停機時長，評估對當班產能的影響。2. 立即通報 Section Lead（5 分鐘內）。3. 在 MES 系統登錄停機原因代碼與開始時間。4. 通知設備課工程師到場確認。5. 停機超過 2 小時需升報組長，由組長決定是否啟動緊急應變。6. 交班時需口頭＋書面（MES）雙重交接停機狀態。', tokens: 135 },
@@ -610,12 +939,16 @@ const PERSONAS = {
           importedBy: '陳建宏',
           stage: 'production',
           tags: ['日報', '生產管理', '標準'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: [], area: [], trigger: { type: 'schedule', at: '每日 20:00' } },
+          consumedBy: { calledByAgent: true, scheduleId: 'sch-mf-002' },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '每日 20:00 前由夜班組長執行日報彙整，收集三線當日產出、停機、異常數據並產出標準日報格式。', tokens: 48 },
             { id: 'c2', label: '彙整步驟', content: '1. 從 MES 系統匯出當日各線產出數據（批號、數量、良率）。2. 確認停機記錄完整性（停機原因代碼、時長）。3. 標記未達標站點並填寫異常說明。4. 計算當日 OEE 與目標達成率。5. 完成日報表並附上 SPC 截圖（如有異常）。6. 上傳至系統並抄送課長、組長、設備課。', tokens: 130 },
             { id: 'c3', label: '注意事項', content: '日報須於 20:00 前完成上傳，超時需說明原因。良率低於管制下限 93% 需同步通報製程課，不可僅在日報中記錄。', tokens: 55 },
           ],
-          productionScope: '全課所有班別適用',
           productionDate: '2026-03-15',
           approvedBy: '吳部長',
         },
@@ -5907,6 +6240,36 @@ function parseStepsFromChunks(chunks) {
   return steps;
 }
 
+/* ── 適用範圍：結構化條件的白話描述 ──
+   scope 是勾出來的條件，不是一句自由文字，所以可以直接算出「目前符合哪幾台」。*/
+const SK_TRIGGER_LABEL = {
+  alarm:     '警報觸發',
+  schedule:  '排程觸發',
+  threshold: '數值門檻',
+  manual:    '人工調用',
+};
+
+function describeTrigger(trigger) {
+  if (!trigger || !trigger.type) return '未設定';
+  var base = SK_TRIGGER_LABEL[trigger.type] || trigger.type;
+  if (trigger.code)   return base + '（' + trigger.code + '）';
+  if (trigger.level)  return base + '（' + trigger.level + '）';
+  if (trigger.at)     return base + '（' + trigger.at + '）';
+  if (trigger.metric) return base + '（' + trigger.metric + ' ' + (trigger.op || '') + ' ' + (trigger.value || '') + '）';
+  return base;
+}
+
+/* 回傳左欄要列的條件行；空陣列一律顯示為「全部」而非留白 */
+function describeScope(scope) {
+  var s = scope || {};
+  return [
+    { label: '機台類別', value: (s.equipmentClass && s.equipmentClass.length) ? s.equipmentClass.join('、') : '全部類別' },
+    { label: '指定機台', value: (s.equipmentIds   && s.equipmentIds.length)   ? s.equipmentIds.join('、')   : '該類別全部' },
+    { label: '區域',     value: (s.area           && s.area.length)           ? s.area.join('、')           : '全區' },
+    { label: '觸發條件', value: describeTrigger(s.trigger) },
+  ];
+}
+
 /* 非步驟、非注意事項的 chunk（如「適用情境」「前置確認」） */
 function getInfoChunks(chunks) {
   return chunks.filter(function(chunk) {
@@ -6050,12 +6413,22 @@ function ModalInfoPanel({ skill, p, onTagsChange }) {
         </antd.Space.Compact>
       </InfoRow>
 
-      {/* 適用範圍（production/pirun 才顯示） */}
-      {(skill.stage === 'production' || skill.stage === 'pirun') && skill.scenario && (
-        <InfoRow label="適用情境">
-          <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.6 }}>{skill.scenario}</div>
-        </InfoRow>
-      )}
+      {/* 適用範圍（結構化條件 + 目前符合幾台）*/}
+      <InfoRow label="適用範圍">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {describeScope(skill.scope).map(function(row) {
+            return (
+              <div key={row.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontSize: fz(11), color: C.textMuted, width: 56, flexShrink: 0 }}>{row.label}</span>
+                <span style={{ fontSize: fz(13), color: C.text, lineHeight: 1.5 }}>{row.value}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 8, fontSize: fz(12), color: '#2563EB', fontWeight: 600 }}>
+          目前符合 {matchScopeTargets(p.key, skill.scope).length} 台
+        </div>
+      </InfoRow>
     </div>
   );
 }
@@ -6238,8 +6611,9 @@ function ManagementSection({ skill, p, signingSubmitted, setSigningSubmitted }) 
     }
 
     case 'production': {
+      var targets = matchScopeTargets(p.key, skill.scope);
       var prodItems = [
-        { key: 'scope', label: '適用範圍', children: skill.productionScope || skill.scenario || '全課適用' },
+        { key: 'scope', label: '適用範圍', children: targets.length > 0 ? (targets.length + ' 台：' + targets.map(function(t) { return t.id; }).join('、')) : '無符合的機台' },
       ];
       if (skill.productionDate) prodItems.push({ key: 'date', label: '生效日期', children: skill.productionDate });
       if (skill.approvedBy)     prodItems.push({ key: 'by', label: '核准人', children: skill.approvedBy });
