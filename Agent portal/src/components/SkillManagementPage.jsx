@@ -1199,6 +1199,7 @@ function SOPManagementPage({ p, onBack }) {
   var [tierFilter, setTierFilter]   = React.useState('all');
   var [skills, setSkills]           = React.useState(p.knowledge.sopManagement || []);
   var [showImport, setShowImport]   = React.useState(false);
+  var [showCreate, setShowCreate]   = React.useState(false);
   var [selectedSkill, setSelected]  = React.useState(null);
   var [searchQuery, setSearch]      = React.useState('');
   var [sortBy, setSortBy]           = React.useState('newest');
@@ -1315,7 +1316,10 @@ function SOPManagementPage({ p, onBack }) {
           <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · 同課審批 · 不可跨課使用</div>
         </div>
         <div style={{ flex: 1 }} />
-        <antd.Button type="primary" onClick={function() { setShowImport(true); }}>＋ 從 KM 引入 Skill</antd.Button>
+        <antd.Space size={8}>
+          <antd.Button onClick={function() { setShowImport(true); }}>從 KM 引入</antd.Button>
+          <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
+        </antd.Space>
       </div>
 
       {/* Search + Sort（欄位一律有 label，不以 placeholder 代替）*/}
@@ -1406,6 +1410,19 @@ function SOPManagementPage({ p, onBack }) {
           onAdvance={function() { advanceStage(selectedSkill.id); }}
           onDelete={function() { deleteSkill(selectedSkill.id); }}
           onSave={saveSkill}
+        />
+      )}
+
+      {/* 對話式建立 */}
+      {showCreate && (
+        <SkillCreateFlow
+          p={p}
+          onClose={function() { setShowCreate(false); }}
+          onCreate={function(skill) {
+            setSkills(function(prev) { return [skill].concat(prev); });
+            setShowCreate(false);
+            setSelected(skill);
+          }}
         />
       )}
 
