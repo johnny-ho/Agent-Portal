@@ -87,3 +87,7 @@ PO 核准後刪除 **`Agent portal/src/components/SOPManagementPage.jsx`（560 �
 ## [2026-07-25] query | Phase 0–5 驗收（PO 指派）
 
 對照計畫逐項驗證：檔案結構/CDN 釘版/ConfigProvider token/JS_MODULES 順序/死檔刪除 ✅；build 通過（20 模組、655,248 bytes）；瀏覽器實測通知 deep-link（N2→Scheduling 展開、badge 遞減、nav 紅點收編）、Setting 通知矩陣預設值、dark mode Task 頁皆正常；Phase 6/7 頁面確認未動。發現缺口：SettingPage 殘留 1 alert + 5 window.confirm（已記入計畫 Phase 8）。結論：Phase 0–5 符合預期，可放行 Phase 6。受影響頁面：antd-migration-plan.md（Phase 8 +1 項）。
+
+## [2026-07-25] decision | Agent Skill 三層模型 + Tool Gateway 授權機制
+
+PO×AI 討論 codify graph 涵蓋率不足、需補 skill.md 彈性路徑。結論寫入 [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)：(1) 切分軸為**副作用範圍**而非「是否用 LLM」，分知識型／引導型（唯讀工具，新增）／執行型三層，簽核強度 ∝ blast radius；(2) 隔離**不用 sub agent**，做在 Tool Gateway（進場 allowlist + 出場檢查），三層差別濃縮成 `run.allowlist = skill.tools` 一行；(3) `sopManagement[]` 加 `tier`／`tools`／結構化 `scope`（取代自由文字 `scenario`／`productionScope`，PO 決議現在改）；(4) 簽核由 dry run 改**評測集**，PO 決議由課上 Seed 出題、LLM 輔助、驗證與簽核強制，負面案例由系統從 scope 自動生成；(5) 六條風險與體驗設計六原則（含「回收飛輪」：引導型成功後回填 codify graph 草稿）。PO 確認本專案為**個人原型**，治理設計目標為「讓人看得見它擋住了」而非真防護。受影響頁面：index.md、open-questions.md（SCH-OQ-2 標記已有解方）。
