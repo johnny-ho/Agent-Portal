@@ -10,7 +10,7 @@ status: current
 
 # Ant Design 全面遷移計畫（PO 已核准）
 
-> **進度（2026-07-25）**：Phase 0–5 ✅ 完成、Phase 8 死檔清理 ✅；**下一棒 Phase 6（僅 App.jsx nav/header —— HandoverPage 已決議廢除，直接刪不遷移）**。
+> **進度（2026-07-25）**：Phase 0–5 ✅ 完成、Phase 8 死檔清理 ✅；**HandoverPage.jsx 已實際刪除**（1,011 行不必遷移，build 產物 655,248 → 592,297 bytes）；**下一棒 Phase 6 僅剩 App.jsx nav/header**。
 > **PO 決議（2026-07-24）**：採全面遷移（非孤島漸進）。
 > **前提假設**：維持現有 build pipeline（React 18 UMD + Babel Standalone + build.py），**不含 Vite 遷移**——prototype 定位不動架構。
 > **現況數據**：13 元件 ~14,000 行；樣式為 ~1,740 處 inline `style={{}}` 掛在自製 ThemeContext（`C` 色彩 + `fz()` 字級 + dark mode）；Tailwind 實際僅 42 處 className。
@@ -123,7 +123,7 @@ status: current
 | 3 ✅ | SkillManagementPage | 914 | 表格/表單重（**已完成 2026-07-25**；SOPManagementPage.jsx 560 行為死碼，未遷移，已於 Phase 8 刪除） |
 | 4 ✅ | SchedulingPage + KPIPage + KnowledgePage | 502 + 361 + 126 | 中等（**已完成 2026-07-25**；KnowledgePage 未掛 Nav，以臨時 harness 驗收） |
 | 5 ✅ | ChatPage + AppCenterPage | 400 + 662 | 中等（**已完成 2026-07-25**；含三處全域改動：antd.App、autoInsertSpaceInButton、.sch-timeline） |
-| 6 | ~~HandoverPage~~ → **只剩 App.jsx（nav/header）** | ~~1,011~~ + 634 | **PO 決議 2026-07-25 廢除 HandoverPage**，該檔直接刪除不必遷移（淨省 1,011 行）；見 [handover](../entities/modules/handover.md) |
+| 6 | ~~HandoverPage~~ → **只剩 App.jsx（nav/header）** | ~~1,011~~ + 634 | **PO 決議 2026-07-25 廢除 HandoverPage**，該檔 **2026-07-25 已刪除**（含 App.jsx 路由/圖示/註解 nav 項與 build.py JS_MODULES）；見 [handover](../entities/modules/handover.md) |
 | 7 | SectionPage（Home widgets） | 2,242 | 客製視覺最重、**最後動**（降低用戶測試干擾） |
 
 ## 每頁驗收準則（DoD）

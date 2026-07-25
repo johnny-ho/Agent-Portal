@@ -22,11 +22,19 @@ status: stale
 
 | # | 位置 | 處置 |
 |---|---|---|
-| 1 | `HandoverPage.jsx`（62KB / 1,011 行，獨立頁、Nav 隱藏；App.jsx:631、702 兩處路由） | **刪除** |
-| 2 | `ShiftHandoverModal`（`SectionPage.jsx:1874`，Home header 按鈕開啟）→ 提交後經 `handoverRecord`（App 層 state）進 `BulletinWidget` 成置頂公告 `type:'handover'` | **保留並換角色** |
+| 1 | `HandoverPage.jsx`（62KB / 1,011 行，獨立頁、Nav 隱藏；App.jsx:631、702 兩處路由） | **✅ 已刪除（2026-07-25）** |
+| 2 | `ShiftHandoverModal`（`SectionPage.jsx:1874`）→ 提交後經 `handoverRecord`（App 層 state）進 `BulletinWidget` 成置頂公告 `type:'handover'` | **保留並換角色**（線完好，但**目前無入口**，見下） |
 | 3 | ChatPage 的「準備交班摘要」quick prompt（三 persona 皆有） | 保留 |
 
 ⚠️ **刪除時不可連 `handoverRecord` / `onHandoverSubmit` / `showHandoverModal` 一起清**——那是觸點 2 的線，仍在使用。
+
+### ⚠️ 發現（2026-07-25 刪除時實測）：ShiftHandoverModal 目前沒有觸發入口
+
+原以為「Home header 的『發起交班』按鈕開啟 Modal」，實測**該按鈕所在的 `SectionHeader`（`SectionPage.jsx:403`）是死碼**——`src/` 內零引用，Home 頂端那條 header 早已由 `App.jsx` 自繪取代。故 `setShowHandoverModal(true)` **全專案無人呼叫**，Modal 進不去。此為刪除前既有狀態（在 `main` 上已如此），非本次刪除造成。
+
+`ShiftHandoverModal → handoverRecord → BulletinWidget` 這條線本身**驗證完好**：以強制開啟的 probe build 實測，送出後佈告欄立即出現置頂【交班記錄】公告。
+
+→ **給新交班樣貌的意涵**：Modal 的入口本來就要重做，而新設計的入口不是 header 按鈕，是**佈告欄那則 SOP 產出公告上的「補充交代事項」**——順路解掉這個缺口，`SectionHeader` 死碼可一併清除。
 
 ## 新的交班樣貌
 

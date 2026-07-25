@@ -34,7 +34,6 @@ JS_MODULES = [
     os.path.join(SRC_DIR, 'components', 'KnowledgePage.jsx'),
     os.path.join(SRC_DIR, 'components', 'ChatPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SkillManagementPage.jsx'),
-    os.path.join(SRC_DIR, 'components', 'HandoverPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SettingPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'TaskManagementPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SchedulingPage.jsx'),
