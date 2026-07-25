@@ -5325,8 +5325,10 @@ function LinkWidgetCard({ widget, onEdit }) {
 
 /* ── renderHomeWidget: dispatch by slot.type ── */
 /* rowId 是為了讓 custom widget 的 onEdit 能帶出精確的 { rowId, slotId }，供 HomeLayoutTab 自動展開對應設定面板 */
+/* 注意：本函式是被當一般函式呼叫（非 <Component />），所以裡面不能有 hook——
+   否則 useTheme 會算進 DashboardPage 的 hook 序列，widget 數量一變就噴
+   「change in the order of Hooks」。原本的 useTheme 未被使用，已移除。 */
 function renderHomeWidget(slot, rp, rowId) {
-  var { C, fz } = useTheme();
   switch (slot.type) {
     case 'announcement': return <BulletinWidget p={rp.p} handoverRecord={rp.handoverRecord} onEdit={rp.onOpenBulletinSetting} onOpenHandover={rp.onOpenHandover} />;
     case 'tool':         return <ToolStatusWidget p={rp.p} />;

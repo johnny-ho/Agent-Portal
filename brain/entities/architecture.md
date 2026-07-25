@@ -16,8 +16,8 @@ status: current
 
 ```mermaid
 flowchart LR
-    D["src/data/*.js<br/>(5 份 mock 資料)"] --> B[build.py<br/>依序串接]
-    C["src/components/*.jsx<br/>(13 個元件, App.jsx 最後)"] --> B
+    D["src/data/*.js<br/>(6 份 mock 資料)"] --> B[build.py<br/>依序串接]
+    C["src/components/*.jsx<br/>(14 個元件, App.jsx 最後)"] --> B
     S[src/shell.html<br/>+ styles.css] --> B
     B --> O["index.html<br/>(單一檔案, 根目錄)"]
 ```
@@ -37,9 +37,10 @@ flowchart LR
 
 ## 前端結構
 
-- **狀態提升至 App.jsx**：persona 切換、`handoverRecord`（交班→佈告欄整合）、`DEFAULT_FUNCTION_TREE`（前後台共用）、`homeLayout`（v3.7 row-based 首頁）；Dark Mode 用 ThemeContext（v3.1）
+- **狀態提升至 App.jsx**：persona 切換、`handoverRecord`（SOP 交接報告產出→佈告欄→交班 Modal 那條線）、`DEFAULT_FUNCTION_TREE`（前後台共用）、`homeLayout`（v3.7 row-based 首頁）；Dark Mode 用 ThemeContext（v3.1）
 - **AntD 橋接層**：`shared.jsx` 的 `AppConfigProvider` 從 ThemeContext 讀 isDark/字級 → 映射 AntD `ConfigProvider` theme token，並在內層包一個 `antd.App component={false}`（零 DOM）供各頁 `antd.App.useApp()` 取得吃主題的 `message`/`modal`；遷移進度見 [antd-migration-plan](../concepts/antd-migration-plan.md)
-- 13 個 Page/元件 + shared.jsx；mock 資料集中在 `src/data/`（personas / tasks / scheduling / apps / kpiReportConfig）
+- 14 個 Page/元件 + shared.jsx（2026-07-25：刪 HandoverPage、加 SkillCreateFlow）；mock 資料集中在 `src/data/`（personas / tasks / scheduling / apps / kpiReportConfig / notifications）
+- **hook 陷阱**：`renderHomeWidget()` 這類「被當一般函式呼叫」的渲染輔助函式裡不能有 hook——曾因裡面留了一個沒用到的 `useTheme()`，使該 hook 併入 `DashboardPage` 的序列，persona 切換使 widget 數量改變時就噴 React hooks order warning（2026-07-25 修）
 - 尚無正式 Widget Contract——widget 是 Component 級靜態模擬（規模化風險見 [widget-governance](../concepts/widget-governance.md)）
 
 ## 架構層面的觀察（PM 視角）

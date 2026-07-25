@@ -350,6 +350,17 @@ genChatId:   '...',                                                          // 
 consumedBy:  { calledByAgent: true, scheduleId: 'sch-001' | null },
 ```
 
+### 實作時補上的欄位（2026-07-25，已落地）
+
+| 欄位 | 型別 | 為什麼需要 |
+|---|---|---|
+| `evalCases[]` | `{ input, expect, origin: 'seed'\|'system', locked, result }` | 輔助判斷的驗收。`origin: 'system'` 的負面題 `locked: true` 不可刪 |
+| `traceSample` | `{ question, askedBy, askedAt, steps[] }` | 一次實際互動的逐步紀錄，`steps[]` 含 `kind: 'match'\|'tool'\|'answer'`，工具步驟帶 `allowed` 與 `reason`。**這是「已拒絕」那一行唯一的資料來源**，原型定位要靠它現形 |
+| `plainSteps[].needsConfirm` | `boolean` | 標出寫入步驟，供「本 SOP 含 N 個需確認步驟」計算 |
+| `dryRun.comparedWith` / `diffNote` | `string` | 「與上次試跑的差異」——Seed 要確認變的是資料不是邏輯 |
+
+另新增全域 **`EQUIPMENT_MASTER`**（設備／站點主檔，per persona）與 **`matchScopeTargets(personaKey, scope)`**：結構化適用範圍要能算出「目前符合 N 台」，就必須有一份可比對的主檔，否則勾選畫面沒有東西可回饋。`scheduling.js` 對應加 `skillId`／`hasWrite`／`confirmSteps`／`producesHandover`／`runs[].output`，與 **`getLatestHandoverReport(personaKey)`**（Home 佈告欄與交班 Modal 共用同一份產出）。
+
 ## 原型定位
 
 PO 確認**本專案為個人原型**，不受 OKR 時程約束。治理設計的目標從「真的擋住」改為 **「讓人看得見它擋住了」**——Tool Gateway 不需是真的安全邊界，但**必須在 UI 上現形**：
@@ -360,6 +371,26 @@ PO 確認**本專案為個人原型**，不受 OKR 時程約束。治理設計�
 ```
 
 那一行「已拒絕」比任何架構圖都能說明三層模型在幹嘛。**原型交付物是可理解性，不是防護力。**
+
+## 實作狀態（2026-07-25 完成，7 個 commit）
+
+| # | 內容 | 落點 |
+|---|---|---|
+| 1 | HandoverPage 刪除 | `App.jsx`、`build.py` |
+| 2 | 資料層三層欄位 + 結構化 scope + 設備主檔 | `data/personas.js` |
+| 3 | 類型欄／類型篩選／詳情依類型分岔／dry run 三層／工具授權區 | `SkillManagementPage.jsx`、`shared.jsx` |
+| 4 | 對話式建立五關 | `SkillCreateFlow.jsx`（新檔） |
+| 5 | 執行紀錄展示產出物／排程只掛 SOP／需確認步驟提示 | `SchedulingPage.jsx`、`data/scheduling.js` |
+| 6 | SOP 產出 → 佈告欄置頂 → 交班 Modal 預填 | `SectionPage.jsx` |
+| 7 | Chat 三態徽章 | `ChatPage.jsx`、`data/personas.js` |
+
+**三個超出原文件、實作時決定的設計**：
+
+1. **送簽的硬條件寫進 UI**（風險 2「簽核變蓋章」的具體化）：SOP 需展開過 dry run 第二層、輔助判斷需測試題全過，否則清單與詳情的推進鈕皆 disabled 並以 tooltip 說明原因。原文件只說「不能收在很深的地方」，實作把它變成擋得住的條件。
+2. **建立流程的適用範圍那一關完全沒有可打字的欄位**（AntD Select 的 combobox 殼是 `readOnly`）。原文件說「勾選不是打字」，實作把它當硬約束驗收。
+3. **新增排程的清單列出所有 Skill 但鎖住不可排程者並寫明原因**，沿用「鎖住的區塊不能隱藏」原則（原文件只把它用在授權區）。
+
+**尚未實作**：SOP 卡片的「不適用」一鍵轉輔助判斷（體驗設計原則 2）、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務（體驗設計原則 5）。
 
 ## 關聯
 

@@ -34,6 +34,10 @@ UI 已於 2026-07-25 完成 **AntD 遷移 Phase 4**（見 [antd-migration-plan](
 - **排程型 SOP 會靜默失效**（資料來源改欄位／系統改 API → 持續產出看似正常但錯誤的報告）→ 需結果異常偵測（與前 N 次比較）＋ 定期自動重跑 dry run
 - 知識管理頁的 SOP 詳情提供「設為定期執行」入口，跳轉本頁並預填時間
 
+### 實作狀態（2026-07-25 已完成）
+
+前四項已落地：`SchNewScheduleModal`（只選得到 Production 的 SOP；知識與輔助判斷仍列出但鎖住並寫明原因）、執行紀錄展開先顯示「本次產出」再顯示步驟（沿用知識管理頁的產出渲染，兩邊長一樣）、右上依 `confirmSteps` 顯示需確認步驟數或「可完全自動執行」。資料面 `scheduling.js` 新增 `sch-eq-004`「當班交接報告」（綁 `sm-eq-007`，含一筆設備監控 timeout 的失敗紀錄）與 `getLatestHandoverReport()`。**尚未實作**：結果異常偵測、定期自動重跑 dry run、SOP 詳情的「設為定期執行」入口。
+
 ## 專屬 OQ
 
 SCH-OQ-1 Claim timeout 機制（高）；SCH-OQ-2 Skill 編寫介面與 MCP tool 授權（高）；SCH-OQ-3 執行 context 持久化規格（高）；SCH-OQ-4 延伸討論結果是否回寫執行紀錄；SCH-OQ-5 失敗重試策略；SCH-OQ-6 排程建立/編輯 UI。彙整見 [open-questions](../../open-questions.md)。
