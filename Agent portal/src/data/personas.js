@@ -433,7 +433,22 @@ const PERSONAS = {
         { role: 'user', text: '這個問答有價值，幫我存到課的知識庫。' },
         { role: 'ai', text: '整理成 Q&A 條目如下：\n\n標題：E-101 研磨頭換件 — 力矩與冷卻水路標準\n來源 Skill：v2.3\n關鍵資訊：上蓋螺絲 18 N·m、流量 1.8–2.2 L/min\n\n→ 確認提交後進入 Knowledge 等待發布。', action: 'contribute' },
       ]},
-      { id: 2, title: 'ERR-4421 異常代碼分析', time: '今天 09:15', preview: 'ERR-4421 最常見根因是什麼？', messages: [] },
+      /* 三態徽章的範例對話：同一串裡出現「AI 依指引研判」與「一般回答」，
+         對照上一串的「依核准流程」。見 concepts/agent-skill-tiering.md 體驗設計原則 */
+      { id: 2, title: 'E-101 跳 ERR-4421 怎麼處理', time: '今天 03:12', preview: 'E-101 跳 ERR-4421，怎麼辦？', messages: [
+        { role: 'user', text: 'E-101 跳 ERR-4421，怎麼辦？' },
+        { role: 'ai',
+          text: '這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你看了現場數據：\n\n・冷卻水壓 0.11 MPa（門檻 0.15）\n・過濾器壓差 0.07 MPa（判斷門檻 0.05）\n・近 2 小時水壓由 0.19 緩降至 0.11，不是跳動\n\n研判為冷卻水路阻塞。建議先執行冷卻水路疏通程序，30 分鐘內未回升再開緊急工單。\n\n我無法代為開單，工單內容我已擬好，你可以直接複製。',
+          guidedBy: 'ERR-4421 冷卻異常研判',
+          toolRuns: [
+            { tool: 'fdc.get_alarm_detail',     label: '查警報明細',   mode: 'read',  allowed: true,  result: '取得 1 筆：冷卻水壓 0.11 MPa、過濾器壓差 0.07 MPa' },
+            { tool: 'eqp.get_sensor_trend',     label: '查感測器趨勢', mode: 'read',  allowed: true,  result: '近 2 小時水壓緩降，非跳動' },
+            { tool: 'mes.create_urgent_order',  label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為輔助判斷，不可異動系統', result: '已拒絕 → 改為建議' },
+          ],
+        },
+        { role: 'user', text: '冷卻水路阻塞通常多久會再發生？' },
+        { role: 'ai', text: '這要看水質與過濾器更換週期，一般廠務條件下常見的區間是 3–6 個月，但這是通則，不是本課的實際數據。\n\n如果要準確的答案，建議查本課近一年的 ERR-4421 發生紀錄；我目前沒有課上的相關知識可以引用。' },
+      ]},
       { id: 3, title: '白班交班摘要', time: '昨天 19:45', preview: '幫我整理今天的交班重點', messages: [] },
       { id: 4, title: 'E-308 異常追蹤', time: '04/07', preview: 'E-308 上次異常紀錄在哪？', messages: [] },
     ],
