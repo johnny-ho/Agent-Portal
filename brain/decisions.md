@@ -3,7 +3,7 @@ type: decision
 title: 決議時間軸（v2.5 → v3.9）
 description: 歷次版本的關鍵產品決議，一頁掌握「為什麼現在長這樣」
 tags: [decision, changelog]
-updated: 2026-07-11
+updated: 2026-07-26
 sources: [PRODUCT_BASELINE.md §13, 版本標頭]
 status: current
 ---
@@ -32,5 +32,8 @@ status: current
 | — | 2026-07-25 | **Agent Skill 三層模型定案**：知識／輔助判斷／SOP（UI 用字）。分界為確定性＋副作用（「能不能排程」是使用者可懂的分界）；隔離做在 **Tool Gateway 而非 sub agent**；**寫入行為一律強制人工確認**（HITL），故把關永遠在 runtime；適用範圍改結構化欄位；輔助判斷簽核改**評測集**（Seed 出題、負面題系統自動生成） | [agent-skill-tiering](concepts/agent-skill-tiering.md) |
 | — | 2026-07-25 | **SOP 建立採對話式**：Seed 貼文本或聊需求 → agent 生流程與 code node → 試跑 → promote 進 Draft → UI 上 dry run → 簽核。code node **自由式 + sub graph 混用**（成熟行為做成標準元件，避免錯用與重複試錯）；簽核對象是**白話說明＋dry run 三層結果**，非 code；Pilot Run 改條件式（唯讀 SOP 跳過） | [agent-skill-tiering](concepts/agent-skill-tiering.md) |
 | — | 2026-07-25 | **交班中心廢除**：`HandoverPage` 直接刪除，交班降級為一個 SOP 的排程產出——Schedule 內檢視（檔案櫃）＋ Home 佈告欄觸達（今天這份），`ShiftHandoverModal` 改為預填後人補判斷。ECP 切入點定位不變、載體改變 | [handover](entities/modules/handover.md)、[ecp-strategy](concepts/ecp-strategy.md) |
+| — | 2026-07-26 | **知識拆出 Skill 管理**，落於 Setting 獨立 tab（不進 Nav）。理由：知識在輔助／SOP 執行的前後都會被引用，是底料不是平行路線。**部分推翻**「三種類型放同一管理頁」——飛輪 1 的兩端（輔助判斷↔SOP）仍同清單，故論證不受影響。Vector/RAG/知識圖譜僅註記方向不實作 | [knowledge-base](entities/modules/knowledge-base.md)、[agent-skill-tiering](concepts/agent-skill-tiering.md) |
+| — | 2026-07-26 | **Skill 詳情從 Modal 改全頁**：Title/Scope/Description/**Graph**（僅 SOP）/Test case & Dry-run，右上 **Ask AI**（只能改當前這一份，修改以 diff 回寫主欄）與 **Signoff**（一顆會看 stage 的按鈕，取代散落各處的階段推進鈕）。清單降為純進入點、列上只剩刪除 | [agent-skill-tiering](concepts/agent-skill-tiering.md)、[setting](entities/modules/setting.md) |
+| — | 2026-07-26 | **AI 頁改成當代 AI 對話**：砍頭像、AI 回應無氣泡無框全寬純文字、三態徽章降級為一行細字 meta（徽章不能省的論證不變，只降視覺重量）。新增**五種情境腳本**（SOP+HITL 成功／API 變更導致失效／輔助問答婉拒執行並給操作入口／依知識回答／無知識收斂成追蹤任務），標題直接就是情境目標 | [ai-chat](entities/modules/ai-chat.md) |
 
 **模式觀察**（PM 視角）：決議多次走「先做 → 發現雙頭管理/定位混淆 → 收斂單一入口」路徑（v2.8 釘選、v3.6 Nav）；引用舊版行為時務必先查本表確認未被推翻。

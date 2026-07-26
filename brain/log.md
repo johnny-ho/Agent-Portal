@@ -143,3 +143,21 @@ PO 補充實際開發中的 SOP 流程（對話式生成 → 試跑 → promote 
 **尚未實作**（列在 concept 頁末）：SOP 卡片「不適用」一鍵轉輔助判斷、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋實作補上的欄位、實作狀態、三個實作決定、未實作清單）、[entities/modules/scheduling.md](entities/modules/scheduling.md)、[entities/modules/ai-chat.md](entities/modules/ai-chat.md)、[entities/modules/home-dashboard.md](entities/modules/home-dashboard.md)、[entities/modules/knowledge-base.md](entities/modules/knowledge-base.md)、[entities/architecture.md](entities/architecture.md)、index.md。
+
+## [2026-07-26] decision | 知識拆出獨立、Skill 詳情改全頁、Chat 五情境改版
+
+PO 在 session 開頭提出五點修正，逐項討論確認後一次做完。三個需要 PO 拍板的分岔都先問過（知識落點／詳情形態／情境呈現），PO 皆選推薦方案。
+
+**決議 1｜知識從 Skill 管理拆出**（推翻 [agent-skill-tiering](concepts/agent-skill-tiering.md)「三種類型放同一管理頁」的前半）。PO 的理由：知識在輔助／SOP 執行的前後都會被引用，是底料不是平行路線。落點 = Setting 新 tab「知識管理」（不進 Nav，Section 管理七→八 tabs）。新增 `data/knowledge.js`（4 狀態，不需 Pilot Run），`personas.js` 移除 11 筆 `tier: 'knowledge'`，`SKILL_TIERS` 縮為 `['guided','sop']`，「從 KM 引入」隨知識搬過去。Skill 加 `knowledgeRefs[]`、知識文件加 `usedBy[]` 互相顯示。**飛輪 1 不受影響**——它的兩端是輔助判斷↔SOP，仍在同一份清單。Vector/RAG/知識圖譜依 PO 指示「註記方向就好」，做成頁面上一張可展開說明卡。
+
+**決議 2｜Skill 詳情從 1000px Modal 改全頁**（`SkillDetailPage.jsx` 新檔）。清單降為純進入點、列上只剩刪除。版面依 PO 指定：Title / Scope / Description / Graph（僅 SOP）/ Test case & Dry-run，右上 Ask AI 與 Signoff。**刻意拿掉兩個舊區塊但資訊不流失**：「會碰到哪些系統」收進 Graph 節點標記與 Scope 下一行可展開摘要；「最近一次處理紀錄」併入測試區（它真正的活體展示是 Chat 情境 3）。Signoff 一顆按鈕取代原本散在清單與 Modal 的多顆階段推進鈕，按 stage 變臉；送簽硬條件統一為「兩種類型都要測試案例全過」，SOP 另加 dry run 第二層展開過。
+
+**決議 3｜Graph**（原本完全不存在，SOP 只有直條 Timeline）。以「距 start 最長路徑」分層；`graph.edges` 支援條件分支（sm-eq-004 的 Level-2/Level-3、sm-eq-008 的有/無 OOC）與平行取數（sm-eq-007 三路取數匯流）。實作時修了兩個渲染問題：跨層的邊要在每段連接條畫通過線，否則節點看起來斷掉；同源多邊要把終點岔開，否則兩條線與兩個標籤疊成一條。
+
+**決議 4｜Ask AI 是修 Skill 的 agent 不是聊天框**。硬邊界「只能改當前這一份」寫在面板開頭，並內建一題讓它把邊界講一次。關鍵是**修改回寫到主欄對應區塊**（`−/＋` diff 橫幅 + 採用／捨棄），未處理前不能問下一題——不這樣做它就只是又一個聊天框。
+
+**決議 5｜Chat 版面 + 五情境**（`data/chatScenarios.js` 新檔）。版面：砍頭像、AI 回應無氣泡無框全寬純文字、user 改淡底、間距 16→32、三態徽章降級成一行細字 meta（徽章不能省的論證不變，改的只是視覺重量）。五情境為腳本播放，標題直接就是目標，user 發言以「建議接話」按鈕推進；情境 1／2 的人工介入用由下而上的面板（不是 Modal）；情境 2／5 用行動按鈕收斂成追蹤任務。equipment 五個完整，process／mfg 各兩個。
+
+**驗證**：build 850,155 bytes，瀏覽器實測 equipment 五情境全部走完（含 sheet 選項、失敗分支、建任務）、Skill 清單／詳情／Graph 分支／Ask AI diff 回寫、知識管理清單、Scheduling 新增排程仍只選得到 Production SOP，三 persona 切換無誤，console 零 React error（僅既有的 Babel 500KB note）。
+
+受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋「2026-07-26 改版」整段、原「三種類型放同一管理頁」標記為部分推翻）、[entities/modules/knowledge-base.md](entities/modules/knowledge-base.md)（改寫）、[entities/modules/ai-chat.md](entities/modules/ai-chat.md)、[entities/modules/setting.md](entities/modules/setting.md)、[decisions.md](decisions.md)、index.md。

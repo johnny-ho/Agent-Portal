@@ -1,9 +1,9 @@
 ---
 type: entity
 title: Setting 後台
-description: Personal 區（全角色）+ Section 管理七 tabs（Seed）+ IT 管理區（IT Admin）
+description: Personal 區（全角色）+ Section 管理八 tabs（Seed，2026-07-26 加知識管理）+ IT 管理區（IT Admin）
 tags: [module, setting, governance]
-updated: 2026-07-11
+updated: 2026-07-26
 sources: [PRODUCT_BASELINE.md §6, §13.9–13.11, §13.13]
 status: current
 ---
@@ -12,7 +12,7 @@ status: current
 
 **結構**：Personal 區（深色模式 / 語言 / 字型，全角色）＋ Section 管理區（僅 Seed）＋ IT 管理區（僅 IT Admin，APP 管理 tab）。是四層治理模型的操作介面，見 [widget-governance](../../concepts/widget-governance.md)。
 
-## Section 管理七 tabs（Seed）
+## Section 管理八 tabs（Seed）
 
 | Tab | 功能 |
 |-----|------|
@@ -21,7 +21,8 @@ status: current
 | KPI Summary | KPI 啟停、黃/紅閾值、拖曳排序、即時預覽 |
 | KPI 報表管理（v3.9） | 報表來源設定，見 [kpi-center](kpi-center.md) |
 | Application | 課級應用分組、必選標記，反映 Home 課的應用 widget |
-| 知識管理 | Skill 匯入 / 編輯測試 / 五段簽核，見 [knowledge-base](knowledge-base.md) |
+| Skill 管理 | 輔助判斷與 SOP 的清單、詳情（Scope／Description／Graph／Test & Dry-run）、Signoff、Ask AI，見 [agent-skill-tiering](../../concepts/agent-skill-tiering.md) |
+| 知識管理（2026-07-26 新增） | 課上知識文件的引入、審核與被引用關係，見 [knowledge-base](knowledge-base.md) |
 | 首頁排版（v3.7） | Row-based widget 管理（Picker 依課過濾 + singleton 約束、per-widget 編輯面板、跨 tab 跳轉） |
 
 ## 現況與注意

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Agent Skill 三層模型（知識／輔助判斷／SOP）
-description: 三層 Skill 的分界、對話式建立流程、Tool Gateway runtime 把關、sub graph 混用與兩個飛輮 — Agent 架構的實作依據
+description: 三層 Skill 的分界、對話式建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-26 知識已拆出獨立管理
 tags: [concept, ai, architecture, skill, governance]
-updated: 2026-07-25
-sources: [PO×AI 討論 2026-07-25, PRODUCT_BASELINE.md §8, personas.js sopManagement, scheduling.js]
+updated: 2026-07-26
+sources: [PO×AI 討論 2026-07-25 與 2026-07-26, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
 status: current
 ---
 
@@ -328,7 +328,8 @@ dry run 對 SOP 有效（每次跑都一樣），對輔助判斷無效（同一�
 3. **授權綁工具不綁文件**：唯讀為預設且廉價；勾寫入工具時跳確認「簽核從 2 位變 3 位／執行到這步會停下等人／必須指定影響範圍」。**摩擦是設計出來的，不是靠寫規範叫人自律**
 4. **鎖住的區塊不能隱藏**：輔助判斷的「會異動系統的動作」區要看得到但灰底加鎖，寫明「輔助判斷不能異動系統，需要 AI 代為執行請改建 SOP」——Seed 看見它才知道邊界在哪
 5. **trace 成為工程師的資產**：可匯出處理紀錄一鍵帶進交班或任務 → 直接打「2 小時寫報告自證」痛點，把風險 1 翻轉成最強採用論證
-6. **三種類型放同一管理頁**用類型欄位區分，不開第二個 Nav 入口——飛輪 1 要成立，兩端必須在同一個清單裡
+6. ~~**三種類型放同一管理頁**用類型欄位區分，不開第二個 Nav 入口——飛輪 1 要成立，兩端必須在同一個清單裡~~
+   ⚠️ **2026-07-26 PO 推翻前半**：知識拆出去獨立成「知識管理」頁。理由是知識在輔助判斷／SOP 執行的**前後都會被引用**，是底料不是第三條路線。飛輪 1 的論證仍然成立且未受影響——飛輪 1 的兩端是**輔助判斷 → SOP**，兩者仍在同一個清單裡。後半（不開第二個 Nav 入口）維持：知識管理掛在 Setting 的獨立 tab，不進 Nav。詳見文末「2026-07-26 改版」
 
 **不要做**：不讓 LLM 自己決定用哪層；輔助判斷輸出不自動寫入任何系統；不在 Nav 開第二個「AI Skill」入口。
 
@@ -391,6 +392,95 @@ PO 確認**本專案為個人原型**，不受 OKR 時程約束。治理設計�
 3. **新增排程的清單列出所有 Skill 但鎖住不可排程者並寫明原因**，沿用「鎖住的區塊不能隱藏」原則（原文件只把它用在授權區）。
 
 **尚未實作**：SOP 卡片的「不適用」一鍵轉輔助判斷（體驗設計原則 2）、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務（體驗設計原則 5）。
+
+## 2026-07-26 改版（PO 討論後實作完成）
+
+### 決議 1：知識拆出 Skill 管理
+
+**PO**：「知識管理是一個單獨的事情，知識在輔助／SOP 執行前後都可以被應用，我認為不該被視為一條平行的路線。」
+
+推翻上文「三種類型放同一管理頁」的前半。落點：**Setting 新增獨立 tab「知識管理」**（不進 Nav，Section 管理從七 tabs 變八 tabs）。
+
+| | 改前 | 改後 |
+|---|---|---|
+| 知識存哪 | `sopManagement[]` 的 `tier: 'knowledge'` | `data/knowledge.js` 的 `KNOWLEDGE_DOCS[persona]` |
+| 狀態機 | 五階段（Draft→…→Production） | 四狀態（草稿／審核中／已發布／待更新）—— 知識不需要 Pilot Run |
+| 「從 KM 引入」 | Skill 管理 Header | 移到知識管理 —— 它引入的是文件不是流程 |
+| Skill 怎麼用到知識 | 無關聯 | Skill 新增 `knowledgeRefs[]`；知識文件有 `usedBy[]` 反向顯示被誰引用 |
+
+`SKILL_TIERS` 縮為 `['guided', 'sop']`。`SKILL_TIER_CFG.knowledge` 保留供用語一致性使用。`SkillCreateFlow` 的 knowledge 推薦分支改為導引到知識管理（`rec.redirect === 'knowledge'` 時多顯示一張說明卡）。
+
+**Vector + RAG + 知識圖譜為後續方向，本版不實作**，僅在知識管理頁放一張可展開的說明卡（PO 明示「註記方向就好」）。
+
+### 決議 2：Skill 詳情從 Modal 改全頁
+
+理由：Graph 與 Ask AI 側欄要同時展開，1000px Modal 塞不下。清單降級為純進入點，**列上的操作只剩刪除**。
+
+詳情頁版面（PO 指定）：**Title / Scope / Description / Graph（僅 SOP）/ Test case & Dry-run**，右上 `[Ask AI]` 與 `[Signoff]`。
+
+刻意拿掉兩個舊區塊，資訊沒有不見、換了地方：
+
+| 拿掉的 | 去哪了 |
+|---|---|
+| 「會碰到哪些系統」大區塊 | SOP → Graph 節點上直接標讀／寫／需確認；輔助判斷 → Scope 下方一行可展開摘要（鎖住不隱藏原則保留） |
+| 「最近一次處理紀錄」獨立區 | 併入 Test 區；它真正的活體展示是 Chat 情境 3 |
+
+**Signoff 一顆按鈕取代原本散在清單與 Modal 的多顆階段推進鈕**，按 stage 變臉：Draft／Testing →「送出簽核」（受送簽硬條件約束，未過則 disabled 並在頁尾寫明原因，不只藏在 tooltip）；Approving →「簽核中 N/M」disabled；Pilot Run →「確認生效」；Production →「已生效」disabled。五階段資料結構不動。
+
+送簽硬條件也統一了：**兩種類型都要測試案例全數通過**，SOP 額外要求展開過 dry run 第二層。原本 SOP 只檢查 dry run，現在 SOP 也有 `evalCases`。
+
+### 決議 3：新資料欄位
+
+```js
+purpose:       '一句話用途',              // 清單與 Scope 區共用
+description:   '...',                     // 輔助判斷＝skill.md 風格長文；SOP＝流程敘述。簽核契約
+knowledgeRefs: ['kd-eq-003'],             // 引用的知識文件
+graph:         { edges: [{from, to, label}] },   // 僅 SOP。'start'/'end' 為終端節點
+plainSteps[].io:     'read'|'write'|'compute'|'decision',   // Graph 節點標記
+plainSteps[].system, plainSteps[].tool,
+```
+
+`plainSteps` 保留為 Graph 節點的內容來源（`graph` 只放邊），避免與 `SchedulingPage` 既有的 `needsConfirm` 統計重複定義。Graph 以「距 start 的最長路徑」分層；跨層的邊（如「無 OOC 直接結束」）在每一段連接條畫通過線，同源多邊會把終點岔開，否則兩條線與兩個標籤會疊成一條。
+
+### 決議 4：Ask AI 是修 Skill 的 agent，不是聊天框
+
+範圍硬邊界：**只能改當前這一份，不可跨 Skill／SOP**，面板開頭就寫明，且內建一題「你可以順便幫我改別的 SOP 嗎？」讓它把邊界講一次。
+
+關鍵設計：**AI 的修改回寫到主欄對應區塊**，以 `−/＋` diff 橫幅呈現，附「採用／捨棄」；未處理前不能問下一題。不做這件事的話它只是又一個聊天框。
+
+### 決議 5：Chat 五情境 + 版面改成當代 AI 對話
+
+**PO**：「目前 ai 頁面的對話非常不理想，看起來很像 chatting 系統，不是當代的 ai 對話模式。」
+
+版面：**移除頭像**、AI 回應**無氣泡無框**全寬純文字（15px／行高 1.85、最大寬 720）、User 訊息改淡底圓角不用藍底白字實心塊、訊息間距 16→32。**三態徽章保留但降級成回應下方一行細字 meta**（色點＋標籤＋來源，hover 才出說明）——徽章不能省的論證（採用率問題）不變，改的只是它的視覺重量。工具呼叫改灰色細行不包框，`✗ 已拒絕` 仍用紅字。
+
+五情境為腳本播放（`data/chatScenarios.js`），**對話標題直接就是該情境的目標**，使用者的發言以底部「建議接話」按鈕呈現、點了才推進：
+
+| # | 演什麼 | 對到本頁哪一段 |
+|---|---|---|
+| 1 | SOP 執行 → 人工介入 → 順利開單 | HITL：寫入步驟一律停下等人 |
+| 2 | SOP 執行 → 人工介入 → **API 變更導致 codify 失效** | 風險 3「排程型 SOP 靜默失效」的具體化 |
+| 3 | 輔助問答 → 給建議 → **婉拒代為執行並給操作 URL** | Tool Gateway `[6]` 出場關的活體展示 |
+| 4 | 無 Skill／SOP，依知識回答 | 一個入口分岔在回答裡；情境幻覺的反面教材（拒絕把 CMP 判斷套到爐管） |
+| 5 | 無 Skill 也無知識 → **收斂成一張追蹤任務** | close loop：把「問不到」變成可追蹤的缺口 |
+
+情境 1／2 的人工介入用**由下而上升起的面板**（不是 Modal）：它是「流程停在這裡等你」，不是「跳出來打斷你」。情境 2／5 的收尾用行動按鈕直接建任務。
+
+### 實作落點（2026-07-26）
+
+| 檔案 | 內容 |
+|---|---|
+| `data/knowledge.js`（新） | `KNOWLEDGE_DOCS` × 3 persona、`KD_STATUS_CFG`、`getKnowledgeDocs`／`findKnowledgeDoc` |
+| `data/chatScenarios.js`（新） | 五情境腳本（equipment 5 / process 2 / mfg 2） |
+| `data/personas.js` | 移除 knowledge tier 共 11 筆；其餘補 `purpose`／`description`／`graph`／`knowledgeRefs`／`evalCases`；新增 5 個 Skill 補齊五階段覆蓋 |
+| `components/SkillDetailPage.jsx`（新） | 全頁詳情、SkillGraph、AskAiPanel、Signoff |
+| `components/KnowledgePage.jsx` | 由死碼重寫為知識管理頁 |
+| `components/SkillManagementPage.jsx` | 清單化（只留刪除）、詳情改路由到全頁；保留 `StatusTag`／`describeScope`／`DryRunOutput` 供詳情頁共用 |
+| `components/ChatPage.jsx` | 版面重寫 + 腳本引擎 + HitlSheet |
+| `components/SkillCreateFlow.jsx` | 移除 knowledge 分支；產出補 `graph`／`description`／`purpose`；`buildAutoEvalCases` 加 tier 參數 |
+| `components/SettingPage.jsx` | 新增「知識管理」tab（Section 管理七→八 tabs） |
+
+**這一版仍未實作**（承上一版）：SOP 卡片的「不適用」一鍵轉輔助判斷、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務。
 
 ## 關聯
 
