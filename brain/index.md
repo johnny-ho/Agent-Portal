@@ -8,6 +8,7 @@
 - [decisions.md](decisions.md) — v2.5 → v3.9 決議時間軸 + 2026-07-10 backlog 方法論
 - [open-questions.md](open-questions.md) — OQ-1~9、TM/SCH 專屬 OQ、wiki 新發現缺口 W-1~4
 - [log.md](log.md) — 操作時間軸（append-only）
+- [../ai_ux_guideline.md](../ai_ux_guideline.md) — **AI 對話／Agent 執行體驗的團隊實作準則**（根目錄，AI 維護）：§0–6 執行型（Chat 頁），§7 編輯型（Skill 詳情 Ask AI），§8 快速檢查清單。做任何新的 AI 功能前先讀這頁，不必重推導一次
 
 ## Sources（原始文件摘要）
 
@@ -41,7 +42,7 @@
 ## Concepts
 
 - [concepts/design-principles.md](concepts/design-principles.md) — 八條設計原則（需求評審檢查表）
-- [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md) — **Agent Skill 三層模型**（知識／輔助判斷／SOP）+ 對話式建立 + Tool Gateway runtime 把關 + 兩個飛輪；原型 2026-07-25 實作完成，**2026-07-26 改版：知識拆出獨立、Skill 詳情改全頁（Graph/Signoff/Ask AI）、Chat 五情境**；頁末有實作落點與未實作清單；SCH-OQ-2 解方
+- [concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md) — **Agent Skill 三層模型**（知識／輔助判斷／SOP）+ 建立流程 + Tool Gateway runtime 把關 + 兩個飛輪；原型 2026-07-25 實作完成，**2026-07-26 兩輪改版**：①知識拆出獨立、Skill 詳情改全頁（Graph/Signoff/Ask AI）、Chat 五情境 → ②**Skill 管理四項（決議 6–9）：清單工具列收一行、Ask AI 全程在右側不阻塞、測試／試跑補回執行動作與可看的 FAIL、建立改短表單＋詳情頁首次體檢**；頁末有實作落點與未實作清單；SCH-OQ-2 解方
 - [concepts/widget-governance.md](concepts/widget-governance.md) — 四層治理 + Widget Contract
 - [concepts/ecp-strategy.md](concepts/ecp-strategy.md) — ECP 下一代、交接切入點、平台引力模型
 - [concepts/antd-migration-plan.md](concepts/antd-migration-plan.md) — AntD 全面遷移計畫（8 Phase、token 映射、每頁 DoD）；**Phase 0–5 ✅ 完成**（Setting 系列、TaskManagement、SkillManagement、Scheduling、KPI、Knowledge、Chat、AppCenter）＋ Phase 8 死檔清理 ✅，HandoverPage 已刪，下一棒 **Phase 6（僅 App.jsx nav/header）**

@@ -268,7 +268,9 @@ function SOPManagementPage({ p }) {
     );
   }
 
-  /* 篩選膠囊（Segmented）標籤：文字 + 筆數 */
+  /* 篩選膠囊（Segmented）標籤：文字 + 筆數
+     工具列已收成一行、拿掉外部 label，所以「全部類型 / 全部」這幾顆
+     的文字本身就要撐起語意，不能再簡寫成「全部」兩字以外的東西。 */
   function stageLabel(text, count, active) {
     return (
       <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: active ? '#FFFFFF' : C.textMuted, fontWeight: active ? 600 : 400 }}>
@@ -282,9 +284,12 @@ function SOPManagementPage({ p }) {
     );
   }
 
-  var stageOptions = [{ value: 'all', label: stageLabel('全部', skills.length, filter === 'all') }].concat(
+  /* Pilot Run 縮成 Pilot：單行工具列每 32px 都要省 */
+  var STAGE_SHORT = { pirun: 'Pilot' };
+
+  var stageOptions = [{ value: 'all', label: stageLabel('全部階段', skills.length, filter === 'all') }].concat(
     SKILL_STAGES.map(function(s) {
-      return { value: s, label: stageLabel(SKILL_STAGE_CFG[s].label, counts[s] || 0, filter === s) };
+      return { value: s, label: stageLabel(STAGE_SHORT[s] || SKILL_STAGE_CFG[s].label, counts[s] || 0, filter === s) };
     })
   );
 
@@ -295,8 +300,6 @@ function SOPManagementPage({ p }) {
       return { value: t, label: stageLabel(SKILL_TIER_CFG[t].label, tierCounts[t] || 0, tierFilter === t) };
     })
   );
-
-  var toolLabel = { fontSize: fz(11), color: C.textMuted, flexShrink: 0 };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.bg }}>
@@ -311,45 +314,35 @@ function SOPManagementPage({ p }) {
         <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
       </div>
 
-      {/* 知識已拆到另一頁，這裡講一句避免使用者以為東西不見了 */}
-      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, fontSize: fz(12), color: C.textMuted, flexShrink: 0, lineHeight: 1.6 }}>
-        知識文件不在這頁 —— 它在<span style={{ color: C.textSub, fontWeight: 600 }}>「知識管理」</span>。知識是這些 Skill 引用的底料，不是與它們平行的第三種東西。
-      </div>
-
-      {/* Search + Sort（欄位一律有 label，不以 placeholder 代替）*/}
-      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-        <span style={toolLabel}>搜尋</span>
-        <antd.Input
-          allowClear
-          value={searchQuery}
-          onChange={function(e) { setSearch(e.target.value); }}
-          prefix={<span style={{ color: C.textMuted, fontSize: fz(12) }}>🔍</span>}
-          placeholder="名稱、用途、人員…"
-          style={{ flex: 1 }}
-        />
-        <span style={{ ...toolLabel, marginLeft: 8 }}>排序</span>
-        <antd.Select
-          value={sortBy}
-          onChange={setSortBy}
-          style={{ width: 128, flexShrink: 0 }}
-          options={[
-            { value: 'newest', label: '最新建立' },
-            { value: 'oldest', label: '最舊優先' },
-            { value: 'name',   label: '名稱 A→Z' },
-            { value: 'stage',  label: '狀態順序' },
-          ]}
-        />
-      </div>
-
-      {/* 類型 / 階段 filter → Segmented（選中背景 #2563EB 依 guideline，以巢狀 ConfigProvider 侷限於本頁）*/}
+      {/* 工具列：搜尋 / 類型 / 階段 / 排序 收成單一行。
+          2026-07-26 PO 定案：原本四個中文 label（搜尋、類型、階段、排序）拿掉 ——
+          Segmented 第一顆本來就寫「全部類型 / 全部階段」，排序把 label 收進值裡，
+          語意沒有消失，換來列表往上提三條橫線的高度。 */}
       <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
-        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
-          <span style={toolLabel}>類型</span>
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
+          <antd.Input
+            allowClear
+            value={searchQuery}
+            onChange={function(e) { setSearch(e.target.value); }}
+            prefix={<span style={{ color: C.textMuted, fontSize: fz(12) }}>🔍</span>}
+            aria-label="搜尋 Skill 名稱、用途或人員"
+            placeholder="搜尋名稱、用途、人員…"
+            style={{ flex: 1, minWidth: 176 }}
+          />
           <antd.Segmented size="small" value={tierFilter} onChange={setTierFilter} options={tierOptions} />
-        </div>
-        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
-          <span style={toolLabel}>階段</span>
           <antd.Segmented size="small" value={filter} onChange={setFilter} options={stageOptions} />
+          <antd.Select
+            value={sortBy}
+            onChange={setSortBy}
+            aria-label="排序方式"
+            style={{ width: 152, flexShrink: 0 }}
+            options={[
+              { value: 'newest', label: '排序：最新建立' },
+              { value: 'oldest', label: '排序：最舊優先' },
+              { value: 'name',   label: '排序：名稱 A→Z' },
+              { value: 'stage',  label: '排序：狀態順序' },
+            ]}
+          />
         </div>
       </antd.ConfigProvider>
 

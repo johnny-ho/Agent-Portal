@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Agent Skill 三層模型（知識／輔助判斷／SOP）
-description: 三層 Skill 的分界、對話式建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-26 知識已拆出獨立管理
+description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-26 兩輪改版：知識拆出獨立、詳情改全頁、建立改表單、AI 對話收斂到 Ask AI
 tags: [concept, ai, architecture, skill, governance]
 updated: 2026-07-26
 sources: [PO×AI 討論 2026-07-25 與 2026-07-26, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
@@ -130,6 +130,8 @@ status: current
 進場關可省，**出場關不可省**。
 
 ## 建立流程：對話式，不是填表
+
+> ⚠️ **2026-07-26 第二輪 PO 推翻「在建立 Modal 裡對話」的形式，但保留全部論證**。「起點不是選類型、由 agent 推薦」「適用範圍一律勾選」仍是硬約束；改的是**對話發生的位置**——從建立精靈搬到詳情頁的 Ask AI。Modal 裡的「試跑」也一併廢除。詳見文末「2026-07-26 第二輪改版」。
 
 **PO 補充的實際流程**：Seed 提供文本或跟 agent 聊需求 → agent 判讀並生成流程與 code node → **試跑一次**展示結果 → user 確認後指示 promote → codify graph 寫入 SOP 記為 **Draft** → user 在 UI 上 **dry run** 確認 → 簽核通過 → common agent 可調用，或設為 schedule job。
 
@@ -448,6 +450,8 @@ plainSteps[].system, plainSteps[].tool,
 
 關鍵設計：**AI 的修改回寫到主欄對應區塊**，以 `−/＋` diff 橫幅呈現，附「採用／捨棄」；未處理前不能問下一題。不做這件事的話它只是又一個聊天框。
 
+> ⚠️ **2026-07-26 第二輪：後半（回寫主欄 + 阻塞）已被推翻**。「Ask AI 不是聊天框、它的建議要能真的改到東西」這個論證維持；被推翻的是實作手段——左側即時渲染 + 鎖住右側，違反 [ai_ux_guideline](../../ai_ux_guideline.md) §1（把非阻塞的事做成阻塞）。詳見文末「2026-07-26 第二輪改版」。
+
 ### 決議 5：Chat 五情境 + 版面改成當代 AI 對話
 
 **PO**：「目前 ai 頁面的對話非常不理想，看起來很像 chatting 系統，不是當代的 ai 對話模式。」
@@ -479,6 +483,99 @@ plainSteps[].system, plainSteps[].tool,
 | `components/ChatPage.jsx` | 版面重寫 + 腳本引擎 + HitlSheet |
 | `components/SkillCreateFlow.jsx` | 移除 knowledge 分支；產出補 `graph`／`description`／`purpose`；`buildAutoEvalCases` 加 tier 參數 |
 | `components/SettingPage.jsx` | 新增「知識管理」tab（Section 管理七→八 tabs） |
+
+**這一版仍未實作**（承上一版）：SOP 卡片的「不適用」一鍵轉輔助判斷、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務。
+
+## 2026-07-26 第二輪改版：Skill 管理四項（PO 逐點指定，實作完成）
+
+PO 拿四張截圖逐點指出問題。四點的共同性質：**前一輪把「有 AI 在幫忙」做出來了，但把 AI 的介入點放錯位置**——放進了 Modal（建立精靈）、放進了左側主欄（建議橫幅），兩處都讓畫面變複雜卻沒讓使用者更有掌握感。
+
+### 決議 6：清單頁工具列收成一行
+
+刪掉「知識文件不在這頁 —— 它在知識管理」那段藍字。它是純解釋性文字，而知識管理就在同一個 Setting 側欄看得到。
+
+搜尋／類型／階段／排序原本各佔一個 band，加上 header 與藍字共五條橫線，列表被壓到頁面下半部。合併成單一行工具列，**四個中文 label（搜尋、類型、階段、排序）拿掉**：Segmented 第一顆本來就寫「全部類型／全部階段」，排序把 label 收進值裡（「排序：最新建立」），語意沒有消失。`Pilot Run` → `Pilot` 省寬度。
+
+> CLAUDE.md「不可用 placeholder 取代 label」是針對**表單輸入欄位**；篩選工具列的慣例不同，且此處語意由控件自身承擔。這是有意識的例外，不是違規。
+
+### 決議 7：Ask AI 全程留在右側 —— 推翻決議 4 的後半
+
+**PO**：「ai 給建議後不該停止右邊的行為，且左邊的畫面也沒必要即時渲染結果，這樣會增加開發的難度，對使用者來說價值也不是很高。」
+
+前一輪的做法是：AI 一回答就在左側對應區塊插 `−/＋` 建議橫幅，同時 `disabled={!!activeProposal}` 鎖住右側並顯示「先處理左邊那筆再繼續問」。這正是 [ai_ux_guideline](../../ai_ux_guideline.md) §1 禁止的事——**把一件非阻塞的事（討論怎麼改）做成了阻塞的事**。
+
+新節奏，全部發生在右側：
+
+```
+問 → AI 純文字回答＋建議（左側完全不動、右側不上鎖）
+   → [幫我改] [不用，我再想想]        ← 對話式接話，不是卡片
+   → 逐步播放 AI 的執行過程（560ms/步）
+   → 結果訊息＋可收合 diff
+   → [套用並刷新左側]                  ← 按了左邊才會變
+```
+
+三個關鍵取捨：
+
+- **diff 搬到右側**。左側不再即時預覽，使用者在按「套用」前看不到改動落在版面哪裡——所以把原本 `ProposalBanner` 裡那塊 `−/＋` 原封不動移進右側結果訊息（預設收合）。資訊沒消失，換了位置，開發也只需渲染在對話流裡。
+- **不 take 完全沒關係**。什麼都不會發生，可以直接問下一題。「使用者跟 AI 討論」本身就是合法的終點。
+- **按鈕過期就消失，不留入口**。依 guideline §2.4，操作按鈕只在它所屬訊息是最後一則時顯示。**PO 定案：收起後不留任何重新喚起的入口**——「錯過不再；如果 user 有需要，他可以透過跟 agent 對話重新喚起內容」。這與 Chat 頁「入口落到右側產出區永久可找」的處理刻意不同，因為那裡的產物是**已經發生的事實**，這裡的建議只是**還沒發生的提案**，重講一次的成本極低。
+
+左側套用時的回饋：對應區塊先變灰 + 「更新中…」（700ms）→ 換內容 + 淡入 → 藍框閃 1.6s（`.sd-flash`）+ 自動捲到該區塊 + 頂部 toast。`ProposalBanner` 整個刪除，左側從此沒有 AI 的東西。
+
+### 決議 8：Dry-run 與測試案例要有「動作」
+
+**PO**：「dry run 看不出怎麼進行，應該至少要有一個按鈕『run test』，使用者才有機會看到 run 完的結果。」
+
+前一輪的 `result: 'pass'` 是資料裡寫死的——**送簽的硬條件建立在一個從未發生過的動作上**。補回三個動作：
+
+| 動作 | 行為 |
+|---|---|
+| **執行測試** | 逐題播放（620ms/題）pending → running → pass/fail；跑完寫入 `evalRun: { at, by }`，標題列顯示「上次執行：剛剛 · 王志明」 |
+| **重新試跑**（僅 SOP） | 更新 `dryRun.ranAt`。與執行測試分成兩顆，因為送簽 gate 的條件不同 |
+| **＋ 新增測試案例** | 小 Modal（明確的表單任務，用 Modal 是對的）：兩個欄位＋一顆「✦ 讓 AI 依這份內容幫我想一題」自動填入可再編輯 |
+
+新增的案例一律 `result: 'pending'`，徽章顯示「N 題待執行」而非憑空的 X/Y 通過；`getSignoffGate` 加一條「還有 N 題沒有執行」。seed 出題可刪（✕），系統出題維持不可刪。
+
+**刻意設計一題會失敗**：AI 補的第二題（SOP 版「同一天重複執行」／輔助判斷版「數據不足以判斷時」）帶 `mockResult: 'fail'` 與 `mockActual`／`mockReason`，FAIL 列可展開看「AI 實際回了什麼」與「為什麼判定不通過」。沒有失敗可看，「執行測試」就只是一段動畫；而「補了邊界題才發現原本會出事」正是負面題機制存在的理由——這條鏈路（AI 補題 → 套用 → 執行 → 1 題 FAIL → 送簽被擋）是本頁論證最好的活體展示。
+
+### 決議 9：建立改成短表單，AI 移到詳情頁第一秒
+
+**PO**：「新增 skill 的畫面我認為不該在 modal 內有 ai 對話，顯得過於複雜。」
+
+一個產品有兩套 AI 對話（建立精靈 + Ask AI）本來就是重複。Modal 縮成單頁表單，只收四樣：
+
+1. **要建立哪一種**（兩張卡）——**允許選錯是刻意的**，卡片下方寫明「不確定也沒關係，建立後 AI 會依你填的內容判斷，該換類型它會告訴你」
+2. **名稱**
+3. **適用範圍**（沿用既有 `ScopePicker`／`ScopeMatchBar`，一律勾選不打字）
+4. **大致流程**——**這欄是餵給 agent 的 context，不能省**，否則就真的變成無 AI 的純表單
+
+送出後立刻建立 Draft 並進詳情頁：左側是使用者填的原始內容（Description 標注「這是你建立時填的原始內容，還不是正式格式」）、測試案例只有系統負面題且全部待執行；**右側 Ask AI 自動展開並開始思考**（四步，2–3 秒），跑完給一則首輪體檢，每點都是可 take 的建議，走的正是決議 7 那套流程：
+
+| 建議 | take 後刷新 |
+|---|---|
+| 類型判斷（`recommendTier` 判到與使用者選的不同時才出現） | 整頁 tier；系統負面題依新類型重出 |
+| 「把你填的白話整理成正式 Description」 | Description |
+| （SOP）「依這段流程拆成步驟並畫出流程圖」 | Graph |
+| 測試案例只提醒、不給 action | ——（它要的是使用者去按「執行測試」） |
+
+**「起點不是選類型、由 agent 推薦」的論證沒有被推翻，只是換了發生的時機**——從「選之前」變成「選之後由 agent 糾正」。差別是使用者不必先讀懂分類就能開始，而糾正發生在他已經有具體內容可以被判斷的時候，agent 的建議才有依據。
+
+建立流程裡的「試跑」廢除：原本在 Modal 裡跑一次假試跑、然後說「之後在正式介面再驗一次」，本來就是重複；現在由決議 8 的「執行測試／重新試跑」承接。上文「驗證有兩次，意義不同」的表格**簡化為一次**——promote 後在正式介面驗。
+
+### 附帶決議：WriteToggle 搬到詳情頁
+
+**AI 提出、PO 同意**（不在 PO 原本四點內）。「要不要讓這個 SOP 能異動系統」原本問在建立表單，那時使用者連內容都還沒定案，太早。搬到詳情頁 Scope 區的「可用工具」那塊——那裡本來就是講工具授權的地方，摩擦擺在那裡才有意義。僅 Draft／Testing 開放調整，已送簽之後不再開放。
+
+### 實作落點（2026-07-26 第二輪）
+
+| 檔案 | 內容 |
+|---|---|
+| `components/SkillManagementPage.jsx` | 刪藍字提示；五 band → 兩 band 單行工具列；`STAGE_SHORT` |
+| `components/SkillDetailPage.jsx` | 刪 `ProposalBanner`／`bannerFor`；新增 `AiRunBlock`／`AiDiff`／`AiText`／`AddEvalCaseModal`／`buildIntakeReview`／`buildFormalDescription`／`tierWord`／`evalCaseOutcome`；`SdSection` 加 refreshing／flash／contentKey；`TestBlock` 全改；`ScopeBlock` 掛 `WriteToggle`；`getSignoffGate` 加 pending 條件 |
+| `components/SkillCreateFlow.jsx` | 對話精靈整個換成表單；刪 `SC_STEPS`／`SC_EXAMPLES`／`generateTryRun`／`TryRunResult`／`suggestTitle`／`Bubble`；新增 `TierChoiceCard`／`SC_FLOW_EXAMPLES`；`recommendTier`／`generateDraftContent` 保留但改由詳情頁呼叫 |
+| `src/styles.css` | `@keyframes sd-flash` / `.sd-flash` |
+
+新資料欄位：`intakeInput: { rawFlow, chosenTier }`、`intakeDone`、`evalRun: { at, by }`、`evalCases[].mockResult`／`mockActual`／`mockReason`。
 
 **這一版仍未實作**（承上一版）：SOP 卡片的「不適用」一鍵轉輔助判斷、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務。
 

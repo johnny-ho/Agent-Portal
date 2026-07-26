@@ -1,28 +1,18 @@
 /* ════════════════════════════════════════
-   SKILL CREATE FLOW — 對話式建立
+   SKILL CREATE FLOW — 建立表單（不是對話）
 
-   起點不是「選類型」，是 Seed 講他想解決的問題，由 agent 推薦類型。
-   要 Seed 先讀三張說明卡再選，是把系統的分類負擔丟給他。
+   2026-07-26 PO 定案，取代原本的五關對話式精靈。
 
-   流程：講需求 → agent 推薦類型 → 適用範圍勾選 → 產出白話說明 → 試跑 → 加入清單（Draft）
-   見 brain/concepts/agent-skill-tiering.md「建立流程：對話式，不是填表」
+   理由：一個產品裡有兩套 AI 對話（建立精靈 + 詳情頁的 Ask AI）本來就是重複，
+   而且 Modal 裡塞對話會讓「建立」這件事看起來比實際複雜很多。
+
+   現在這裡只收四樣東西 —— 類型、名稱、適用範圍、大致流程 ——
+   然後把它們當成 context 丟給 agent：建立完立刻進詳情頁，
+   右側 Ask AI 自己開始體檢（含「你這個其實比較像 SOP」這種類型建議）。
+   使用者第一次用就看得到有 agent 在幫忙，不會面對一張空白頁。
+
+   類型允許選錯，是刻意的：讓 agent 去糾正，比要人先讀懂兩張說明卡再選好。
    ════════════════════════════════════════ */
-
-/* 每一關的順序（進度條與「回上一步」用）*/
-const SC_STEPS = [
-  { key: 'describe',  label: '講需求' },
-  { key: 'recommend', label: '確認類型' },
-  { key: 'scope',     label: '適用範圍' },
-  { key: 'draft',     label: '白話說明' },
-  { key: 'tryrun',    label: '試跑' },
-];
-
-/* 需求描述的範例（降低第一句話的門檻，不強迫從零打字）*/
-const SC_EXAMPLES = [
-  '我想每天交班前自動整理一份當班報告，要有機台稼動、異常件數、待辦交接事項。',
-  'E-101 這類 CMP 機台跳 ERR-4421 的時候，希望 AI 幫值班的人研判可能原因。',
-  '停機超過一小時的時候，希望自動整理影響範圍並通報接班的人。',
-];
 
 /* 觸發條件一律用選的，不打字 —— 自由文字是情境幻覺的來源 */
 const SC_TRIGGER_OPTIONS = [
@@ -39,46 +29,43 @@ const SC_THRESHOLDS  = [
   { metric: '停機時長', op: '>', value: '1 小時' },
 ];
 
-/* ── agent 依需求描述推薦類型（原型用關鍵詞，真實版是 LLM 判讀）── */
+/* 流程描述的範例（降低第一句話的門檻，不強迫從零打字）*/
+const SC_FLOW_EXAMPLES = [
+  '每天交班前整理一份當班報告：取機台稼動、抓當班異常件數並分級、把未結案的待辦列出來，最後套課上的交接格式。',
+  'CMP 機台跳 ERR-4421 的時候，先看冷卻水路壓差、再看感測器近兩小時趨勢、對照上次保養時間，然後告訴值班的人可能是什麼原因。',
+];
+
+/* ── agent 依需求描述推薦類型（原型用關鍵詞，真實版是 LLM 判讀）──
+   建立時不再用它，改由詳情頁的首次體檢呼叫 —— 見 buildIntakeReview。 */
 function recommendTier(text) {
   var t = text || '';
-  var periodic = /每天|每日|每班|定期|固定|排程|自動/.test(t);
-  var aggregate = /整理|彙整|報告|日報|統計|報表|摘要/.test(t);
-  var judge = /研判|判斷|分析|怎麼辦|原因|異常處理|建議/.test(t);
-  var docs  = /文件|規範|標準|手冊|查得到|查詢|知識/.test(t);
+  var periodic = /每天|每日|每班|定期|固定|排程|自動|交班|交接/.test(t);
+  var aggregate = /整理|彙整|報告|日報|統計|報表|摘要|清單/.test(t);
+  var judge = /研判|判斷|分析|怎麼辦|原因|異常處理|建議|可能是/.test(t);
 
   if (periodic && aggregate) {
     return {
       tier: 'sop',
-      why: '你描述的是每天固定要做的彙整，每次步驟都一樣、結果可以重現。',
-      benefit: '做成 SOP 可以設成排程自動跑，時間到就有產出。',
+      why: '你描述的是每次都照同樣順序做完的彙整，步驟固定、結果可以重現。',
+      benefit: '做成 SOP 才能設成排程自動跑，時間到就有產出。',
     };
   }
   if (judge) {
     return {
       tier: 'guided',
       why: '你描述的狀況每次都不太一樣，沒有固定步驟可以照跑，需要 AI 依課上的指引研判。',
-      benefit: '做成輔助判斷可以查現場數據當證據，但不會去動任何系統。',
-    };
-  }
-  /* 純文件不在這裡建 —— 知識已於 2026-07-26 拆到「知識管理」獨立管理。
-     這裡仍接住這類需求，但要把人導到對的地方。 */
-  if (docs) {
-    return {
-      tier: 'guided',
-      why: '你描述的比較像是「把文件變成可以查的內容」。',
-      benefit: '純文件請到「知識管理」直接引入，不需要在這裡建 Skill。\n如果你要的是「AI 依那份文件幫人研判並給建議」，那就繼續建成輔助判斷 —— 它會引用那份知識。',
-      redirect: 'knowledge',
+      benefit: '輔助判斷可以查現場數據當證據，但不會去動任何系統，也不能設排程。',
     };
   }
   return {
     tier: 'guided',
     why: '從你的描述看不出固定步驟，比較像是每次要視狀況判斷的事。',
-    benefit: '先做成輔助判斷比較安全；之後如果大家的做法收斂了，可以再變成 SOP。',
+    benefit: '先做成輔助判斷比較安全；之後大家的做法收斂了，再改成 SOP。',
   };
 }
 
-/* ── agent 依類型與需求生出白話說明（原型為 mock，真實版由生成端回傳）── */
+/* ── agent 依類型與需求生出流程步驟（原型為 mock，真實版由生成端回傳）──
+   建立時不再呼叫；詳情頁「幫我拆步驟」採用後才會用到。 */
 function generateDraftContent(tier, scopeTargets) {
   if (tier === 'sop') {
     return {
@@ -102,8 +89,6 @@ function generateDraftContent(tier, scopeTargets) {
         { name: 'fdc.list_alarms',       label: '取當班警報',     system: 'FDC',         mode: 'read' },
         { name: 'case_center.list_open', label: '取未結案 Case',  system: 'Case Center', mode: 'read' },
       ],
-      description: '這份 SOP 每次的步驟都一樣、結果可以重現，所以可以設成排程自動執行。\n\n流程大意：取當班機台稼動資料與同時段警報並分級，接著計算稼動率與異常密度，取未結案 Case 與待辦事項，最後套用課內的格式輸出。\n\n目前全程只讀取資料、不異動任何系統。若之後加入會異動系統的步驟，執行到那幾步一律會停下來等人確認。',
-      guidance: [],
     };
   }
   return {
@@ -113,39 +98,6 @@ function generateDraftContent(tier, scopeTargets) {
       { name: 'fdc.get_alarm_detail', label: '查警報明細',   system: 'FDC',      mode: 'read' },
       { name: 'eqp.get_sensor_trend', label: '查感測器趨勢', system: '設備監控', mode: 'read' },
     ],
-    description: '# 判斷指引\n\n## 什麼時候用這份\n這類狀況每次長得不一樣，沒有固定步驟可以照跑，需要看現場數據研判。\n（AI 依你的描述草擬，建立後請補上排除條件：什麼時候不該用這份。）\n\n## 判斷順序\n1. **先看現場數據的走勢**：持續性的偏移與突發跳動要分開看，兩者的處置方向完全不同。\n2. **比對同類設備**：多台同時出現通常不是單機問題。\n3. **對照上次保養時間**：距離上次保養越久，磨耗解釋的合理性越高。\n\n## 要一併確認的數據\n- 異常發生前 2 小時的趨勢\n- 同機台近 7 天的同類事件次數\n- 上次保養日期\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。\n實際處置請由人執行，或改走已核准的 SOP。本類型只有唯讀工具，不會異動任何系統。',
-    guidance: [
-      { id: 'c1', label: '判斷指引', content: '先看現場數據的走勢：持續性的偏移與突發跳動要分開看，兩者的處置方向不同。', tokens: 58 },
-      { id: 'c2', label: '要一併確認的數據', content: '取異常發生前 2 小時的趨勢、同機台近 7 天的同類事件次數、上次保養日期。', tokens: 52 },
-      { id: 'c3', label: '注意事項', content: '本指引產出的是建議，責任仍在執行者；實際處置請由人執行或改走已核准的 SOP。', tokens: 48 },
-    ],
-  };
-}
-
-/* ── 試跑結果（原型 mock）── */
-function generateTryRun(tier, targets) {
-  if (tier === 'sop') {
-    return {
-      kind: 'output',
-      title: '當班交接報告（試跑）',
-      generatedAt: '剛剛',
-      metrics: [
-        { label: '機台稼動率', value: '94.2', unit: '%',  note: '涵蓋 ' + targets.length + ' 台' },
-        { label: '本班異常',   value: '5',    unit: '件', note: 'P1 ×2 / P2 ×3' },
-        { label: '待交接事項', value: '4',    unit: '項', note: '' },
-      ],
-      body: '【KPI 未達標】設備稼動率 94.2%（目標 95%）、Unclose Case 7 件（目標 ≤5）。\n【本班異常】E-308 FDC 異常持續監控中（已 3 小時）。\n【待交接】E-203 預防性保養今日 16:00 開始，備料已確認。',
-    };
-  }
-  return {
-    kind: 'judge',
-    question: targets.length > 0 ? (targets[0].id + ' 出現異常，怎麼處理？') : '設備出現異常，怎麼處理？',
-    toolRuns: [
-      { tool: 'fdc.get_alarm_detail', label: '查警報明細',   mode: 'read',  allowed: true,  result: '取得警報明細 1 筆' },
-      { tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', mode: 'read',  allowed: true,  result: '近 2 小時數值緩降，非跳動' },
-      { tool: 'mes.create_urgent_order', label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
-    ],
-    answer: '研判為持續性偏移而非突發異常。建議先執行對應的疏通／校正程序，30 分鐘內未改善再開緊急工單。我無法代為開單，內容已擬好可直接複製。',
   };
 }
 
@@ -184,7 +136,7 @@ function ScopePicker({ p, scope, onChange }) {
   var trigger = scope.trigger || { type: 'manual' };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       <div>
         {fieldLabel('機台類別', '不勾 = 全部類別')}
@@ -294,397 +246,174 @@ function ScopeMatchBar({ p, scope }) {
   );
 }
 
+/* ── 類型選擇卡：允許選錯，agent 會在詳情頁糾正 ── */
+function TierChoiceCard({ tier, selected, onSelect }) {
+  var { C, fz } = useTheme();
+  var cfg = SKILL_TIER_CFG[tier];
+  return (
+    <div
+      onClick={function() { onSelect(tier); }}
+      style={{
+        flex: 1, minWidth: 0, cursor: 'pointer', borderRadius: 8, padding: 16,
+        border: '1px solid ' + (selected ? '#2563EB' : C.border),
+        background: selected ? 'rgba(37,99,235,0.06)' : C.bg,
+        transition: 'border-color 0.15s, background 0.15s',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <SkillTierTag tier={tier} />
+        {selected && <span style={{ fontSize: fz(12), color: '#2563EB', fontWeight: 700 }}>✓</span>}
+      </div>
+      <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500, lineHeight: 1.6, marginBottom: 8 }}>{cfg.oneLiner}</div>
+      <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>{cfg.detail}</div>
+    </div>
+  );
+}
+
 /* ════════════════════════════════════════
-   SkillCreateFlow — 對話式建立主元件（AntD Modal）
+   SkillCreateFlow — 建立表單（AntD Modal）
    ════════════════════════════════════════ */
 function SkillCreateFlow({ p, onClose, onCreate }) {
   var { C, fz } = useTheme();
 
-  var [step, setStep]         = React.useState('describe');
-  var [thinking, setThinking] = React.useState(false);
-  var [desc, setDesc]         = React.useState('');
-  var [rec, setRec]           = React.useState(null);     /* agent 的推薦 */
-  var [tier, setTier]         = React.useState(null);     /* 定案的類型 */
-  var [scope, setScope]       = React.useState({ equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } });
-  var [draft, setDraft]       = React.useState(null);
-  var [tryRun, setTryRun]     = React.useState(null);
-  var [title, setTitle]       = React.useState('');
+  var [tier, setTier]   = React.useState('guided');
+  var [title, setTitle] = React.useState('');
+  var [flow, setFlow]   = React.useState('');
+  var [scope, setScope] = React.useState({ equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } });
 
-  var targets   = matchScopeTargets(p.key, scope);
-  var threadRef = React.useRef(null);
+  var targets = matchScopeTargets(p.key, scope);
+  var canSubmit = title.trim().length > 0 && targets.length > 0 && flow.trim().length >= 10;
 
-  /* agent 回一段就捲到底，不然使用者會停在對話中間 */
-  React.useEffect(function() {
-    var el = threadRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [step, thinking]);
-
-  /* agent「想一下」的節奏；原型用 timeout 模擬 */
-  function think(ms, fn) {
-    setThinking(true);
-    setTimeout(function() { setThinking(false); fn(); }, ms || 900);
-  }
-
-  function submitDesc(text) {
-    setDesc(text);
-    think(1100, function() {
-      setRec(recommendTier(text));
-      setStep('recommend');
-    });
-  }
-
-  function acceptTier(t) {
-    setTier(t);
-    setTitle(suggestTitle(desc, t));
-    setStep('scope');
-  }
-
-  function confirmScope() {
-    think(1000, function() {
-      setDraft(generateDraftContent(tier, targets.length));
-      setStep('draft');
-    });
-  }
-
-  function runTry() {
-    think(1200, function() {
-      setTryRun(generateTryRun(tier, targets));
-      setStep('tryrun');
-    });
-  }
-
-  function promote() {
-    var hasWrite = (draft.tools || []).some(function(t) { return t.mode === 'write'; });
+  function submit() {
+    if (!canSubmit) return;
+    var raw = flow.trim();
     onCreate({
       id: 'sm-new-' + Date.now(),
-      title: title.trim() || '未命名 Skill',
-      sourceKM: '對話式建立 · 未從 KM 引入',
-      importedAt: '2026-07-25',
+      title: title.trim(),
+      sourceKM: '課內建立 · 未從 KM 引入',
+      importedAt: '2026-07-26',
       importedBy: p.user.name,
       stage: 'draft',
-      tags: ['對話建立'],
+      tags: ['課內建立'],
       tier: tier,
-      tools: draft.tools || [],
-      hasWrite: hasWrite,
+      /* 工具授權在詳情頁的 Scope 區調整，建立當下不問 */
+      tools: generateDraftContent(tier).tools,
+      hasWrite: false,
       scope: scope,
       consumedBy: { calledByAgent: true, scheduleId: null },
-      genChatId: 'gen-chat-' + Date.now(),
-      ragChunks: draft.guidance || [],
-      plainSteps: draft.plainSteps || [],
-      graph: draft.graph || null,
-      purpose: (desc || '').trim().slice(0, 60) || SKILL_TIER_CFG[tier].oneLiner,
-      description: draft.description || '',
+      ragChunks: [],
+      plainSteps: [],
+      graph: null,
+      purpose: raw.slice(0, 60),
+      /* 左側先放使用者填的原文；要不要換成正式格式，由 agent 建議、使用者決定 */
+      description: raw,
       knowledgeRefs: [],
-      /* 測試案例兩種類型都要：系統依適用範圍與類型自動出的負面題不可刪 */
+      /* 系統依適用範圍與類型自動出的負面題不可刪；一律「待執行」*/
       evalCases: buildAutoEvalCases(p, scope, tier),
-      dryRun: undefined,   /* dry run 是 promote 之後在正式介面上再驗一次的事 */
+      dryRun: undefined,
+      /* 這兩個欄位讓詳情頁知道要跑首次體檢 —— 見 buildIntakeReview */
+      intakeInput: { rawFlow: raw, chosenTier: tier },
+      intakeDone: false,
     });
   }
 
-  /* ── 對話泡泡 ── */
-  function Bubble({ role, children }) {
-    var isAgent = role === 'agent';
+  function fieldLabel(text, hint) {
     return (
-      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexDirection: isAgent ? 'row' : 'row-reverse' }}>
-        <div style={{
-          width: 28, height: 28, borderRadius: 6, flexShrink: 0,
-          background: isAgent ? 'rgba(37,99,235,0.08)' : C.bgPanel,
-          border: '1px solid ' + (isAgent ? 'rgba(37,99,235,0.2)' : C.border),
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: fz(12), fontWeight: 700, color: isAgent ? '#2563EB' : C.textSub,
-        }}>{isAgent ? 'AI' : (p.user.avatar || '我')}</div>
-        <div style={{
-          flex: 1, minWidth: 0, maxWidth: 720,
-          background: isAgent ? C.bgSub : 'rgba(37,99,235,0.08)',
-          border: '1px solid ' + (isAgent ? C.border : 'rgba(37,99,235,0.2)'),
-          borderRadius: 8, padding: 16,
-        }}>{children}</div>
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub }}>{text}</span>
+        {hint && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{hint}</span>}
       </div>
     );
   }
-
-  var tierCfg = tier ? SKILL_TIER_CFG[tier] : null;
-  var stepIdx = SC_STEPS.findIndex(function(s) { return s.key === step; });
 
   return (
     <antd.Modal
       open
       centered
-      width={880}
+      width={640}
       title={
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 24 }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, paddingRight: 24, flexWrap: 'wrap' }}>
           <span style={{ fontSize: fz(16), fontWeight: 600, color: C.text }}>建立新的 Skill</span>
-          <span style={{ fontSize: fz(12), color: C.textMuted }}>跟 AI 說你想解決什麼，它會建議做成哪一種</span>
+          <span style={{ fontSize: fz(12), color: C.textMuted }}>填完這幾樣，AI 會接手幫你檢查與補齊</span>
         </div>
       }
       onCancel={onClose}
-      footer={null}
+      onOk={submit}
+      okText="建立並讓 AI 檢查"
+      cancelText="取消"
+      okButtonProps={{ disabled: !canSubmit }}
       styles={{
-        body: { padding: 0, height: '68vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
-        header: { marginBottom: 0, padding: '16px 24px', borderBottom: '1px solid ' + C.border },
-        content: { padding: 0, overflow: 'hidden' },
+        body: { maxHeight: '62vh', overflowY: 'auto', paddingRight: 8 },
+        header: { marginBottom: 16 },
       }}
+      className="scrollbar-thin"
     >
-      {/* 進度：五關 */}
-      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
-        <antd.Steps
-          size="small"
-          current={stepIdx < 0 ? 0 : stepIdx}
-          items={SC_STEPS.map(function(s) { return { title: <span style={{ fontSize: fz(12) }}>{s.label}</span> }; })}
+      {/* 1 類型 */}
+      <div style={{ marginBottom: 24 }}>
+        {fieldLabel('要建立哪一種')}
+        <div style={{ display: 'flex', gap: 8 }}>
+          {SKILL_TIERS.map(function(t) {
+            return <TierChoiceCard key={t} tier={t} selected={tier === t} onSelect={setTier} />;
+          })}
+        </div>
+        <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 8, lineHeight: 1.7 }}>
+          不確定也沒關係 —— 建立後 AI 會依你填的內容判斷，該換類型它會告訴你。
+        </div>
+      </div>
+
+      {/* 2 名稱 */}
+      <div style={{ marginBottom: 24 }}>
+        {fieldLabel('名稱')}
+        <antd.Input
+          value={title}
+          onChange={function(e) { setTitle(e.target.value); }}
+          aria-label="Skill 名稱"
         />
       </div>
 
-      {/* 對話串 */}
-      <div ref={threadRef} style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }} className="scrollbar-thin">
-
-        {/* 1 講需求 */}
-        <Bubble role="agent">
-          <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7 }}>
-            你想解決什麼問題？直接講就好，或是把課上現成的文件貼進來。
-          </div>
-        </Bubble>
-
-        {step === 'describe' && (
-          <Bubble role="agent">
-            <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8 }}>不知道怎麼開頭的話，這幾個是常見的：</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {SC_EXAMPLES.map(function(ex) {
-                return (
-                  <antd.Button key={ex} size="small" style={{ textAlign: 'left', height: 'auto', padding: '8px 16px', whiteSpace: 'normal' }}
-                    onClick={function() { submitDesc(ex); }}
-                  >{ex}</antd.Button>
-                );
-              })}
-            </div>
-          </Bubble>
-        )}
-
-        {desc && <Bubble role="user"><div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7 }}>{desc}</div></Bubble>}
-
-        {/* 2 agent 推薦類型 */}
-        {rec && (
-          <Bubble role="agent">
-            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 8 }}>{rec.why}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-              <span style={{ fontSize: fz(14), color: C.text }}>我建議做成</span>
-              <SkillTierTag tier={rec.tier} />
-            </div>
-            <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, marginBottom: 16, whiteSpace: 'pre-line' }}>{rec.benefit}</div>
-
-            {/* 純文件不在這裡建 —— 知識已拆到「知識管理」 */}
-            {rec.redirect === 'knowledge' && step === 'recommend' && (
-              <antd.Alert
-                type="info" showIcon style={{ marginBottom: 16 }}
-                message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>如果你只是要把文件變成 AI 查得到的內容</span>}
-                description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>請關掉這裡，改到「知識管理」用「＋ 從 KM 引入」。知識不需要授權工具、也不需要走五階段簽核，那條路快很多。</span>}
-              />
-            )}
-
-            {step === 'recommend' && (
-              <React.Fragment>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                  <antd.Button type="primary" onClick={function() { acceptTier(rec.tier); }}>
-                    好，做成{SKILL_TIER_CFG[rec.tier].label}
-                  </antd.Button>
-                </div>
-                <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8 }}>想改成別的：</div>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {SKILL_TIERS.filter(function(t) { return t !== rec.tier; }).map(function(t) {
-                    return (
-                      <antd.Tooltip key={t} title={SKILL_TIER_CFG[t].detail}>
-                        <antd.Button size="small" onClick={function() { acceptTier(t); }}>
-                          {SKILL_TIER_CFG[t].label} — {SKILL_TIER_CFG[t].oneLiner}
-                        </antd.Button>
-                      </antd.Tooltip>
-                    );
-                  })}
-                </div>
-              </React.Fragment>
-            )}
-            {step !== 'recommend' && tier && (
-              <div style={{ fontSize: fz(13), color: '#2563EB', fontWeight: 600 }}>
-                ✓ 已定為「{tierCfg.label}」{tier !== rec.tier ? '（你改過）' : ''}
-              </div>
-            )}
-          </Bubble>
-        )}
-
-        {/* 3 適用範圍 */}
-        {tier && (
-          <Bubble role="agent">
-            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 8 }}>
-              這個 Skill 適用在哪些機台？勾出來就好 —— 沒被圈到的機台，AI 連考慮都不會考慮它。
-            </div>
-            <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
-              這裡不能打字，是刻意的：自由文字只有人看得懂，系統無法拿它過濾。
-            </div>
-
-            {step === 'scope'
-              ? <ScopePicker p={p} scope={scope} onChange={setScope} />
-              : <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>
-                  {describeScope(scope).map(function(r) { return r.label + '：' + r.value; }).join('　·　')}
-                </div>
-            }
-
-            <div style={{ marginTop: 16 }}>
-              <ScopeMatchBar p={p} scope={scope} />
-            </div>
-
-            {step === 'scope' && (
-              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <antd.Button type="primary" disabled={targets.length === 0} onClick={confirmScope}>
-                  範圍就這樣，繼續
-                </antd.Button>
-                {targets.length === 0 && (
-                  <span style={{ fontSize: fz(12), color: '#EF4444' }}>至少要有一台符合才能繼續</span>
-                )}
-              </div>
-            )}
-          </Bubble>
-        )}
-
-        {/* 4 白話說明 + 會碰到哪些系統 */}
-        {draft && (
-          <Bubble role="agent">
-            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 16 }}>
-              {tier === 'sop'
-                ? '我把它拆成這幾步。標準元件是課上已經驗證過的做法，簽核時你只需要重點看「本次自訂」那幾步。'
-                : tier === 'guided'
-                  ? '我把判斷指引整理成這樣。它不是固定步驟，是給 AI 研判時依循的原則。'
-                  : '我把文件解析成這幾段可查詢的內容。'}
-            </div>
-
-            {/* 名稱（這裡可以打字，因為它只是名字，不參與過濾）*/}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>名稱</div>
-              <antd.Input value={title} onChange={function(e) { setTitle(e.target.value); }} />
-            </div>
-
-            {(draft.plainSteps || []).length > 0 && (
-              <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {draft.plainSteps.map(function(s) {
-                  var isCustom = s.source === 'custom';
-                  return (
-                    <div key={s.num} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '8px 16px', background: C.bg, border: '1px solid ' + C.border, borderRadius: 8 }}>
-                      <span style={{ fontSize: fz(12), fontWeight: 700, color: C.textMuted, width: 16 }}>{s.num}</span>
-                      <span style={{ fontSize: fz(13), color: C.text, flex: 1, minWidth: 0 }}>{s.label}</span>
-                      <antd.Tag bordered={false} style={{
-                        marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
-                        color: isCustom ? '#F59E0B' : '#2563EB',
-                        background: isCustom ? 'rgba(245,158,11,0.08)' : 'rgba(37,99,235,0.08)',
-                      }}>{isCustom ? '✎ 本次自訂' : '📦 標準元件 ' + s.version}</antd.Tag>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {(draft.guidance || []).length > 0 && (
-              <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {draft.guidance.map(function(g) {
-                  return (
-                    <div key={g.id} style={{ padding: '8px 16px', background: C.bg, border: '1px solid ' + C.border, borderRadius: 8 }}>
-                      <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, marginBottom: 4 }}>{g.label}</div>
-                      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7 }}>{g.content}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* 會碰到哪些系統 */}
-            <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>會碰到哪些系統</div>
-            {(draft.tools || []).length === 0
-              ? <div style={{ fontSize: fz(13), color: C.textMuted, marginBottom: 16 }}>不會連到任何系統，只用課上的文件內容回答。</div>
-              : <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {draft.tools.map(function(t) {
-                    return (
-                      <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: C.bg, border: '1px solid ' + C.border, borderRadius: 8 }}>
-                        <span style={{ fontSize: fz(13), color: C.text, width: 128, flexShrink: 0 }}>{t.label}</span>
-                        <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', flex: 1, minWidth: 0 }}>{t.name}</span>
-                        <antd.Tag bordered={false} style={{
-                          marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
-                          color: t.mode === 'read' ? '#22C55E' : '#EF4444',
-                          background: t.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-                        }}>{t.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
-                      </div>
-                    );
-                  })}
-                </div>
-            }
-
-            {/* 寫入能力要有摩擦：勾了就講清楚代價，且只有 SOP 能勾 */}
-            {tier === 'sop' && (
-              <WriteToggle
-                draft={draft}
-                onEnable={function(tool) { setDraft(Object.assign({}, draft, { tools: (draft.tools || []).concat([tool]) })); }}
-                onDisable={function() { setDraft(Object.assign({}, draft, { tools: (draft.tools || []).filter(function(t) { return t.mode !== 'write'; }) })); }}
-              />
-            )}
-            {tier === 'guided' && (
-              <div style={{ padding: '8px 16px', background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>
-                🔒 「輔助判斷」不能加入會異動系統的動作。需要 AI 代為執行，請改建一個 SOP。
-              </div>
-            )}
-
-            {step === 'draft' && (
-              <div style={{ marginTop: 16 }}>
-                <antd.Button type="primary" onClick={runTry}>
-                  {tier === 'sop' ? '先試跑一次看看' : '先試問一次看看'}
-                </antd.Button>
-              </div>
-            )}
-          </Bubble>
-        )}
-
-        {/* 5 試跑 */}
-        {tryRun && (
-          <Bubble role="agent">
-            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 16 }}>
-              這是剛剛實際跑出來的結果。確認沒問題我就把它加進清單，之後你可以在正式介面上再驗一次。
-            </div>
-            <TryRunResult result={tryRun} />
-            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <antd.Button type="primary" onClick={promote}>結果沒問題，加進清單</antd.Button>
-              <antd.Button onClick={function() { setTryRun(null); setStep('draft'); }}>不太對，回去改</antd.Button>
-              <span style={{ fontSize: fz(12), color: C.textMuted }}>加進清單後會是 Draft，還要經過確認與簽核才會生效。</span>
-            </div>
-          </Bubble>
-        )}
-
-        {thinking && (
-          <Bubble role="agent">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div className="spin" style={{ width: 16, height: 16, border: '2px solid ' + C.border, borderTopColor: '#2563EB', borderRadius: '50%' }} />
-              <span style={{ fontSize: fz(13), color: C.textMuted }}>AI 正在處理…</span>
-            </div>
-          </Bubble>
-        )}
+      {/* 3 適用範圍 */}
+      <div style={{ marginBottom: 24 }}>
+        {fieldLabel('適用範圍', '一律用勾的 —— 自由文字只有人看得懂，系統無法拿它過濾')}
+        <ScopePicker p={p} scope={scope} onChange={setScope} />
+        <div style={{ marginTop: 16 }}>
+          <ScopeMatchBar p={p} scope={scope} />
+        </div>
       </div>
 
-      {/* 輸入列：只有第一關要打字 */}
-      {step === 'describe' && (
-        <div style={{ padding: 16, borderTop: '1px solid ' + C.border, flexShrink: 0, display: 'flex', gap: 8 }}>
-          <antd.Input.TextArea
-            value={desc}
-            onChange={function(e) { setDesc(e.target.value); }}
-            autoSize={{ minRows: 2, maxRows: 4 }}
-            onPressEnter={function(e) { e.preventDefault(); if (desc.trim()) submitDesc(desc.trim()); }}
-          />
-          <antd.Button type="primary" disabled={!desc.trim()} onClick={function() { submitDesc(desc.trim()); }}>送出</antd.Button>
+      {/* 4 大致流程 —— 這欄是餵給 agent 的 context，不能省 */}
+      <div>
+        {fieldLabel('大致流程', '條列或白話都可以，AI 會幫你整理成正式內容')}
+        <antd.Input.TextArea
+          value={flow}
+          onChange={function(e) { setFlow(e.target.value); }}
+          autoSize={{ minRows: 4, maxRows: 8 }}
+          aria-label="大致流程描述"
+        />
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <span style={{ fontSize: fz(11), color: C.textMuted }}>不知道怎麼寫的話，這兩個是常見的：</span>
+          {SC_FLOW_EXAMPLES.map(function(ex, i) {
+            return (
+              <antd.Button key={i} size="small"
+                onClick={function() { setFlow(ex); }}
+                style={{ textAlign: 'left', height: 'auto', padding: '8px 16px', whiteSpace: 'normal', fontSize: fz(12), color: C.textSub }}
+              >{ex}</antd.Button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 送出前的檢查：擋住的原因要寫出來，不要只 disable 按鈕 */}
+      {!canSubmit && (
+        <div style={{ marginTop: 16, fontSize: fz(12), color: '#EF4444', lineHeight: 1.7 }}>
+          還缺：{[
+            !title.trim() ? '名稱' : null,
+            targets.length === 0 ? '至少一台符合的機台' : null,
+            flow.trim().length < 10 ? '大致流程（至少寫一句，AI 才有東西可以判斷）' : null,
+          ].filter(Boolean).join('、')}
         </div>
       )}
     </antd.Modal>
   );
-}
-
-/* 依需求描述與類型給個預設名稱（可改）*/
-function suggestTitle(desc, tier) {
-  var t = desc || '';
-  if (/交班|交接/.test(t)) return '整理當班交接報告';
-  if (/ERR-4421|冷卻/.test(t)) return 'ERR-4421 冷卻異常研判';
-  if (/換件/.test(t)) return '換件標準作業內容';
-  return SKILL_TIER_CFG[tier].label + '（未命名）';
 }
 
 /* 依適用範圍與類型自動生成負面測試題 —— Seed 不會想到寫「不該做什麼」，
@@ -724,7 +453,8 @@ function buildAutoEvalCases(p, scope, tier) {
   return cases;
 }
 
-/* ── 寫入能力開關：摩擦是設計出來的 ── */
+/* ── 寫入能力開關：摩擦是設計出來的 ──
+   2026-07-26 起掛在詳情頁的 Scope 區（工具授權那塊），不在建立表單裡問。*/
 function WriteToggle({ draft, onEnable, onDisable }) {
   var { C, fz } = useTheme();
   var hasWrite = (draft.tools || []).some(function(t) { return t.mode === 'write'; });
@@ -763,65 +493,6 @@ function WriteToggle({ draft, onEnable, onDisable }) {
         checked={hasWrite}
         onChange={function(v) { if (v) ask(); else onDisable(); }}
       />
-    </div>
-  );
-}
-
-/* ── 試跑結果的三種樣子 ── */
-function TryRunResult({ result }) {
-  var { C, fz } = useTheme();
-
-  if (result.kind === 'output') {
-    return (
-      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg }}>
-        <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>{result.title}</div>
-        <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>{result.generatedAt}</div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-          {result.metrics.map(function(m) {
-            return (
-              <div key={m.label} style={{ flex: '1 1 128px', border: '1px solid ' + C.border, borderRadius: 8, padding: 16 }}>
-                <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 8 }}>{m.label}</div>
-                <div style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{m.value}<span style={{ fontSize: fz(12), color: C.textMuted, marginLeft: 4 }}>{m.unit}</span></div>
-                {m.note && <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8 }}>{m.note}</div>}
-              </div>
-            );
-          })}
-        </div>
-        <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, whiteSpace: 'pre-wrap', background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16 }}>{result.body}</div>
-      </div>
-    );
-  }
-
-  if (result.kind === 'judge') {
-    return (
-      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
-        <div style={{ padding: 16, borderBottom: '1px solid ' + C.border, fontSize: fz(13), color: C.text, fontWeight: 500, background: C.bgSub }}>
-          試問：「{result.question}」
-        </div>
-        {result.toolRuns.map(function(t, i) {
-          return (
-            <div key={i} style={{ padding: '8px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: t.allowed ? 'transparent' : 'rgba(239,68,68,0.04)' }}>
-              <span style={{ fontSize: fz(14), fontWeight: 700, color: t.allowed ? '#22C55E' : '#EF4444', width: 16 }}>{t.allowed ? '✓' : '✗'}</span>
-              <span style={{ fontSize: fz(13), color: C.text }}>{t.label}</span>
-              <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>{t.tool}</span>
-              <antd.Tag bordered={false} style={{
-                marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
-                color: t.mode === 'read' ? '#22C55E' : '#EF4444',
-                background: t.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-              }}>{t.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
-              <span style={{ fontSize: fz(12), color: t.allowed ? C.textSub : '#EF4444', flex: 1, minWidth: 0 }}>{t.result}</span>
-            </div>
-          );
-        })}
-        <div style={{ padding: 16, fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>{result.answer}</div>
-      </div>
-    );
-  }
-
-  return (
-    <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg }}>
-      <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>{result.title}</div>
-      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>{result.body}</div>
     </div>
   );
 }
