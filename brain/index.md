@@ -31,7 +31,7 @@
 | [kpi-center](entities/modules/kpi-center.md) | 趨勢深入分析；v3.9 報表管理後台；AntD Phase 4 已遷移 | 2 |
 | [app-center](entities/modules/app-center.md) | 內部應用目錄 + 釘選 + Function Tree（Dropdown+Tree）；AntD Phase 5 已遷移 | 3 |
 | [task-management](entities/modules/task-management.md) | 課長派工；P1 缺口 AI 自動標記；AntD Phase 2 已遷移 | 4 |
-| [ai-chat](entities/modules/ai-chat.md) | 被動查詢原則 + 四個 Ask AI 入口 + 三態徽章；**2026-07-26 版面改成當代 AI 對話（無頭像無氣泡）＋ 五種情境腳本** | 5 |
+| [ai-chat](entities/modules/ai-chat.md) | 被動查詢原則 + 四個 Ask AI 入口；**2026-07-26 三輪改版**：當代 AI 對話版面＋五情境腳本 → 互動模態收斂成「對話式／決策卡」兩種＋逐步播放 → 右側多任務執行面板（計畫來自已核准 SOP 的 plainSteps）、決策留痕、**三態徽章從 UI 移除（告知責任轉移到 F-AI-01 驗收條件 ⚠️）** | 5 |
 | [scheduling](entities/modules/scheduling.md) | 唯一 AI 主動場景，HITL 三重約束；**只掛 SOP＋展示產出物**；AntD Phase 4 已遷移 | 6 |
 | [handover](entities/modules/handover.md) | ❌ **已廢除、`HandoverPage.jsx` 已刪（2026-07-25）**；交班改為 SOP 排程產出，Schedule 檢視＋Home 佈告欄觸達；`ShiftHandoverModal` 入口已改掛佈告欄那則 SOP 產出 | — |
 | [knowledge-base](entities/modules/knowledge-base.md) | **知識管理：2026-07-26 從 Skill 管理拆出獨立**（Setting 新 tab）；Vector/RAG/知識圖譜為後續方向 | — |

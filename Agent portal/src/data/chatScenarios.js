@@ -12,8 +12,13 @@
 
    ── 腳本播放模型 ──
    turns[] 為線性腳本。使用者的發言以底部「建議接話」按鈕呈現，
-   點了才推進；AI 回合會自動接著出現，直到遇到需要使用者操作的東西
-   （sheet 由下而上的選單 / action 行動按鈕）才停下來等人。
+   點了才推進；AI 回合逐一自動接上（步驟會一步一步跑出來），
+   直到遇到決策卡（sheet）或下一句又是使用者發言才停下來等人。
+
+   ── 2026-07-26 第二輪收斂（PO 指定）──
+   互動模態只留兩種：**對話式（建議接話）** 與 **決策卡（sheet）**。
+   決策卡只給「會異動系統且流程卡住」的時刻；其餘一律用對話推進。
+   原本的 action 行動按鈕（不用／好）已全數改寫成 user turn。
 
    turn 形狀：
      { role: 'user', text }
@@ -22,14 +27,16 @@
        skill: { id, title, tier },                  // 命中的 Skill／SOP
        knowledge: [{ id, title }],                  // 引用的知識文件
        text,                                        // 主要回應（無氣泡，全寬）
-       run:    { title, steps: [...] },             // 執行過程／工具呼叫
-       result: { variant, title, lines: [] },       // 結果卡
-       links:  [{ label, url, note }],              // 操作入口
-       sheet:  { ... },                             // 由下而上的選單
-       action: { ... },                             // 行動按鈕
+       run:      { title, steps: [...] },           // SOP 執行進度 → 對話流只顯示步驟名
+       evidence: { title, steps: [...] },           // 輔助判斷查過的數據 → 只進右側面板
+       blocked:  { label, tool, reason },           // 被 Tool Gateway 擋下的寫入請求
+       result:   { variant, title, lines: [] },     // 結果卡
+       links:    [{ label, url }],                  // 操作入口（只渲染 label 成按鈕）
+       sheet:    { ... },                           // 決策卡
      }
 
    run.steps[].status：ok（完成）/ pause（停下等人）/ fail（失敗）/ skip（略過）
+   步驟的 tool / io / detail / reason **不在對話流顯示**，只餵右側執行面板。
    ════════════════════════════════════════ */
 
 const CHAT_SCENARIOS = {
@@ -41,7 +48,7 @@ const CHAT_SCENARIOS = {
     {
       id: 'sc-eq-1',
       title: '執行 SPC 異常開單 SOP（中途需人工確認）',
-      goal: '呼叫 SOP → 執行到寫入步驟停下 → 確認開單 → 成功',
+      goal: '呼叫 SOP → 寫入步驟停下 → 確認開單 → 接著跑第二份 SOP（面板出現兩個任務）',
       time: '今天 07:52',
       turns: [
         { role: 'user', text: '幫我跑一次今天的 SPC 異常日報與開單。' },
@@ -100,7 +107,7 @@ const CHAT_SCENARIOS = {
                     ],
                   },
                   links: [
-                    { label: '在 Case Center 開啟這張工單', url: '/app/case-center/case/CS-20260726-014', note: '查看與追蹤處理進度' },
+                    { label: '開啟 Case 單', url: '/app/case-center/case/CS-20260726-014' },
                   ],
                 },
               },
@@ -124,6 +131,39 @@ const CHAT_SCENARIOS = {
               },
             ],
           },
+        },
+
+        /* ── 第二份 SOP：讓右側面板出現兩個任務 ──
+           sm-eq-007 是純唯讀、不會停下來的 SOP，正好對比出
+           「任務 1 停過一次要人確認、任務 2 一路跑完」。 */
+        { role: 'user', text: '順便把當班交接報告也整理一下。' },
+        {
+          role: 'ai',
+          mode: 'approved',
+          skill: { id: 'sm-eq-007', title: '整理當班交接報告', tier: 'sop' },
+          text: '好，這份全程只讀資料、不動任何系統，所以中途不會停下來問你，我直接跑完。',
+          run: {
+            title: 'SOP 執行中',
+            steps: [
+              { num: 1, label: '取當班機台稼動資料', tool: 'eqp.get_uptime', io: 'read', status: 'ok', detail: '12 台機台 · 08:00–15:30' },
+              { num: 2, label: '取同時段警報並分級', tool: 'fdc.list_alarms', io: 'read', status: 'ok', detail: '警報 5 件（Level-2 ×1）' },
+              { num: 3, label: '計算稼動率與異常密度', io: 'compute', status: 'ok', detail: '稼動率 94.2%（已排除 PM 時數）、異常密度 2.7 件／8h' },
+              { num: 4, label: '取未結案 Case 與待交接事項', tool: 'case_center.list_open', io: 'read', status: 'ok', detail: '未結案 7 件，其中 1 件逾期' },
+              { num: 5, label: '套用交接報告格式', io: 'compute', status: 'ok', detail: '已套用課內格式' },
+            ],
+          },
+          result: {
+            variant: 'success',
+            title: 'ETC 設備課 · 日班交接報告已產出',
+            lines: [
+              '稼動率 94.2%（目標 95%，未達標）',
+              '本班異常 5 件 · 未結案 Case 7 件',
+              '今早開的 #CS-20260726-014 已列入待交接事項',
+            ],
+          },
+          links: [
+            { label: '開啟交接報告', url: '/app/handover/report/20260726-day' },
+          ],
         },
       ],
     },
@@ -216,28 +256,25 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
-          text: '分兩件事處理，先顧眼前的警報，再修 SOP。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 SOP 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 SOP 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 SOP 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 SOP owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 SOP 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 SOP 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 SOP 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。',
+          text: '分兩件事處理，先顧眼前的警報，再修 SOP。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 SOP 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 SOP 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 SOP 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 SOP owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 SOP 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 SOP 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 SOP 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。\n\n要不要我把「標準元件升版 ＋ 盤點其他排程 SOP」列成一張追蹤任務？',
           links: [
-            { label: '手動開單（工單內容已預填）', url: '/app/case-center/create?prefill=fdc-e308-20260726', note: 'P1 · E-308 Chamber A 氣體流量異常' },
-            { label: '回報 SOP 失效給 owner 與平台', url: '/app/skill/sm-eq-004/report-issue', note: '會附上本次的失敗紀錄與 API 回應' },
+            { label: '手動開單', url: '/app/case-center/create?prefill=fdc-e308-20260726' },
+            { label: '回報失效', url: '/app/skill/sm-eq-004/report-issue' },
           ],
-          action: {
-            label: '幫我建立一張追蹤任務',
-            desc: '把「標準元件升版 + 檢查其他排程 SOP」列成任務',
-            outcome: {
-              role: 'ai',
-              mode: 'general',
-              text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 SOP、升版後重跑一次 dry run 比對差異。',
-              result: {
-                variant: 'success',
-                title: '任務 #T-2026-0726-03 已建立',
-                lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 SOP 執行失敗紀錄'],
-              },
-              links: [
-                { label: '在任務管理開啟', url: '/app/tasks/T-2026-0726-03', note: '追蹤處理進度' },
-              ],
-            },
+        },
+        { role: 'user', text: '好，幫我建一張追蹤任務。' },
+        {
+          role: 'ai',
+          mode: 'general',
+          text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 SOP、升版後重跑一次 dry run 比對差異。',
+          result: {
+            variant: 'success',
+            title: '任務 #T-2026-0726-03 已建立',
+            lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 SOP 執行失敗紀錄'],
           },
+          links: [
+            { label: '開啟任務', url: '/app/tasks/T-2026-0726-03' },
+          ],
         },
       ],
     },
@@ -256,8 +293,10 @@ const CHAT_SCENARIOS = {
           skill: { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
           knowledge: [{ id: 'kd-eq-003', title: 'ERR-4421 冷卻系統異常排除 v2' }],
           text: '這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你查了現場數據。\n\n**研判：冷卻水路阻塞**\n\n依據有三：過濾器壓差 0.07 MPa，超過 0.05 的判斷門檻；水壓是緩降不是跳動，形態符合阻塞而非感測器老化；同機台近 7 天沒有其他同碼警報，不像感測器問題。\n\n**建議處置**\n1. 先執行冷卻水路疏通程序（清洗過濾器）\n2. 疏通後觀察 30 分鐘，水壓應回到 0.18 MPa 以上\n3. 若 30 分鐘內未回升，再開緊急工單請廠務支援\n\n這是依指引研判的建議，不是已核准的流程，最後判斷仍在你身上。',
-          run: {
-            title: '查了這些現場數據',
+          /* 證據已寫進上面的文字（「依據有三…」），對話流不再重複列一次步驟表；
+             這份明細只餵右側面板的「這次用到的」。 */
+          evidence: {
+            title: '查過的現場數據',
             steps: [
               { label: '比對適用範圍', io: 'match', status: 'ok', detail: 'E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合' },
               { label: '查警報明細', tool: 'fdc.get_alarm_detail', io: 'read', status: 'ok', detail: '冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa' },
@@ -270,16 +309,15 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'guided',
           skill: { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
-          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是輔助判斷型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 你可以在下面的紀錄看到那一行。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
-          run: {
-            title: '這次的工具呼叫紀錄',
-            steps: [
-              { label: '變更 SPC 管制界限', tool: 'spc.update_control_limit', io: 'write', status: 'fail', detail: '已拒絕 → 改為建議', reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具' },
-            ],
+          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是輔助判斷型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 下面那一行就是。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
+          blocked: {
+            label: '變更 SPC 管制界限',
+            tool: 'spc.update_control_limit',
+            reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具',
           },
           links: [
-            { label: 'SPC Console · 管制界限設定', url: '/app/spc-console/limits?station=E-101&recipe=CMP-Standard', note: '已帶入 E-101 與 CMP-Standard，可直接編輯' },
-            { label: '製程變更申請（DCR）', url: '/app/dcr/create?type=spc-limit&station=E-101', note: '管制界限變更須走此流程' },
+            { label: '開啟 SPC Console', url: '/app/spc-console/limits?station=E-101&recipe=CMP-Standard' },
+            { label: '開 DCR 申請', url: '/app/dcr/create?type=spc-limit&station=E-101' },
           ],
         },
       ],
@@ -323,28 +361,25 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'general',
           text: '我查了課上所有的 Skill、SOP 與知識文件，**ERR-9105 完全沒有紀錄**。\n\n我也不打算靠猜的給你一個聽起來合理的答案 —— 半夜三點照著一個猜出來的步驟去動 CVD 機台，風險不對等。\n\n**現在可以做的**\n\n1. 問課上處理過 CVD 的資深同事。依課內的活動紀錄，陳育民與張文凱過去半年碰過 E-502 的異常最多。\n2. 若無人可問且警報持續，依《FDC 警報分級對照表》的通報原則升報 Section Admin，由課長決定是否停機。\n3. 查設備原廠手冊的 ERR-91xx 章節。\n\n**另外想跟你確認一件事**\n\n這次問不到不只是這一次的問題 —— 下一個值班的人半夜遇到一樣的狀況，還是會問不到。要不要我把這件事列成一張任務，追蹤到有人把 ERR-9105 的處理方式補進知識庫為止？',
-          action: {
-            label: '好，建立追蹤任務',
-            desc: '追蹤到 ERR-9105 的處理方式補進知識庫為止',
-            outcome: {
-              role: 'ai',
-              mode: 'general',
-              text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 SOP；如果每次要看現場數據判斷，就建成輔助判斷。到時候系統會提示。',
-              result: {
-                variant: 'success',
-                title: '任務 #T-2026-0725-11 已建立',
-                lines: [
-                  '標題：補齊 E-502 ERR-9105 處理知識',
-                  '指派：陳育民 · 副本：林課長',
-                  '到期：2026-08-01',
-                  '附件：本次對話紀錄、E-502 當下警報明細',
-                ],
-              },
-              links: [
-                { label: '在任務管理開啟', url: '/app/tasks/T-2026-0725-11', note: '追蹤補齊進度' },
-              ],
-            },
+        },
+        { role: 'user', text: '好，幫我建一張追蹤任務。' },
+        {
+          role: 'ai',
+          mode: 'general',
+          text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 SOP；如果每次要看現場數據判斷，就建成輔助判斷。到時候系統會提示。',
+          result: {
+            variant: 'success',
+            title: '任務 #T-2026-0725-11 已建立',
+            lines: [
+              '標題：補齊 E-502 ERR-9105 處理知識',
+              '指派：陳育民 · 副本：林課長',
+              '到期：2026-08-01',
+              '附件：本次對話紀錄、E-502 當下警報明細',
+            ],
           },
+          links: [
+            { label: '開啟任務', url: '/app/tasks/T-2026-0725-11' },
+          ],
         },
       ],
     },
@@ -447,8 +482,8 @@ const CHAT_SCENARIOS = {
           skill: { id: 'sm-pr-006', title: 'CP 值下滑趨勢研判', tier: 'guided' },
           knowledge: [{ id: 'kd-pr-002', title: 'SPC 失控快速處置指引 v2' }],
           text: '這個狀況本課沒有標準流程，我依《CP 值下滑趨勢研判》幫你看了三條時間軸。\n\n**研判：與 03/28 的配方版本異動高度相關**\n\n下滑的起點落在 03/28，正好是 R-512 從 v4.1 升到 v4.2、壓力上限由 4.0 調到 4.2 torr 的那一天。同期間原料批號沒有切換，可以排除材料變異。\n\n**建議**\n1. 先做 Process Window Study，驗證壓力確實是主因\n2. 若確認，走 DCR 把壓力上限回調至 4.0 torr\n3. 回調後觀察 2 週，確認 CP 值回升\n\n這是依指引研判的建議，責任仍在執行者。',
-          run: {
-            title: '查了這些現場數據',
+          evidence: {
+            title: '查過的現場數據',
             steps: [
               { label: '比對適用範圍', io: 'match', status: 'ok', detail: 'R-512 屬 CMP、位於 ETC-3F、CPK 1.41 < 1.5 —— 符合' },
               { label: '查 SPC 趨勢', tool: 'spc.get_trend', io: 'read', status: 'ok', detail: '近 30 天連續 9 點同側（Nelson Rule 2）' },
@@ -463,15 +498,14 @@ const CHAT_SCENARIOS = {
           mode: 'guided',
           skill: { id: 'sm-pr-006', title: 'CP 值下滑趨勢研判', tier: 'guided' },
           text: '我不能幫你改。剛才確實試了，被擋下來了 —— 下面那一行就是。\n\n這份 Skill 是輔助判斷型，允許清單裡只有唯讀工具。而且「調回去」在管制上跟「調過去」是同一件事：兩者都是製程參數變更，都要走 DCR，都要影響評估與回滾計畫。\n\n**你要自己做的話**\n\n1. 開一張 DCR（下面連結已帶好 R-512 與壓力參數）\n2. 影響評估這欄可以直接用我剛才的研判內容，我把時間軸整理好了\n3. 送 Section Admin 初審 → 課長核准 → 生效\n\n**不過我還是建議先做 Process Window Study。** 現在的證據是時間吻合，不是因果確立。直接回調有機會做對，但如果真正原因是別的，你會白繞一圈，而且下次還會再發生。',
-          run: {
-            title: '這次的工具呼叫紀錄',
-            steps: [
-              { label: '調整配方參數', tool: 'recipe.update_param', io: 'write', status: 'fail', detail: '已拒絕 → 改為建議', reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具' },
-            ],
+          blocked: {
+            label: '調整配方參數',
+            tool: 'recipe.update_param',
+            reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具',
           },
           links: [
-            { label: '製程變更申請（DCR）', url: '/app/dcr/create?recipe=R-512&param=pressure_upper', note: '已帶入 R-512 與壓力上限參數' },
-            { label: 'Process Window Study 排程', url: '/app/recipe/R-512/pws/create', note: '建議先做這個再決定要不要回調' },
+            { label: '開 DCR 申請', url: '/app/dcr/create?recipe=R-512&param=pressure_upper' },
+            { label: '排 Process Window Study', url: '/app/recipe/R-512/pws/create' },
           ],
         },
       ],
@@ -574,28 +608,25 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'general',
           text: '我查了課上的 Skill、SOP 與知識文件，**沒有找到「客戶臨時要求」這類插隊情境的決策依據**。\n\n課上有一份《排程優先序決策研判》，但它目前還在簽核中（尚未生效），而且它處理的是三線內部資源競爭，不涵蓋客戶端臨時變更 —— 那牽涉到業務承諾與違約條款，不是排程規則能決定的。\n\n這件事我不適合替你判斷。**建議直接問組長或部長**，因為要衡量的是客戶關係與其他訂單的交期風險，那些資訊不在系統裡。\n\n**另外**\n\n這種狀況應該不是第一次。要不要我列成一張任務，請課上有經驗的人把「客戶臨時變更的處理原則」寫成知識？下次有人半夜遇到，至少有東西可以參考。',
-          action: {
-            label: '好，建立追蹤任務',
-            desc: '請資深同事補齊客戶臨時變更的處理原則',
-            outcome: {
-              role: 'ai',
-              mode: 'general',
-              text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份輔助判斷 Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是輔助判斷的場景。',
-              result: {
-                variant: 'success',
-                title: '任務 #T-2026-0725-08 已建立',
-                lines: [
-                  '標題：補齊客戶臨時變更的排程處理原則',
-                  '指派：林組長 · 副本：吳部長',
-                  '到期：2026-08-05',
-                  '附件：W26-042 本次情境與對話紀錄',
-                ],
-              },
-              links: [
-                { label: '在任務管理開啟', url: '/app/tasks/T-2026-0725-08', note: '追蹤補齊進度' },
-              ],
-            },
+        },
+        { role: 'user', text: '好，幫我建一張追蹤任務。' },
+        {
+          role: 'ai',
+          mode: 'general',
+          text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份輔助判斷 Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是輔助判斷的場景。',
+          result: {
+            variant: 'success',
+            title: '任務 #T-2026-0725-08 已建立',
+            lines: [
+              '標題：補齊客戶臨時變更的排程處理原則',
+              '指派：林組長 · 副本：吳部長',
+              '到期：2026-08-05',
+              '附件：W26-042 本次情境與對話紀錄',
+            ],
           },
+          links: [
+            { label: '開啟任務', url: '/app/tasks/T-2026-0725-08' },
+          ],
         },
       ],
     },
