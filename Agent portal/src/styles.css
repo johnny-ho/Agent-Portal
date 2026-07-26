@@ -34,6 +34,9 @@ body.dark-mode .scrollbar-thin::-webkit-scrollbar-thumb { background: #3C3F41; }
 @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
 .spin { animation: spin 0.8s linear infinite; }
 @keyframes slideInRight { from{transform:translateX(100%)} to{transform:translateX(0)} }
+/* ── Skill 詳情：Ask AI 套用變更後，左側對應區塊要看得出「它剛剛被換掉了」 ── */
+@keyframes sd-flash { 0%{outline-color:rgba(37,99,235,0.55)} 70%{outline-color:rgba(37,99,235,0.55)} 100%{outline-color:rgba(37,99,235,0)} }
+.sd-flash { outline: 2px solid rgba(37,99,235,0.55); outline-offset: 8px; border-radius: 8px; animation: sd-flash 1.6s ease-out forwards; }
 /* ── Task Management：AntD Table 選取列（AntD 遷移 Phase 2）── */
 .tm-list .ant-table-tbody > tr.tm-row-selected > td { background: rgba(37,99,235,0.08) !important; }
 .tm-list .ant-table-tbody > tr.tm-row-selected > td:first-child { box-shadow: inset 3px 0 0 #2563EB; }
