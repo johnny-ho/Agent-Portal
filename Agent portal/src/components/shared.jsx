@@ -144,3 +144,53 @@ const STATUS_CFG = {
   upcoming: { label: '即將開始', color: '#2563EB', bg: 'rgba(37,99,235,0.08)' },
   watch: { label: '需關注', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)' },
 };
+
+/* ════════════════════════════════════════
+   Skill 三層模型 — 全站共用詞彙
+   知識 / 輔助判斷 / SOP。分界是「能不能設成排程」，
+   使用者一秒就懂，比講副作用範圍好解釋。
+   見 brain/concepts/agent-skill-tiering.md
+   ════════════════════════════════════════ */
+const SKILL_TIER_CFG = {
+  knowledge: {
+    label: '知識',
+    short: '知',
+    color: '#6B7280', bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)',
+    oneLiner: '把課上的文件變成 AI 查得到的內容',
+    detail: '執行時只做檢索與回答，不碰任何系統，也不需要設排程。',
+    schedulable: false,
+  },
+  guided: {
+    label: '輔助判斷',
+    short: '判',
+    color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
+    oneLiner: '每次狀況不同，AI 依課上的指引研判並給建議',
+    detail: '可以查現場數據當證據，但不能異動任何系統；每次結果不一樣，所以不能設成排程。',
+    schedulable: false,
+  },
+  sop: {
+    label: 'SOP',
+    short: 'SOP',
+    color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
+    oneLiner: '每次步驟都一樣、結果可重現的固定流程',
+    detail: '執行時完全照核准過的步驟跑，可以設成排程自動執行；會異動系統的步驟一律停下來等人確認。',
+    schedulable: true,
+  },
+};
+
+const SKILL_TIERS = ['knowledge', 'guided', 'sop'];
+
+/* 類型徽章（清單欄位、詳情、Chat 都共用同一顆）*/
+function SkillTierTag({ tier, size }) {
+  var { fz } = useTheme();
+  var cfg = SKILL_TIER_CFG[tier];
+  if (!cfg) return null;
+  return (
+    <antd.Tag style={{
+      marginInlineEnd: 0, borderRadius: 999,
+      color: cfg.color, background: cfg.bg, borderColor: cfg.border,
+      fontSize: fz(size === 'small' ? 10 : 11), fontWeight: 600,
+      lineHeight: size === 'small' ? '16px' : '18px', paddingInline: 8,
+    }}>{cfg.label}</antd.Tag>
+  );
+}

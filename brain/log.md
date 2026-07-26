@@ -107,3 +107,39 @@ PO 補充實際開發中的 SOP 流程（對話式生成 → 試跑 → promote 
 **環境註記**：本 session 的沙箱封鎖 unpkg / cdn.tailwindcss.com（CONNECT 403），產物直開會白畫面。瀏覽器實測改用 scratchpad harness：npm 裝同版 react/react-dom/dayjs/antd/@babel/standalone + @tailwindcss/browser，以 Playwright `page.route` 攔截 CDN 請求改餵本地檔（不動 `src/`、不動 shell.html）。
 
 受影響頁面：[entities/modules/handover.md](entities/modules/handover.md)、[concepts/antd-migration-plan.md](concepts/antd-migration-plan.md)、index.md。
+
+## [2026-07-25] decision | 三層模型改造 Step 2：資料層（personas.js）
+
+`sopManagement[]` 依 [agent-skill-tiering](concepts/agent-skill-tiering.md)「資料模型變更」補齊：19 筆全數有 `tier`／`tools`／結構化 `scope`／`hasWrite`／`consumedBy`；SOP 型另有 `plainSteps`（standard/custom 標記）／`dryRun` 三層快照／`genChatId`。**自由文字 `scenario`／`productionScope`／`pirunScope` 全數移除**（原 3 筆），改由結構化 scope 取代。
+
+新增 **`EQUIPMENT_MASTER`**（設備/站點主檔，equipment 16 台、process 8、mfg 6）與 **`matchScopeTargets(personaKey, scope)`**：適用範圍勾選畫面「目前符合 N 台」的計算來源，也是「這個 skill 根本不會進候選池」那段 demo 的資料基礎。
+
+新增 4 筆 mock：`sm-eq-006` ERR-4421 冷卻異常研判（輔助判斷，3 唯讀工具）、`sm-pr-006` CP 值下滑趨勢研判（輔助判斷，跨 persona 證明不限設備課）、`sm-eq-007` 整理當班交接報告（SOP 唯讀、`consumedBy.scheduleId: 'sch-eq-004'`）、`sm-eq-008` SPC 異常日報與開單（SOP 含寫入、綁既有 `sch-eq-001`，供第 5 步「含 N 個需確認步驟」demo）。
+
+**兩個 doc 未定義、實作時補上的欄位**：`evalCases[]`（測試題，`origin: seed|system` + `locked`，系統出的負面題不可刪）與 `traceSample`（一次互動的逐步紀錄，含被拒絕的寫入工具那一行）——原型定位是「讓人看得見治理在運作」，這兩者是唯一能把它顯示出來的資料。
+
+⚠️ **暫時的前向參照**：`sm-eq-007.consumedBy.scheduleId = 'sch-eq-004'` 指向的排程於第 5 步才會加進 `scheduling.js`。
+
+同步改 `SkillManagementPage.jsx` 兩處渲染（左欄適用範圍改結構化條件 + 目前符合 N 台、生效資訊列出符合機台），避免資料改了畫面空白。build 617,475 bytes，瀏覽器實測 Skill 管理清單 8 筆、詳情 Modal 正常、零 error。
+
+## [2026-07-25] decision | 三層模型改造 Step 3–7 完成（原型全線接通）
+
+依 [agent-skill-tiering](concepts/agent-skill-tiering.md) 做完剩下五步，各自獨立 commit、各自 build + 瀏覽器實測：
+
+**Step 3 知識管理頁**：`shared.jsx` 立全站共用的 `SKILL_TIER_CFG`／`SkillTierTag`（每個類型帶一句白話與「能不能排程」）；清單加類型欄與類型膠囊篩選；詳情 Modal 依類型分岔——SOP 走白話步驟（標準元件 vs 本次自訂）＋ dry run 三層，輔助判斷走測試題（系統負面題標 🔒）＋ 處理紀錄（含「已拒絕」那一行），三種類型共用「會碰到哪些系統」區（輔助判斷的寫入區看得到但鎖住並寫明改建 SOP 的替代路徑）。
+
+**Step 4 對話式建立**（`SkillCreateFlow.jsx` 新檔，主要工作量）：講需求 → agent 推薦類型（可改選）→ 適用範圍勾選（底部即時「目前符合 N 台」，實測 16 → 4 → 3 → 1 連動）→ 白話說明＋工具授權（寫入開關會跳出確認講明三項代價）→ 試跑／試問 → promote 成 Draft。
+
+**Step 5 Schedule**：執行紀錄展開先看到「本次產出」（沿用 Skill 頁的產出渲染，兩邊長一樣）再看步驟；新增排程只選得到 Production 的 SOP，其餘列出但鎖住並寫明原因；含寫入者標「本 SOP 含 N 個需確認步驟」。
+
+**Step 6 Home 接線**：SOP 產出 → 佈告欄置頂（標「SOP 產出」）→ 該則公告上的「補充交代事項並送出交班」開啟 ShiftHandoverModal（**順手補上 Step 1 發現的入口缺口**）→ Modal 以產出預填、標籤改「SOP 已算好 · 可編輯」→ 人送出後交班記錄取代那則自動公告。死碼 `SectionHeader` 一併刪除。
+
+**Step 7 Chat**：三態徽章（依核准流程／AI 依指引研判／一般回答）每則 AI 回答都有；研判類附責任聲明與查過的數據，含被拒絕的寫入請求。
+
+**三個超出原文件的實作決定**（已回填 concept 頁）：送簽硬條件寫成擋得住的 disabled + 原因、建立流程的範圍那一關零可打字欄位、新增排程沿用「鎖住不隱藏」。
+
+**修掉一個 main 上既有的 bug**：`renderHomeWidget()` 被當一般函式呼叫卻內含 `useTheme()`，導致該 hook 併入 `DashboardPage` 的序列，persona 切換使 widget 數量改變時噴 React「change in the order of Hooks」warning。已用 worktree 對照 `aa78f5f` 確認為既有問題（非本次造成），該 `useTheme` 未被使用，直接移除。修掉後四 persona × 七頁全走完零 error。
+
+**尚未實作**（列在 concept 頁末）：SOP 卡片「不適用」一鍵轉輔助判斷、飛輪 1 的「要不要變成 SOP？」提示、標準元件版本升級通知、trace 匯出帶進交班或任務。
+
+受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋實作補上的欄位、實作狀態、三個實作決定、未實作清單）、[entities/modules/scheduling.md](entities/modules/scheduling.md)、[entities/modules/ai-chat.md](entities/modules/ai-chat.md)、[entities/modules/home-dashboard.md](entities/modules/home-dashboard.md)、[entities/modules/knowledge-base.md](entities/modules/knowledge-base.md)、[entities/architecture.md](entities/architecture.md)、index.md。

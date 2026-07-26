@@ -3,6 +3,95 @@
    AntD 遷移 Phase 5（見 brain/concepts/antd-migration-plan.md）
    ════════════════════════════════════════ */
 
+/* ════════════════════════════════════════
+   回答的三態徽章
+
+   一條硬分界（責任）：依核准流程 ↔ AI 研判。
+   值班工程師不需要知道「輔助判斷」這個詞，他要知道的是
+   「AI 這次有多敢承諾」。
+   見 brain/concepts/agent-skill-tiering.md「兩種 user，兩種語言」
+   ════════════════════════════════════════ */
+const CHAT_ANSWER_MODE = {
+  approved: {
+    label: '依核准流程',
+    note: '本回答直接引用課上已簽核的流程，照做即可。',
+    color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
+  },
+  guided: {
+    label: 'AI 依指引研判',
+    note: '本課沒有對應的標準流程，這是 AI 依課上的指引研判的建議，責任仍在執行者。',
+    color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
+  },
+  general: {
+    label: '一般回答',
+    note: '沒有引用課上的知識，僅為一般性說明。',
+    color: '#6B7280', bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)',
+  },
+};
+
+function getAnswerMode(msg) {
+  if (msg.sop) return 'approved';
+  if (msg.guidedBy) return 'guided';
+  return 'general';
+}
+
+function AnswerModeBadge({ msg, onOpenSkill }) {
+  var { C, fz } = useTheme();
+  var mode = getAnswerMode(msg);
+  var cfg  = CHAT_ANSWER_MODE[mode];
+  var runs = msg.toolRuns || [];
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <antd.Tooltip title={cfg.note}>
+          <antd.Tag style={{
+            marginInlineEnd: 0, borderRadius: 999,
+            color: cfg.color, background: cfg.bg, borderColor: cfg.border,
+            fontSize: fz(11), fontWeight: 600, lineHeight: '18px', paddingInline: 10,
+          }}>{cfg.label}</antd.Tag>
+        </antd.Tooltip>
+
+        {mode === 'approved' && (
+          <antd.Tooltip title="點擊查看 Skill 內容">
+            <antd.Tag color="blue" onClick={function() { onOpenSkill && onOpenSkill(msg.sop); }}
+              style={{ marginInlineEnd: 0, cursor: 'pointer', fontSize: fz(12) }}
+            >📄 {msg.sop} →</antd.Tag>
+          </antd.Tooltip>
+        )}
+        {mode === 'guided' && (
+          <span style={{ fontSize: fz(12), color: C.textMuted }}>依《{msg.guidedBy}》</span>
+        )}
+      </div>
+
+      {/* 研判類回答把責任講清楚，並把查過的數據攤開當證據 */}
+      {mode === 'guided' && (
+        <div style={{ marginTop: 8, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '4px 8px', background: cfg.bg, fontSize: fz(11), color: cfg.color, fontWeight: 600 }}>
+            非核准流程 · 這是建議，責任在執行者
+          </div>
+          {runs.map(function(r, i) {
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                padding: '4px 8px', borderTop: '1px solid ' + C.border,
+                background: r.allowed ? 'transparent' : 'rgba(239,68,68,0.04)',
+              }}>
+                <span style={{ fontSize: fz(12), fontWeight: 700, color: r.allowed ? '#22C55E' : '#EF4444', width: 12 }}>{r.allowed ? '✓' : '✗'}</span>
+                <span style={{ fontSize: fz(12), color: C.text }}>{r.label}</span>
+                <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace' }}>{r.tool}</span>
+                <span style={{ fontSize: fz(11), color: r.allowed ? C.textMuted : '#EF4444', flex: 1, minWidth: 0 }}>
+                  {r.allowed ? r.result : (r.result + '（' + r.reason + '）')}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Quick Prompts (新對話建議 prompt) ── */
 var QUICK_PROMPTS = {
   equipment: [
@@ -257,15 +346,10 @@ function ChatPage({ p, aiDraft, clearAiDraft}) {
                       <div style={{ padding: '8px 16px', borderRadius: isUser ? '12px 4px 12px 12px' : '4px 12px 12px 12px', background: isUser ? '#2563EB' : C.bgSub, border: isUser ? 'none' : '1px solid ' + C.border, fontSize: fz(14), lineHeight: 1.65, color: isUser ? '#FFFFFF' : C.text, whiteSpace: 'pre-line' }}>
                         {msg.text}
                       </div>
-                      {msg.sop && (
-                        <antd.Tooltip title="點擊查看 Skill 內容">
-                          <antd.Tag
-                            color="blue"
-                            onClick={function() { openSopDrawer(msg.sop); }}
-                            style={{ marginTop: 8, marginInlineEnd: 0, cursor: 'pointer', fontSize: fz(12) }}
-                          >📄 {msg.sop} →</antd.Tag>
-                        </antd.Tooltip>
-                      )}
+                      {/* 三態徽章：AI 這次有多敢承諾。永遠存在，不是只有特殊情況才標。
+                          工程師若分不出「照核准流程做」跟「照 AI 建議做」，
+                          每次採納都是在賭，他們會選擇不賭。*/}
+                      {!isUser && <AnswerModeBadge msg={msg} onOpenSkill={openSopDrawer} />}
                       {msg.action === 'contribute' && (
                         <antd.Space size={8} style={{ marginTop: 8 }}>
                           <antd.Button size="small" type="primary" style={{ background: '#22C55E' }}>確認提交</antd.Button>

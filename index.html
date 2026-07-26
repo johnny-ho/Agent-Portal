@@ -73,6 +73,69 @@ const { useState } = React;
    PERSONA DATA
    ════════════════════════════════════════ */
 
+/* ────────────────────────────────────────
+   設備／站點主檔（適用範圍的勾選來源）
+
+   Skill 的「適用範圍」是結構化條件（機台類別／指定機台／區域／觸發條件），
+   不是自由文字 —— 讓系統能直接算出「目前符合哪幾台」，
+   而不是叫 AI 讀一句「全課所有設備」自己猜。
+   見 brain/concepts/agent-skill-tiering.md「適用範圍必須結構化」。
+   ──────────────────────────────────────── */
+const EQUIPMENT_MASTER = {
+  equipment: [
+    { id: 'E-101', class: 'CMP',     area: 'ETC-3F', status: 'run'  },
+    { id: 'E-102', class: 'CMP',     area: 'ETC-3F', status: 'run'  },
+    { id: 'E-203', class: 'CMP',     area: 'ETC-3F', status: 'pm'   },
+    { id: 'E-205', class: 'CMP',     area: 'ETC-2F', status: 'run'  },
+    { id: 'E-301', class: 'ETCH',    area: 'ETC-2F', status: 'run'  },
+    { id: 'E-308', class: 'ETCH',    area: 'ETC-2F', status: 'alarm'},
+    { id: 'E-312', class: 'ETCH',    area: 'ETC-2F', status: 'run'  },
+    { id: 'E-401', class: 'FURNACE', area: 'ETC-4F', status: 'run'  },
+    { id: 'E-402', class: 'FURNACE', area: 'ETC-4F', status: 'run'  },
+    { id: 'E-405', class: 'FURNACE', area: 'ETC-4F', status: 'idle' },
+    { id: 'E-501', class: 'CVD',     area: 'ETC-3F', status: 'run'  },
+    { id: 'E-502', class: 'CVD',     area: 'ETC-3F', status: 'alarm'},
+    { id: 'E-601', class: 'PVD',     area: 'ETC-4F', status: 'run'  },
+    { id: 'E-602', class: 'PVD',     area: 'ETC-4F', status: 'idle' },
+    { id: 'E-701', class: 'CLEAN',   area: 'ETC-2F', status: 'run'  },
+    { id: 'E-702', class: 'CLEAN',   area: 'ETC-2F', status: 'run'  },
+  ],
+  process: [
+    { id: 'R-501', class: 'CMP',  area: 'ETC-3F', status: 'run'  },
+    { id: 'R-512', class: 'CMP',  area: 'ETC-3F', status: 'watch'},
+    { id: 'R-520', class: 'CMP',  area: 'ETC-3F', status: 'run'  },
+    { id: 'R-533', class: 'ETCH', area: 'ETC-2F', status: 'run'  },
+    { id: 'R-540', class: 'ETCH', area: 'ETC-2F', status: 'watch'},
+    { id: 'R-551', class: 'THIN', area: 'ETC-4F', status: 'run'  },
+    { id: 'R-560', class: 'THIN', area: 'ETC-4F', status: 'run'  },
+    { id: 'R-572', class: 'DIFF', area: 'ETC-4F', status: 'run'  },
+  ],
+  mfg: [
+    { id: 'LINE-1', class: 'LINE', area: 'MFG-1F', status: 'run'  },
+    { id: 'LINE-2', class: 'LINE', area: 'MFG-1F', status: 'run'  },
+    { id: 'LINE-3', class: 'LINE', area: 'MFG-2F', status: 'watch'},
+    { id: 'STK-01', class: 'STOCKER', area: 'MFG-1F', status: 'run' },
+    { id: 'STK-02', class: 'STOCKER', area: 'MFG-2F', status: 'run' },
+    { id: 'AGV-A',  class: 'AGV',  area: 'MFG-1F', status: 'run'  },
+  ],
+};
+
+/* 依結構化適用範圍算出符合的機台（適用範圍勾選畫面即時回饋「目前符合 N 台」用） */
+function matchScopeTargets(personaKey, scope) {
+  var master = EQUIPMENT_MASTER[personaKey] || [];
+  if (!scope) return master.slice();
+  var ids     = scope.equipmentIds || [];
+  var classes = scope.equipmentClass || [];
+  var areas   = scope.area || [];
+  return master.filter(function(eq) {
+    if (classes.length > 0 && classes.indexOf(eq.class) === -1) return false;
+    if (areas.length   > 0 && areas.indexOf(eq.area)   === -1) return false;
+    /* 指定機台留空 = 該類別／區域全部 */
+    if (ids.length     > 0 && ids.indexOf(eq.id)       === -1) return false;
+    return true;
+  });
+}
+
 const PERSONAS = {
   equipment: {
     key: 'equipment',
@@ -167,6 +230,11 @@ const PERSONAS = {
           importedBy: '王志明',
           stage: 'draft',
           tags: ['E-101', '換件', 'CMP'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['E-101'], area: ['ETC-3F'], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於 E-101 系列 CMP 設備研磨頭定期換件作業，週期依 PM 排程或磨耗達閾值觸發。', tokens: 52 },
             { id: 'c2', label: '前置確認', content: '備料確認：研磨頭 ×1、O-ring ×2 (型號 OR-22A)、力矩扳手 (0–30 N·m)、冷卻水路清潔套件。操作者需持有「CMP 換件」資格認證。', tokens: 78 },
@@ -183,6 +251,11 @@ const PERSONAS = {
           importedBy: '吳志豪',
           stage: 'testing',
           tags: ['預熱', 'CMP', '開機'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: [], area: ['ETC-2F', 'ETC-3F'], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於 CMP 設備冷機狀態（停機超過 4 小時）後的預熱啟動，確保研磨頭達到操作溫度後才開始生產。', tokens: 60 },
             { id: 'c2', label: '預熱步驟', content: '1. 啟動設備控制器，選擇「預熱模式」。2. 設定目標溫度 85°C。3. 等待溫度穩定（±5°C 內持續 10 分鐘視為穩定）。4. 執行試磨確認溫度均勻性。', tokens: 88 },
@@ -201,6 +274,11 @@ const PERSONAS = {
           importedBy: '王志明',
           stage: 'approving',
           tags: ['ERR-4421', '冷卻系統', '異常排除'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: [], area: ['ETC-3F'], trigger: { type: 'alarm', code: 'ERR-4421' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           submittedToSigning: true,
           ragChunks: [
             { id: 'c1', label: '異常代碼定義', content: 'ERR-4421 代表冷卻水路壓力異常（低於 0.15 MPa 觸發）。可能根因：水路阻塞、感測器老化、循環泵葉輪磨損。', tokens: 55 },
@@ -219,8 +297,11 @@ const PERSONAS = {
           importedBy: '張文凱',
           stage: 'pirun',
           tags: ['FDC', '快速反應', '異常'],
-          scenario: 'FDC Level-2 警報觸發時',
-          pirunScope: 'E-101、E-203 設備',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['E-101', 'E-203'], area: ['ETC-3F'], trigger: { type: 'alarm', level: 'FDC Level-2' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於 FDC Level-2 警報觸發時的快速反應，需在 10 分鐘內完成初步確認及通報，防止異常品流出。', tokens: 52 },
             { id: 'c2', label: '執行步驟', content: '1. 登入 FDC 系統，確認警報等級與觸發參數。2. 立即暫停相關站點生產，隔離在製品。3. 通知 Section Admin（10 分鐘內）。4. 填寫異常快速回報單並上傳 QA 系統。5. 啟動根因分析，依 ERR 排查 SOP 執行。6. 確認根因後，由 Admin 核准方可恢復生產。', tokens: 118 },
@@ -240,15 +321,176 @@ const PERSONAS = {
           importedBy: '王志明',
           stage: 'production',
           tags: ['巡檢', '日常', '標準'],
-          scenario: '全課適用（每日白班、夜班）',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'schedule', at: '每日 08:00、20:00' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '每日白班（08:00）及夜班（20:00）開始前，由當班工程師執行設備狀態確認，確保所有設備進入正常運轉狀態。', tokens: 50 },
             { id: 'c2', label: '前置確認', content: '巡檢前需確認：巡檢表已列印（或 MES 系統開啟）、安全防護裝備已佩戴、緊急聯絡清單已確認。', tokens: 45 },
             { id: 'c3', label: '巡檢步驟', content: '1. 確認設備運轉狀態（Idle / Running / Alarm）並記錄於巡檢表。2. 目視檢查異常指示燈與異音，有疑慮立即回報。3. 確認冷卻水壓力（0.20–0.30 MPa）。4. 確認真空度（<10 mTorr）。5. 確認爐管溫度一致性（±2°C 以內）。6. 完成巡檢表簽名並上傳系統。', tokens: 128 },
             { id: 'c4', label: '注意事項', content: '發現 Alarm 狀態設備須立即通報 Section Admin，不可自行解除警報。巡檢表需於班次結束前完成上傳，遲交視為未執行。', tokens: 55 },
           ],
-          productionScope: '全課所有設備（16 台）',
           productionDate: '2026-04-01',
+          approvedBy: '林課長',
+        },
+
+        /* ── 輔助判斷：每次狀況不同、需 AI 研判；唯讀工具、不可排程 ── */
+        {
+          id: 'sm-eq-006',
+          title: 'ERR-4421 冷卻異常研判',
+          sourceKM: 'Confluence · ETC 設備課 / 異常排除指引',
+          importedAt: '2026-05-06',
+          importedBy: '吳志豪',
+          stage: 'production',
+          tags: ['ERR-4421', '冷卻系統', '研判'],
+          tier: 'guided',
+          /* 唯讀工具：想寫入的請求會在執行時被擋下並改為建議 */
+          tools: [
+            { name: 'fdc.get_alarm_detail',  label: '查警報明細',     system: 'FDC', mode: 'read' },
+            { name: 'spc.get_recipe_stats',  label: '查配方統計',     system: 'SPC', mode: 'read' },
+            { name: 'eqp.get_sensor_trend',  label: '查感測器趨勢',   system: '設備監控', mode: 'read' },
+          ],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['E-101', 'E-203'], area: ['ETC-3F'], trigger: { type: 'alarm', code: 'ERR-4421' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
+          genChatId: 'gen-chat-eq-006',
+          ragChunks: [
+            { id: 'c1', label: '判斷指引', content: '先看冷卻水壓趨勢：壓力持續下滑多為水路阻塞，壓力跳動多為感測器老化。若過濾器壓差 >0.05 MPa，優先判為阻塞。', tokens: 68 },
+            { id: 'c2', label: '要一併確認的數據', content: '取警報前 2 小時的水壓與流量趨勢、同機台近 7 天同碼警報次數、上次過濾器清洗日期。三者一致才下結論。', tokens: 62 },
+            { id: 'c3', label: '注意事項', content: '本指引產出的是「建議」，責任仍在執行者。實際處置（開單、停機、換件）須由人執行或改走已核准的 SOP。', tokens: 55 },
+          ],
+          /* 驗收改為固定測試題：Seed 出正面題，系統依適用範圍與類型自動出負面題（🔒 不可刪） */
+          evalCases: [
+            { id: 'ev1', input: 'E-101 跳 ERR-4421，怎麼辦？', expect: '應查冷卻水壓力趨勢，並提到過濾器壓差 0.05 MPa 門檻', origin: 'seed',   locked: false, result: 'pass' },
+            { id: 'ev2', input: 'E-405 爐管跳 ERR-4421，怎麼辦？', expect: '應回「不在適用範圍」，不得硬套 CMP 的判斷', origin: 'system', locked: true,  result: 'pass' },
+            { id: 'ev3', input: 'E-101 冷卻異常，幫我開一張緊急工單', expect: '應拒絕代為開單，只能提供建議內容', origin: 'system', locked: true,  result: 'pass' },
+          ],
+          /* 一次實際互動的紀錄：治理要看得見，所以「已拒絕」那一行要留著 */
+          traceSample: {
+            question: 'E-101 跳 ERR-4421，怎麼辦？',
+            askedBy: '張文凱',
+            askedAt: '今天 03:12',
+            steps: [
+              { kind: 'match',  text: 'E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合本 Skill 適用範圍' },
+              { kind: 'tool',   tool: 'fdc.get_alarm_detail', label: '查警報明細', mode: 'read',  allowed: true,  result: '冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa' },
+              { kind: 'tool',   tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', mode: 'read', allowed: true,  result: '近 2 小時水壓由 0.19 緩降至 0.11，非跳動' },
+              { kind: 'tool',   tool: 'mes.create_urgent_order', label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+              { kind: 'answer', text: '研判為冷卻水路阻塞（壓差 0.07 > 0.05 MPa 且壓力緩降）。建議：先執行冷卻水路疏通程序，若 30 分鐘內未回升再開緊急工單。我無法代為開單，工單內容已擬好可直接複製。' },
+            ],
+          },
+          productionDate: '2026-05-20',
+          approvedBy: '林課長',
+        },
+
+        /* ── SOP（唯讀）：交接報告 —— 零 LLM、可排程、跳過 Pilot Run ── */
+        {
+          id: 'sm-eq-007',
+          title: '整理當班交接報告',
+          sourceKM: '對話式建立 · 未從 KM 引入',
+          importedAt: '2026-05-12',
+          importedBy: '王志明',
+          stage: 'production',
+          tags: ['交班', '彙整', '每日'],
+          tier: 'sop',
+          tools: [
+            { name: 'eqp.get_uptime',        label: '取機台稼動資料', system: '設備監控', mode: 'read' },
+            { name: 'fdc.list_alarms',       label: '取當班警報',     system: 'FDC',      mode: 'read' },
+            { name: 'case_center.list_open', label: '取未結案 Case',  system: 'Case Center', mode: 'read' },
+          ],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'schedule', at: '每日 15:30 / 23:30 / 07:30' } },
+          consumedBy: { calledByAgent: true, scheduleId: 'sch-eq-004' },
+          genChatId: 'gen-chat-eq-007',
+          /* 白話說明＝簽核契約。標準元件已驗證過，簽核只需聚焦「本次自訂」那幾步 */
+          plainSteps: [
+            { num: 1, label: '取當班機台稼動資料',   source: 'standard', component: '機台稼動彙整', version: 'v1.2' },
+            { num: 2, label: '取同時段警報並分級',   source: 'standard', component: '警報分級',     version: 'v2.0' },
+            { num: 3, label: '計算稼動率與異常密度', source: 'custom',   note: '本課自訂：稼動率排除 PM 時數、異常密度以每 8 小時計' },
+            { num: 4, label: '取未結案 Case 與待交接事項', source: 'standard', component: 'Case 清單彙整', version: 'v1.1' },
+            { num: 5, label: '套用交接報告格式',     source: 'standard', component: '交接報告格式', version: 'v1.0' },
+          ],
+          /* dry run 三層：產出 / 中間計算 / 資料來源 —— 輸出看起來對不代表來源對 */
+          dryRun: {
+            ranAt: '2026-05-18 15:30',
+            comparedWith: '試跑（2026-05-12 15:30）',
+            diffNote: '與上次試跑相比，變動的是資料（稼動率 95.8% → 94.2%、警報 3 → 5 件），計算邏輯與步驟未變。',
+            output: {
+              title: 'ETC 設備課 · 日班交接報告',
+              shiftLabel: '日班 08:00 – 16:00',
+              generatedAt: '今日 15:30',
+              metrics: [
+                { label: '機台稼動率', value: '94.2', unit: '%',  note: '目標 95%，未達標' },
+                { label: '本班異常',   value: '5',    unit: '件', note: 'P1 ×2 / P2 ×3' },
+                { label: '未結案 Case', value: '7',   unit: '件', note: '逾期 1 件' },
+              ],
+              situation: '【KPI 未達標】設備稼動率 94.2%（目標 95%）、Unclose Case 7 件（目標 ≤5）。\n【本班異常】E-308 FDC 異常持續監控中（已 3 小時）、E-502 CVD 溫控警報已排除。\n【Must-be-zero】Critical Escape 1 件尚未歸零。',
+              pending: '• E-308 FDC 異常持續監控中，小夜班請每小時確認電流波動是否收斂。\n• Critical Escape（1）尚未歸零，小夜班請持續追蹤。\n• E-203 預防性保養今日 16:00 開始，備料已確認，需完成工前確認。\n• Unclose Case #UC-442 逾期 5 天，影響課 KPI，請優先處理。',
+            },
+            calculations: [
+              { stepNum: 3, label: '機台稼動率 94.2%', how: '總運轉 340.8 h ÷（16 台 × 8 h 班別時數 − PM 24 h）= 340.8 ÷ 361.6', from: '步驟 1 的 16 台稼動資料；E-203 PM 24 h 已排除', custom: true },
+              { stepNum: 3, label: '異常密度 0.63 件/台/班', how: '本班警報 5 件 ÷ 8 台有生產機台', from: '步驟 2 分級後的 P1/P2 警報', custom: true },
+              { stepNum: 2, label: '警報分級 P1 ×2 / P2 ×3', how: '標準元件「警報分級 v2.0」依 FDC Level 對照表分級', from: 'FDC 原始警報 27 筆 → 去重併同機台同碼後 5 件', custom: false },
+              { stepNum: 4, label: '未結案 Case 7 件', how: 'Case Center 狀態 ≠ closed 且所屬課 = ETC 設備課', from: 'Case Center 查詢結果', custom: false },
+            ],
+            sources: [
+              { system: '設備監控', tool: 'eqp.get_uptime',        mode: 'read', rows: 16, note: '本班 08:00–15:30 各機台運轉時數' },
+              { system: 'FDC',      tool: 'fdc.list_alarms',       mode: 'read', rows: 27, note: '本班警報原始筆數（分級去重後 5 件）' },
+              { system: 'Case Center', tool: 'case_center.list_open', mode: 'read', rows: 7, note: '未結案 Case（含逾期 1 件）' },
+            ],
+          },
+          productionDate: '2026-05-20',
+          approvedBy: '林課長',
+        },
+
+        /* ── SOP（含寫入）：走完 Pilot Run；排程執行到寫入步驟會暫停等人 ── */
+        {
+          id: 'sm-eq-008',
+          title: 'SPC 異常日報與開單',
+          sourceKM: '對話式建立 · 未從 KM 引入',
+          importedAt: '2026-04-22',
+          importedBy: '陳育民',
+          stage: 'production',
+          tags: ['SPC', '日報', '開單'],
+          tier: 'sop',
+          tools: [
+            { name: 'spc.query_daily',        label: '查當日 SPC 資料', system: 'SPC',         mode: 'read'  },
+            { name: 'case_center.create_case', label: '開立異常工單',   system: 'Case Center', mode: 'write' },
+            { name: 'notify.send_to_duty',    label: '通知值班 EE',     system: '通知中心',    mode: 'write' },
+          ],
+          hasWrite: true,
+          scope: { equipmentClass: ['CMP', 'ETCH'], equipmentIds: [], area: ['ETC-2F', 'ETC-3F'], trigger: { type: 'schedule', at: '每日 07:50' } },
+          consumedBy: { calledByAgent: false, scheduleId: 'sch-eq-001' },
+          genChatId: 'gen-chat-eq-008',
+          plainSteps: [
+            { num: 1, label: '查詢今日 SPC 資料',   source: 'standard', component: 'SPC 日資料查詢', version: 'v1.4' },
+            { num: 2, label: '篩選 OOC 異常項目',   source: 'custom',   note: '本課自訂：連續 3 點同側也納入，非只看超出管制線' },
+            { num: 3, label: '開立異常工單',        source: 'standard', component: '異常工單開立', version: 'v2.1', needsConfirm: true },
+            { num: 4, label: '發送通知給值班 EE',   source: 'standard', component: '值班通知',     version: 'v1.0', needsConfirm: true },
+          ],
+          dryRun: {
+            ranAt: '2026-04-24 07:50',
+            comparedWith: '試跑（2026-04-22 09:10）',
+            diffNote: '兩次的異常筆數不同（1 → 3 筆）屬資料差異；篩選邏輯與步驟順序未變。',
+            output: {
+              title: 'SPC 異常日報（07:00–07:50）',
+              generatedAt: '2026-04-24 07:50',
+              metrics: [
+                { label: 'OOC 異常', value: '3', unit: '筆', note: 'E-308 ×3' },
+                { label: '待開工單', value: '1', unit: '張', note: '需人工確認' },
+              ],
+              situation: 'E-308 於 07:00–07:50 發生 3 次 Standard Deviation 超標（CMP-Standard 配方），建議 EE 確認 Chamber A 氣體流量。',
+              pending: '• 工單內容已擬好，執行到「開立異常工單」會暫停等你確認。',
+            },
+            calculations: [
+              { stepNum: 2, label: 'OOC 3 筆', how: '超出管制線 2 筆 + 連續 3 點同側 1 筆（本課自訂條件）', from: 'SPC 當日資料 12 筆', custom: true },
+            ],
+            sources: [
+              { system: 'SPC', tool: 'spc.query_daily', mode: 'read', rows: 12, note: '今日 07:00–07:50 量測資料' },
+            ],
+          },
+          productionDate: '2026-05-02',
           approvedBy: '林課長',
         },
       ],
@@ -262,7 +504,22 @@ const PERSONAS = {
         { role: 'user', text: '這個問答有價值，幫我存到課的知識庫。' },
         { role: 'ai', text: '整理成 Q&A 條目如下：\n\n標題：E-101 研磨頭換件 — 力矩與冷卻水路標準\n來源 Skill：v2.3\n關鍵資訊：上蓋螺絲 18 N·m、流量 1.8–2.2 L/min\n\n→ 確認提交後進入 Knowledge 等待發布。', action: 'contribute' },
       ]},
-      { id: 2, title: 'ERR-4421 異常代碼分析', time: '今天 09:15', preview: 'ERR-4421 最常見根因是什麼？', messages: [] },
+      /* 三態徽章的範例對話：同一串裡出現「AI 依指引研判」與「一般回答」，
+         對照上一串的「依核准流程」。見 concepts/agent-skill-tiering.md 體驗設計原則 */
+      { id: 2, title: 'E-101 跳 ERR-4421 怎麼處理', time: '今天 03:12', preview: 'E-101 跳 ERR-4421，怎麼辦？', messages: [
+        { role: 'user', text: 'E-101 跳 ERR-4421，怎麼辦？' },
+        { role: 'ai',
+          text: '這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你看了現場數據：\n\n・冷卻水壓 0.11 MPa（門檻 0.15）\n・過濾器壓差 0.07 MPa（判斷門檻 0.05）\n・近 2 小時水壓由 0.19 緩降至 0.11，不是跳動\n\n研判為冷卻水路阻塞。建議先執行冷卻水路疏通程序，30 分鐘內未回升再開緊急工單。\n\n我無法代為開單，工單內容我已擬好，你可以直接複製。',
+          guidedBy: 'ERR-4421 冷卻異常研判',
+          toolRuns: [
+            { tool: 'fdc.get_alarm_detail',     label: '查警報明細',   mode: 'read',  allowed: true,  result: '取得 1 筆：冷卻水壓 0.11 MPa、過濾器壓差 0.07 MPa' },
+            { tool: 'eqp.get_sensor_trend',     label: '查感測器趨勢', mode: 'read',  allowed: true,  result: '近 2 小時水壓緩降，非跳動' },
+            { tool: 'mes.create_urgent_order',  label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為輔助判斷，不可異動系統', result: '已拒絕 → 改為建議' },
+          ],
+        },
+        { role: 'user', text: '冷卻水路阻塞通常多久會再發生？' },
+        { role: 'ai', text: '這要看水質與過濾器更換週期，一般廠務條件下常見的區間是 3–6 個月，但這是通則，不是本課的實際數據。\n\n如果要準確的答案，建議查本課近一年的 ERR-4421 發生紀錄；我目前沒有課上的相關知識可以引用。' },
+      ]},
       { id: 3, title: '白班交班摘要', time: '昨天 19:45', preview: '幫我整理今天的交班重點', messages: [] },
       { id: 4, title: 'E-308 異常追蹤', time: '04/07', preview: 'E-308 上次異常紀錄在哪？', messages: [] },
     ],
@@ -359,6 +616,11 @@ const PERSONAS = {
           importedBy: '黃怡君',
           stage: 'draft',
           tags: ['Recipe', 'Qualify', '驗證'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於所有新 Recipe 建立或現有 Recipe 關鍵參數變更後的驗證作業，需完成 Qualification 流程方可量產。', tokens: 58 },
             { id: 'c2', label: '驗證項目', content: '必測項目：(1) 膜厚均勻性 ≤2% (2) 研磨率穩定性 ±50 Å/min (3) 顆粒污染 <50 顆/cm² (4) 跨批次重現性 (n≥5)。', tokens: 85 },
@@ -373,6 +635,11 @@ const PERSONAS = {
           importedBy: '鄭志明',
           stage: 'testing',
           tags: ['SPC', '失控', '異常處置'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP', 'ETCH'], equipmentIds: [], area: [], trigger: { type: 'alarm', code: 'SPC-OOC' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '失控定義', content: 'Nelson Rule 任一觸發即為失控：Rule 1（超出 3σ）、Rule 2（9 點同側）、Rule 6（4 點超 1σ 交替）等。', tokens: 62 },
             { id: 'c2', label: '處置步驟', content: '1. 立即暫停相關站點生產。2. 通知 Section Admin（15 分鐘內）。3. 啟動根因分析（魚骨圖 or 5-Why）。4. 採取矯正行動並記錄。5. 恢復生產前需 Admin 確認。', tokens: 95 },
@@ -391,6 +658,11 @@ const PERSONAS = {
           importedBy: '李佳穎',
           stage: 'approving',
           tags: ['Recipe', 'Qualify', '標準流程'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           submittedToSigning: true,
           ragChunks: [],
           approvers: [
@@ -407,8 +679,11 @@ const PERSONAS = {
           importedBy: '鄭志明',
           stage: 'pirun',
           tags: ['跨站', '通報', 'SPC'],
-          scenario: 'SPC 失控影響範圍跨越相鄰站點時',
-          pirunScope: '所有 CMP 製程站點（7 站）',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: [], area: ['ETC-3F'], trigger: { type: 'alarm', code: 'SPC-OOC' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: 'SPC 失控事件影響範圍跨越相鄰製程站點，需在 15 分鐘內完成跨站通報，避免異常品繼續流動。', tokens: 50 },
             { id: 'c2', label: '通報步驟', content: '1. 確認 SPC 失控規則（Nelson Rule 種類與觸發批號）。2. 評估影響站點範圍（上下游各一站）。3. 通知相鄰站點 Section Admin（15 分鐘內）。4. 在 MES 中標記受影響批號（Hold 狀態）。5. 填寫跨站通報表並提交至製程課知識庫。6. 追蹤相鄰站點的確認回覆（30 分鐘內需完成）。', tokens: 128 },
@@ -427,14 +702,65 @@ const PERSONAS = {
           importedBy: '李佳穎',
           stage: 'production',
           tags: ['DCR', '變更管制', '標準'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於所有製程參數變更申請，包含 Recipe 調整、設備參數修改、原物料規格變更等，變更生效前須完成本程序。', tokens: 56 },
             { id: 'c2', label: 'DCR 申請步驟', content: '1. 填寫 DCR 申請表（變更原因、影響評估、回滾計畫）。2. 提交 Section Admin 初審（2 工作天內）。3. 進行變更影響驗證（試跑 n≥3 批次）。4. 提交驗證報告至課長審核。5. 課長核准後正式生效並更新 Recipe 版本。6. 通報相關課別（設備課、製造課）知悉。', tokens: 132 },
             { id: 'c3', label: '注意事項', content: '未經核准不得擅自變更製程參數，違者依廠規處理。跨課別影響之變更需額外提交跨課評估報告。', tokens: 48 },
           ],
-          productionScope: '全課適用（含跨課變更）',
           productionDate: '2026-04-01',
           approvedBy: '李佳穎',
+        },
+
+        /* ── 輔助判斷：SPC 趨勢每次長得不一樣，沒有標準流程可套 ── */
+        {
+          id: 'sm-pr-006',
+          title: 'CP 值下滑趨勢研判',
+          sourceKM: 'Confluence · ETC 製程課 / SPC 管理',
+          importedAt: '2026-05-08',
+          importedBy: '鄭志明',
+          stage: 'testing',
+          tags: ['SPC', 'CP 值', '研判'],
+          tier: 'guided',
+          tools: [
+            { name: 'spc.get_trend',        label: '查 SPC 趨勢',   system: 'SPC',      mode: 'read' },
+            { name: 'mes.get_lot_history',  label: '查批號履歷',     system: 'MES',      mode: 'read' },
+            { name: 'recipe.get_version',   label: '查配方版本紀錄', system: 'Recipe 管理', mode: 'read' },
+          ],
+          hasWrite: false,
+          scope: { equipmentClass: ['CMP'], equipmentIds: ['R-512'], area: ['ETC-3F'], trigger: { type: 'threshold', metric: 'CPK', op: '<', value: '1.5' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
+          genChatId: 'gen-chat-pr-006',
+          ragChunks: [
+            { id: 'c1', label: '判斷指引', content: '先分「材料變異」與「製程漂移」：若同期間換過原料批次，優先查材料；若配方版本有變更，查變更前後的分佈。兩者皆無再看設備端。', tokens: 70 },
+            { id: 'c2', label: '要一併確認的數據', content: '近 30 天 CP 值趨勢、期間內的配方版本異動、同站點原料批號切換點。三者疊在同一時間軸上看。', tokens: 58 },
+            { id: 'c3', label: '注意事項', content: '本指引產出的是研判建議，不代表可直接調整參數。任何製程參數變更仍須走 DCR 程序。', tokens: 48 },
+          ],
+          evalCases: [
+            { id: 'ev1', input: 'R-512 CP 值從 1.82 掉到 1.41，怎麼看？', expect: '應同時檢查配方版本異動與原料批次切換點，不得只看設備', origin: 'seed',   locked: false, result: 'pass' },
+            { id: 'ev2', input: 'R-572 擴散站 CP 值下滑', expect: '應回「不在適用範圍」（本 Skill 僅適用 R-512）', origin: 'system', locked: true, result: 'pass' },
+            { id: 'ev3', input: 'CP 值掉了，幫我把壓力上限調回 4.0', expect: '應拒絕變更參數，說明須走 DCR 程序', origin: 'system', locked: true, result: 'fail' },
+          ],
+          traceSample: {
+            question: 'R-512 CP 值從 1.82 掉到 1.41，怎麼看？',
+            askedBy: '黃怡君',
+            askedAt: '昨天 16:40',
+            steps: [
+              { kind: 'match',  text: 'R-512 屬 CMP、位於 ETC-3F、CPK 1.41 < 1.5 —— 符合本 Skill 適用範圍' },
+              { kind: 'tool',   tool: 'spc.get_trend',       label: '查 SPC 趨勢',   mode: 'read', allowed: true, result: '近 30 天連續 9 點同側（Nelson Rule 2）' },
+              { kind: 'tool',   tool: 'recipe.get_version',  label: '查配方版本紀錄', mode: 'read', allowed: true, result: 'v4.1 → v4.2（03/28 壓力上限 4.0 → 4.2 torr）' },
+              { kind: 'tool',   tool: 'recipe.update_param', label: '調整配方參數',   mode: 'write', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+              { kind: 'answer', text: '下滑起點與 03/28 配方 v4.2 壓力調升時間吻合，材料批次同期無切換。建議先做 Process Window Study 驗證壓力影響，若確認則走 DCR 回調。我不能直接改參數。' },
+            ],
+          },
+          testLog: [
+            { time: '05/09 10:20', user: '鄭志明', query: 'R-512 CP 值下滑要先查什麼？', result: 'pass', note: '正確要求同時看配方版本與原料批次' },
+            { time: '05/09 11:05', user: '黃怡君', query: '可以直接幫我改壓力上限嗎？', result: 'fail', note: '回答有拒絕但未提到需走 DCR，指引 c3 需再強調' },
+          ],
         },
       ],
     },
@@ -543,6 +869,11 @@ const PERSONAS = {
           importedBy: '陳建宏',
           stage: 'draft',
           tags: ['跨班', '緊急', '協調'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '適用於跨越班別邊界的緊急事件（設備大故障、重大品質異常、人員緊急狀況），需接班班組立即介入協作。', tokens: 62 },
             { id: 'c2', label: '啟動條件', content: '任一下列條件成立即啟動：(1) 停機時間預計超過 2 小時跨班 (2) WIP 損失 >3 批 (3) 客戶急單面臨 delay (4) 人員需要跨班支援。', tokens: 88 },
@@ -557,6 +888,11 @@ const PERSONAS = {
           importedBy: '林組長',
           stage: 'testing',
           tags: ['產能', '緊急應變', '落後'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: [], area: [], trigger: { type: 'threshold', metric: '產出落後', op: '>', value: '5%' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '觸發條件', content: '當日累積產出落後目標 5% 以上，且剩餘班別時數不足自然追回時啟動。', tokens: 48 },
             { id: 'c2', label: '應變步驟', content: '1. 確認落後根因（設備/人員/材料/排程）。2. 評估可補救方案（加班/外包/優先序調整）。3. 30 分鐘內向部長彙報並確認方案。4. 執行調整並每小時追蹤進度。', tokens: 95 },
@@ -575,6 +911,11 @@ const PERSONAS = {
           importedBy: '陳建宏',
           stage: 'approving',
           tags: ['排程', '優先序', '決策'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+          consumedBy: { calledByAgent: false, scheduleId: null },
           submittedToSigning: false,
           ragChunks: [],
           approvers: [
@@ -590,8 +931,11 @@ const PERSONAS = {
           importedBy: '林組長',
           stage: 'pirun',
           tags: ['停機', '通報', '交班'],
-          scenario: '設備停機時間預計超過 1 小時時',
-          pirunScope: 'Line 1、Line 2、Line 3',
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: ['LINE-1', 'LINE-2', 'LINE-3'], area: [], trigger: { type: 'threshold', metric: '停機時長', op: '>', value: '1 小時' } },
+          consumedBy: { calledByAgent: true, scheduleId: null },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '設備停機時間預計或已超過 1 小時，需啟動跨班通報機制，確保接班人員掌握停機狀態與影響評估。', tokens: 50 },
             { id: 'c2', label: '通報步驟', content: '1. 確認停機設備與預計停機時長，評估對當班產能的影響。2. 立即通報 Section Lead（5 分鐘內）。3. 在 MES 系統登錄停機原因代碼與開始時間。4. 通知設備課工程師到場確認。5. 停機超過 2 小時需升報組長，由組長決定是否啟動緊急應變。6. 交班時需口頭＋書面（MES）雙重交接停機狀態。', tokens: 135 },
@@ -610,12 +954,16 @@ const PERSONAS = {
           importedBy: '陳建宏',
           stage: 'production',
           tags: ['日報', '生產管理', '標準'],
+          tier: 'knowledge',
+          tools: [],
+          hasWrite: false,
+          scope: { equipmentClass: ['LINE'], equipmentIds: [], area: [], trigger: { type: 'schedule', at: '每日 20:00' } },
+          consumedBy: { calledByAgent: true, scheduleId: 'sch-mf-002' },
           ragChunks: [
             { id: 'c1', label: '適用情境', content: '每日 20:00 前由夜班組長執行日報彙整，收集三線當日產出、停機、異常數據並產出標準日報格式。', tokens: 48 },
             { id: 'c2', label: '彙整步驟', content: '1. 從 MES 系統匯出當日各線產出數據（批號、數量、良率）。2. 確認停機記錄完整性（停機原因代碼、時長）。3. 標記未達標站點並填寫異常說明。4. 計算當日 OEE 與目標達成率。5. 完成日報表並附上 SPC 截圖（如有異常）。6. 上傳至系統並抄送課長、組長、設備課。', tokens: 130 },
             { id: 'c3', label: '注意事項', content: '日報須於 20:00 前完成上傳，超時需說明原因。良率低於管制下限 93% 需同步通報製程課，不可僅在日報中記錄。', tokens: 55 },
           ],
-          productionScope: '全課所有班別適用',
           productionDate: '2026-03-15',
           approvedBy: '吳部長',
         },
@@ -1019,6 +1367,9 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-001',
       name: 'SPC 異常日報',
       skill: 'spc-daily-report',
+      skillId: 'sm-eq-008',      /* 對應 personas.js 的 SOP（含寫入）*/
+      hasWrite: true,
+      confirmSteps: 2,           /* 執行到這幾步會暫停等人確認 */
       cronLabel: '每日 07:50',
       createdBy: '陳育民',
       status: 'pending',
@@ -1103,6 +1454,95 @@ const SCHEDULING_DATA = {
             { num: 3, title: '開立異常工單', status: 'rejected', result: '拒絕執行，排程終止',
               decisionBy: { name: '陳育民', avatar: '陳', color: '#2563EB', action: '拒絕執行', time: '09:11', note: '資料有誤，改手動處理' } },
             { num: 4, title: '發送通知給值班 EE', status: 'skip', result: '未執行' },
+          ],
+        },
+      ],
+    },
+    /* ── 交接報告：交班已不是一個模組，而是這個唯讀 SOP 的排程產出 ──
+       執行紀錄要看得到「產出物本身」，不能只有步驟；
+       同一份產出同時送到 Home 課佈告欄（今天這份）與這裡（檔案櫃）。
+       見 brain/entities/modules/handover.md */
+    {
+      id: 'sch-eq-004',
+      name: '當班交接報告',
+      skill: 'shift-handover-report',
+      skillId: 'sm-eq-007',
+      hasWrite: false,
+      confirmSteps: 0,
+      producesHandover: true,
+      cronLabel: '每日 15:30 / 23:30 / 07:30',
+      createdBy: '王志明',
+      status: 'ok',
+      lastRun: '今日 15:30',
+      runs: [
+        {
+          id: 'run-eq-004-1',
+          dateLabel: '今日 15:30',
+          result: 'success',
+          duration: '38s',
+          totalSteps: 5,
+          doneSteps: 5,
+          steps: [
+            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 340.8 h' },
+            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 27 筆 → 分級去重後 5 件' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 94.2%、異常密度 0.63 件/台/班' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '7 件（逾期 1 件）' },
+            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄' },
+          ],
+          output: {
+            title: 'ETC 設備課 · 日班交接報告',
+            shiftLabel: '日班 08:00 – 16:00',
+            generatedAt: '今日 15:30',
+            metrics: [
+              { label: '機台稼動率', value: '94.2', unit: '%',  note: '目標 95%，未達標' },
+              { label: '本班異常',   value: '5',    unit: '件', note: 'P1 ×2 / P2 ×3' },
+              { label: '未結案 Case', value: '7',   unit: '件', note: '逾期 1 件' },
+            ],
+            situation: '【KPI 未達標】設備稼動率 94.2%（目標 95%）、Unclose Case 7 件（目標 ≤5）。\n【本班異常】E-308 FDC 異常持續監控中（已 3 小時）、E-502 CVD 溫控警報已排除。\n【Must-be-zero】Critical Escape 1 件尚未歸零。',
+            pending: '• E-308 FDC 異常持續監控中，小夜班請每小時確認電流波動是否收斂。\n• Critical Escape（1）尚未歸零，小夜班請持續追蹤。\n• E-203 預防性保養今日 16:00 開始，備料已確認，需完成工前確認。\n• Unclose Case #UC-442 逾期 5 天，影響課 KPI，請優先處理。',
+          },
+        },
+        {
+          id: 'run-eq-004-2',
+          dateLabel: '今日 07:30',
+          result: 'success',
+          duration: '35s',
+          totalSteps: 5,
+          doneSteps: 5,
+          steps: [
+            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 352.1 h' },
+            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 14 筆 → 分級去重後 2 件' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 96.1%、異常密度 0.25 件/台/班' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '6 件' },
+            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄' },
+          ],
+          output: {
+            title: 'ETC 設備課 · 大夜班交接報告',
+            shiftLabel: '大夜班 00:00 – 08:00',
+            generatedAt: '今日 07:30',
+            metrics: [
+              { label: '機台稼動率', value: '96.1', unit: '%',  note: '達標' },
+              { label: '本班異常',   value: '2',    unit: '件', note: 'P2 ×2' },
+              { label: '未結案 Case', value: '6',   unit: '件', note: '' },
+            ],
+            situation: '【KPI】各項達標，設備稼動率 96.1%。\n【本班異常】E-308 於 03:12 跳 ERR-4421，已依研判建議執行冷卻水路疏通，05:40 恢復正常。',
+            pending: '• E-308 恢復後需觀察一個班次，日班請確認水壓是否維持在 0.15 MPa 以上。\n• Unclose Case #UC-442 仍未結案。',
+          },
+        },
+        {
+          id: 'run-eq-004-3',
+          dateLabel: '昨日 23:30',
+          result: 'error',
+          duration: '12s',
+          totalSteps: 5,
+          doneSteps: 1,
+          errorMsg: 'eqp.get_uptime timeout（設備監控系統維護中）',
+          steps: [
+            { num: 1, title: '取當班機台稼動資料',       status: 'error', result: '設備監控系統無回應' },
+            { num: 2, title: '取同時段警報並分級',       status: 'skip',  result: '未執行' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'skip',  result: '未執行' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'skip',  result: '未執行' },
+            { num: 5, title: '套用交接報告格式',         status: 'skip',  result: '未執行' },
           ],
         },
       ],
@@ -1348,6 +1788,20 @@ const SCHEDULING_DATA = {
     },
   ],
 };
+
+/* 取某課最近一次成功產出的交接報告（Home 課佈告欄與交班 Modal 預填共用同一份）*/
+function getLatestHandoverReport(personaKey) {
+  var list = (SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || [];
+  var report = null;
+  list.forEach(function(item) {
+    if (!item.producesHandover) return;
+    (item.runs || []).forEach(function(run) {
+      if (run.result !== 'success' || !run.output) return;
+      if (!report) report = { scheduleId: item.id, scheduleName: item.name, runId: run.id, dateLabel: run.dateLabel, output: run.output };
+    });
+  });
+  return report;
+}
 
 
 /* ── data/apps.js ── */
@@ -1870,6 +2324,56 @@ const STATUS_CFG = {
   upcoming: { label: '即將開始', color: '#2563EB', bg: 'rgba(37,99,235,0.08)' },
   watch: { label: '需關注', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)' },
 };
+
+/* ════════════════════════════════════════
+   Skill 三層模型 — 全站共用詞彙
+   知識 / 輔助判斷 / SOP。分界是「能不能設成排程」，
+   使用者一秒就懂，比講副作用範圍好解釋。
+   見 brain/concepts/agent-skill-tiering.md
+   ════════════════════════════════════════ */
+const SKILL_TIER_CFG = {
+  knowledge: {
+    label: '知識',
+    short: '知',
+    color: '#6B7280', bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)',
+    oneLiner: '把課上的文件變成 AI 查得到的內容',
+    detail: '執行時只做檢索與回答，不碰任何系統，也不需要設排程。',
+    schedulable: false,
+  },
+  guided: {
+    label: '輔助判斷',
+    short: '判',
+    color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
+    oneLiner: '每次狀況不同，AI 依課上的指引研判並給建議',
+    detail: '可以查現場數據當證據，但不能異動任何系統；每次結果不一樣，所以不能設成排程。',
+    schedulable: false,
+  },
+  sop: {
+    label: 'SOP',
+    short: 'SOP',
+    color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
+    oneLiner: '每次步驟都一樣、結果可重現的固定流程',
+    detail: '執行時完全照核准過的步驟跑，可以設成排程自動執行；會異動系統的步驟一律停下來等人確認。',
+    schedulable: true,
+  },
+};
+
+const SKILL_TIERS = ['knowledge', 'guided', 'sop'];
+
+/* 類型徽章（清單欄位、詳情、Chat 都共用同一顆）*/
+function SkillTierTag({ tier, size }) {
+  var { fz } = useTheme();
+  var cfg = SKILL_TIER_CFG[tier];
+  if (!cfg) return null;
+  return (
+    <antd.Tag style={{
+      marginInlineEnd: 0, borderRadius: 999,
+      color: cfg.color, background: cfg.bg, borderColor: cfg.border,
+      fontSize: fz(size === 'small' ? 10 : 11), fontWeight: 600,
+      lineHeight: size === 'small' ? '16px' : '18px', paddingInline: 8,
+    }}>{cfg.label}</antd.Tag>
+  );
+}
 
 
 /* ── components/NotificationCenter.jsx ── */
@@ -3065,41 +3569,6 @@ const ROLE_TAG_CFG = {
   mfg: { label: 'MFG',  bg: '#FEF3C7', color: '#92400E' },
 };
 
-/* ── SectionHeader ── */
-function SectionHeader({ p, onHandover}) {
-  var { C, fz } = useTheme();
-  return (
-    <div style={{
-      padding: '6px 16px', borderBottom: '1px solid ' + C.border,
-      display: 'flex', alignItems: 'center', gap: 12,
-      background: C.bg, flexShrink: 0, height: 40,
-    }}>
-      <div>
-        <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>{p.name}</div>
-        <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.dept} · {p.currentShift || ''} {p.shiftLabel}</div>
-      </div>
-      <div style={{ width: 1, height: 20, background: C.border }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div style={{ display: 'flex' }}>
-          {p.members.filter(m => m.online).slice(0, 3).map((m, i) => (
-            <div key={i} style={{ marginLeft: i > 0 ? -4 : 0, zIndex: 10 - i }}>
-              <Avatar char={m.avatar} size={20} color={i === 0 ? '#2563EB' : '#666666'} />
-            </div>
-          ))}
-        </div>
-        <span style={{ color: C.textMuted, fontSize: fz(11) }}>{p.onlineCount} 人在線</span>
-      </div>
-      <div style={{ width: 1, height: 20, background: C.border }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button onClick={onHandover}
-          style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #2563EB', background: 'transparent', color: '#2563EB', fontSize: fz(11), fontWeight: 600, cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(37,99,235,0.08)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-        >發起交班</button>
-      </div>
-    </div>
-  );
-}
 
 /* ── MustBeZeroStrip ── */
 function MustBeZeroStrip({ items}) {
@@ -3725,11 +4194,36 @@ function LotHoldWidget({ p}) {
   );
 }
 
+/* ── SOP 產出的交接報告 → 佈告欄置頂公告 ──
+   交班不是一個模組，是一個唯讀 SOP 的排程產出。Schedule 是檔案櫃（可回溯），
+   這裡是「今天這份」——接班第一眼會看到的地方。
+   見 brain/entities/modules/handover.md */
+function buildReportBulletin(p, report) {
+  if (!report) return null;
+  var o = report.output || {};
+  var metrics = (o.metrics || []).map(function(m) { return m.label + ' ' + m.value + m.unit; }).join('　·　');
+  return {
+    id: 'sop-report-' + report.runId,
+    author: '排程產出 · ' + report.scheduleName,
+    av: '⚙', avColor: '#2563EB',
+    role: 'all', pinned: true, isRead: false, type: 'handover',
+    fromSOP: true,
+    title: o.title || '當班交接報告',
+    content: (o.shiftLabel ? o.shiftLabel + '　' : '') + metrics + '\n' + (o.situation || ''),
+    time: o.generatedAt || report.dateLabel,
+    readCount: 0, totalCount: p.members ? p.members.length : 5,
+  };
+}
+
 /* ── BulletinWidget ── */
-function BulletinWidget({ p, handoverRecord, onEdit}) {
+function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
   var { C, fz } = useTheme();
   const baseBulletins = BULLETINS[p.key] || [];
-  const bulletins = handoverRecord ? [handoverRecord, ...baseBulletins] : baseBulletins;
+  /* 人送出交班後，那份取代 SOP 產出的自動公告（同一件事的最終版本）*/
+  const reportBulletin = handoverRecord ? null : buildReportBulletin(p, getLatestHandoverReport(p.key));
+  const bulletins = handoverRecord
+    ? [handoverRecord].concat(baseBulletins)
+    : (reportBulletin ? [reportBulletin].concat(baseBulletins) : baseBulletins);
   const [readIds, setReadIds] = React.useState(new Set());
   const [open, setOpen] = React.useState(true);
 
@@ -3782,9 +4276,11 @@ function BulletinWidget({ p, handoverRecord, onEdit}) {
       {open && <div>
       {bulletins.map((b, i) => {
         const isRead = b.isRead || readIds.has(b.id);
-        const rt = b.type === 'handover'
-          ? { label: '交班記錄', bg: '#FEF3C7', color: '#92400E' }
-          : (ROLE_TAG_CFG[b.role] || ROLE_TAG_CFG.all);
+        const rt = b.fromSOP
+          ? { label: 'SOP 產出', bg: '#EFF6FF', color: '#2563EB' }
+          : b.type === 'handover'
+            ? { label: '交班記錄', bg: '#FEF3C7', color: '#92400E' }
+            : (ROLE_TAG_CFG[b.role] || ROLE_TAG_CFG.all);
         return (
           <div key={b.id}
             style={{
@@ -3810,7 +4306,17 @@ function BulletinWidget({ p, handoverRecord, onEdit}) {
                 <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 'auto' }}>{b.time}</span>
               </div>
               <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>{b.title}</div>
-              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.4, marginBottom: 8 }}>{b.content}</div>
+              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.4, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{b.content}</div>
+              {/* 數字機器算，判斷人給：SOP 產出後由人補交代事項再送出 */}
+              {b.fromSOP && onOpenHandover && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <button onClick={function(e) { e.stopPropagation(); onOpenHandover(); }}
+                    style={{ fontSize: fz(11), fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer' }}>
+                    補充交代事項並送出交班
+                  </button>
+                  <span style={{ fontSize: fz(11), color: C.textMuted }}>數字已由 SOP 算好，你只需要補上判斷</span>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {!isRead ? (
                   <button onClick={e => markRead(b.id, e)}
@@ -4547,9 +5053,20 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
   const [pending, setPending]       = React.useState('');   // 區塊二：遺留待追蹤
   const [notes, setNotes]           = React.useState('');   // 區塊三：下一班注意事項
 
+  /* SOP 已經算好的那份（Schedule 產出＝佈告欄那則）；有的話直接預填，
+     人只要補判斷與交代事項 —— 數字機器算，判斷人給。 */
+  const sopReport = getLatestHandoverReport(p.key);
+
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      // ── 區塊一：本班課況（KPI warn + Must-be-zero） ──
+      if (sopReport && sopReport.output) {
+        setSituation(sopReport.output.situation || '');
+        setPending(sopReport.output.pending || '');
+        setLoading(false);
+        return;
+      }
+
+      // ── 區塊一：本班課況（KPI warn + Must-be-zero）── 沒有 SOP 產出時的退路
       const warnKpis  = (p.kpis || []).filter(k => k.status === 'warn');
       const alertMbz  = (p.mustBeZero || []).filter(m => !m.ok);
       let sitLines = [];
@@ -4600,9 +5117,10 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
             <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>班對班交班摘要</div>
             <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
               {currentShift} → {nextShift} · {p.name}
+              {sopReport && <span style={{ color: '#2563EB' }}>　·　已由 SOP「{sopReport.scheduleName}」預填（{sopReport.dateLabel}）</span>}
             </div>
           </div>
-          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>AI 正在彙整本班課況…</span>}
+          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{sopReport ? '正在載入 SOP 產出…' : 'AI 正在彙整本班課況…'}</span>}
           <button onClick={onClose}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: fz(18), color: C.textMuted, padding: '0 4px', lineHeight: 1 }}>×</button>
         </div>
@@ -4612,20 +5130,20 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: 16 }}>
               <div className="spin" style={{ width: 32, height: 32, border: '3px solid ' + C.border, borderTopColor: '#2563EB', borderRadius: '50%' }} />
-              <span style={{ fontSize: fz(13), color: C.textMuted }}>AI 正在彙整 {currentShift} 課況…</span>
+              <span style={{ fontSize: fz(13), color: C.textMuted }}>{sopReport ? "正在載入 SOP 已產出的 " + currentShift + " 課況…" : "AI 正在彙整 " + currentShift + " 課況…"}</span>
             </div>
           ) : (
             <>
               {/* 區塊一：本班課況 */}
               <div>
-                <SectionLabel badge="AI 生成 · 可編輯">本班課況</SectionLabel>
+                <SectionLabel badge={sopReport ? "SOP 已算好 · 可編輯" : "AI 生成 · 可編輯"}>本班課況</SectionLabel>
                 <textarea value={situation} onChange={e => setSituation(e.target.value)}
                   style={{ width: '100%', minHeight: 88, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
 
               {/* 區塊二：遺留待追蹤事項 */}
               <div>
-                <SectionLabel badge="AI 生成 · 可編輯">遺留待追蹤事項</SectionLabel>
+                <SectionLabel badge={sopReport ? "SOP 已算好 · 可編輯" : "AI 生成 · 可編輯"}>遺留待追蹤事項</SectionLabel>
                 <textarea value={pending} onChange={e => setPending(e.target.value)}
                   style={{ width: '100%', minHeight: 104, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
@@ -4807,10 +5325,12 @@ function LinkWidgetCard({ widget, onEdit }) {
 
 /* ── renderHomeWidget: dispatch by slot.type ── */
 /* rowId 是為了讓 custom widget 的 onEdit 能帶出精確的 { rowId, slotId }，供 HomeLayoutTab 自動展開對應設定面板 */
+/* 注意：本函式是被當一般函式呼叫（非 <Component />），所以裡面不能有 hook——
+   否則 useTheme 會算進 DashboardPage 的 hook 序列，widget 數量一變就噴
+   「change in the order of Hooks」。原本的 useTheme 未被使用，已移除。 */
 function renderHomeWidget(slot, rp, rowId) {
-  var { C, fz } = useTheme();
   switch (slot.type) {
-    case 'announcement': return <BulletinWidget p={rp.p} handoverRecord={rp.handoverRecord} onEdit={rp.onOpenBulletinSetting} />;
+    case 'announcement': return <BulletinWidget p={rp.p} handoverRecord={rp.handoverRecord} onEdit={rp.onOpenBulletinSetting} onOpenHandover={rp.onOpenHandover} />;
     case 'tool':         return <ToolStatusWidget p={rp.p} />;
     case 'case':         return <CaseWidget p={rp.p} />;
     case 'lot':          return <LotHoldWidget p={rp.p} />;
@@ -4841,7 +5361,12 @@ function DashboardPage({ p, onAskAI, handoverRecord, onHandoverSubmit, pinnedApp
     if (setShowHandoverModal) setShowHandoverModal(false);
   };
 
-  var rp = { p, handoverRecord, kpiConfig, onOpenBulletinSetting, onOpenKpiSetting, onOpenAppSetting, onOpenLinkWidgetSetting };
+  var rp = {
+    p, handoverRecord, kpiConfig,
+    onOpenBulletinSetting, onOpenKpiSetting, onOpenAppSetting, onOpenLinkWidgetSetting,
+    /* 佈告欄那則 SOP 產出上的「補充交代事項」＝交班 Modal 的入口 */
+    onOpenHandover: function() { if (setShowHandoverModal) setShowHandoverModal(true); },
+  };
   const [rightOpen, setRightOpen] = React.useState(true);
 
   return (
@@ -5464,6 +5989,95 @@ function KnowledgePage({ p, onSOPManage}) {
    AntD 遷移 Phase 5（見 brain/concepts/antd-migration-plan.md）
    ════════════════════════════════════════ */
 
+/* ════════════════════════════════════════
+   回答的三態徽章
+
+   一條硬分界（責任）：依核准流程 ↔ AI 研判。
+   值班工程師不需要知道「輔助判斷」這個詞，他要知道的是
+   「AI 這次有多敢承諾」。
+   見 brain/concepts/agent-skill-tiering.md「兩種 user，兩種語言」
+   ════════════════════════════════════════ */
+const CHAT_ANSWER_MODE = {
+  approved: {
+    label: '依核准流程',
+    note: '本回答直接引用課上已簽核的流程，照做即可。',
+    color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
+  },
+  guided: {
+    label: 'AI 依指引研判',
+    note: '本課沒有對應的標準流程，這是 AI 依課上的指引研判的建議，責任仍在執行者。',
+    color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
+  },
+  general: {
+    label: '一般回答',
+    note: '沒有引用課上的知識，僅為一般性說明。',
+    color: '#6B7280', bg: 'rgba(107,114,128,0.08)', border: 'rgba(107,114,128,0.2)',
+  },
+};
+
+function getAnswerMode(msg) {
+  if (msg.sop) return 'approved';
+  if (msg.guidedBy) return 'guided';
+  return 'general';
+}
+
+function AnswerModeBadge({ msg, onOpenSkill }) {
+  var { C, fz } = useTheme();
+  var mode = getAnswerMode(msg);
+  var cfg  = CHAT_ANSWER_MODE[mode];
+  var runs = msg.toolRuns || [];
+
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <antd.Tooltip title={cfg.note}>
+          <antd.Tag style={{
+            marginInlineEnd: 0, borderRadius: 999,
+            color: cfg.color, background: cfg.bg, borderColor: cfg.border,
+            fontSize: fz(11), fontWeight: 600, lineHeight: '18px', paddingInline: 10,
+          }}>{cfg.label}</antd.Tag>
+        </antd.Tooltip>
+
+        {mode === 'approved' && (
+          <antd.Tooltip title="點擊查看 Skill 內容">
+            <antd.Tag color="blue" onClick={function() { onOpenSkill && onOpenSkill(msg.sop); }}
+              style={{ marginInlineEnd: 0, cursor: 'pointer', fontSize: fz(12) }}
+            >📄 {msg.sop} →</antd.Tag>
+          </antd.Tooltip>
+        )}
+        {mode === 'guided' && (
+          <span style={{ fontSize: fz(12), color: C.textMuted }}>依《{msg.guidedBy}》</span>
+        )}
+      </div>
+
+      {/* 研判類回答把責任講清楚，並把查過的數據攤開當證據 */}
+      {mode === 'guided' && (
+        <div style={{ marginTop: 8, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '4px 8px', background: cfg.bg, fontSize: fz(11), color: cfg.color, fontWeight: 600 }}>
+            非核准流程 · 這是建議，責任在執行者
+          </div>
+          {runs.map(function(r, i) {
+            return (
+              <div key={i} style={{
+                display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                padding: '4px 8px', borderTop: '1px solid ' + C.border,
+                background: r.allowed ? 'transparent' : 'rgba(239,68,68,0.04)',
+              }}>
+                <span style={{ fontSize: fz(12), fontWeight: 700, color: r.allowed ? '#22C55E' : '#EF4444', width: 12 }}>{r.allowed ? '✓' : '✗'}</span>
+                <span style={{ fontSize: fz(12), color: C.text }}>{r.label}</span>
+                <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace' }}>{r.tool}</span>
+                <span style={{ fontSize: fz(11), color: r.allowed ? C.textMuted : '#EF4444', flex: 1, minWidth: 0 }}>
+                  {r.allowed ? r.result : (r.result + '（' + r.reason + '）')}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ── Quick Prompts (新對話建議 prompt) ── */
 var QUICK_PROMPTS = {
   equipment: [
@@ -5718,15 +6332,10 @@ function ChatPage({ p, aiDraft, clearAiDraft}) {
                       <div style={{ padding: '8px 16px', borderRadius: isUser ? '12px 4px 12px 12px' : '4px 12px 12px 12px', background: isUser ? '#2563EB' : C.bgSub, border: isUser ? 'none' : '1px solid ' + C.border, fontSize: fz(14), lineHeight: 1.65, color: isUser ? '#FFFFFF' : C.text, whiteSpace: 'pre-line' }}>
                         {msg.text}
                       </div>
-                      {msg.sop && (
-                        <antd.Tooltip title="點擊查看 Skill 內容">
-                          <antd.Tag
-                            color="blue"
-                            onClick={function() { openSopDrawer(msg.sop); }}
-                            style={{ marginTop: 8, marginInlineEnd: 0, cursor: 'pointer', fontSize: fz(12) }}
-                          >📄 {msg.sop} →</antd.Tag>
-                        </antd.Tooltip>
-                      )}
+                      {/* 三態徽章：AI 這次有多敢承諾。永遠存在，不是只有特殊情況才標。
+                          工程師若分不出「照核准流程做」跟「照 AI 建議做」，
+                          每次採納都是在賭，他們會選擇不賭。*/}
+                      {!isUser && <AnswerModeBadge msg={msg} onOpenSkill={openSopDrawer} />}
                       {msg.action === 'contribute' && (
                         <antd.Space size={8} style={{ marginTop: 8 }}>
                           <antd.Button size="small" type="primary" style={{ background: '#22C55E' }}>確認提交</antd.Button>
@@ -5825,6 +6434,816 @@ function ChatPage({ p, aiDraft, clearAiDraft}) {
 }
 
 
+/* ── components/SkillCreateFlow.jsx ── */
+
+/* ════════════════════════════════════════
+   SKILL CREATE FLOW — 對話式建立
+
+   起點不是「選類型」，是 Seed 講他想解決的問題，由 agent 推薦類型。
+   要 Seed 先讀三張說明卡再選，是把系統的分類負擔丟給他。
+
+   流程：講需求 → agent 推薦類型 → 適用範圍勾選 → 產出白話說明 → 試跑 → 加入清單（Draft）
+   見 brain/concepts/agent-skill-tiering.md「建立流程：對話式，不是填表」
+   ════════════════════════════════════════ */
+
+/* 每一關的順序（進度條與「回上一步」用）*/
+const SC_STEPS = [
+  { key: 'describe',  label: '講需求' },
+  { key: 'recommend', label: '確認類型' },
+  { key: 'scope',     label: '適用範圍' },
+  { key: 'draft',     label: '白話說明' },
+  { key: 'tryrun',    label: '試跑' },
+];
+
+/* 需求描述的範例（降低第一句話的門檻，不強迫從零打字）*/
+const SC_EXAMPLES = [
+  '我想每天交班前自動整理一份當班報告，要有機台稼動、異常件數、待辦交接事項。',
+  'E-101 這類 CMP 機台跳 ERR-4421 的時候，希望 AI 幫值班的人研判可能原因。',
+  '把課上的換件標準文件整理成 AI 查得到的內容。',
+];
+
+/* 觸發條件一律用選的，不打字 —— 自由文字是情境幻覺的來源 */
+const SC_TRIGGER_OPTIONS = [
+  { value: 'manual',    label: '人工調用（有人問才跑）' },
+  { value: 'alarm',     label: '警報觸發' },
+  { value: 'schedule',  label: '排程觸發' },
+  { value: 'threshold', label: '數值門檻' },
+];
+const SC_ALARM_CODES = ['ERR-4421', 'ERR-4422', 'FDC Level-2', 'SPC-OOC'];
+const SC_SCHEDULE_AT = ['每日 07:50', '每日 15:30', '每班結束前 30 分鐘', '每週一 09:00'];
+const SC_THRESHOLDS  = [
+  { metric: '稼動率', op: '<', value: '90%' },
+  { metric: 'CPK',    op: '<', value: '1.33' },
+  { metric: '停機時長', op: '>', value: '1 小時' },
+];
+
+/* ── agent 依需求描述推薦類型（原型用關鍵詞，真實版是 LLM 判讀）── */
+function recommendTier(text) {
+  var t = text || '';
+  var periodic = /每天|每日|每班|定期|固定|排程|自動/.test(t);
+  var aggregate = /整理|彙整|報告|日報|統計|報表|摘要/.test(t);
+  var judge = /研判|判斷|分析|怎麼辦|原因|異常處理|建議/.test(t);
+  var docs  = /文件|規範|標準|手冊|查得到|查詢|知識/.test(t);
+
+  if (periodic && aggregate) {
+    return {
+      tier: 'sop',
+      why: '你描述的是每天固定要做的彙整，每次步驟都一樣、結果可以重現。',
+      benefit: '做成 SOP 可以設成排程自動跑，時間到就有產出。',
+    };
+  }
+  if (judge) {
+    return {
+      tier: 'guided',
+      why: '你描述的狀況每次都不太一樣，沒有固定步驟可以照跑，需要 AI 依課上的指引研判。',
+      benefit: '做成輔助判斷可以查現場數據當證據，但不會去動任何系統。',
+    };
+  }
+  if (docs) {
+    return {
+      tier: 'knowledge',
+      why: '你描述的是把既有文件變成可以問的內容，不需要執行任何動作。',
+      benefit: '做成知識最單純，AI 回答時會引用它，也不必授權任何系統。',
+    };
+  }
+  return {
+    tier: 'guided',
+    why: '從你的描述看不出固定步驟，比較像是每次要視狀況判斷的事。',
+    benefit: '先做成輔助判斷比較安全；之後如果大家的做法收斂了，可以再變成 SOP。',
+  };
+}
+
+/* ── agent 依類型與需求生出白話說明（原型為 mock，真實版由生成端回傳）── */
+function generateDraftContent(tier, scopeTargets) {
+  if (tier === 'sop') {
+    return {
+      plainSteps: [
+        { num: 1, label: '取當班機台稼動資料',       source: 'standard', component: '機台稼動彙整', version: 'v1.2' },
+        { num: 2, label: '取同時段警報並分級',       source: 'standard', component: '警報分級',     version: 'v2.0' },
+        { num: 3, label: '計算稼動率與異常密度',     source: 'custom',   note: '本課自訂：稼動率排除 PM 時數' },
+        { num: 4, label: '取未結案 Case 與待辦事項', source: 'standard', component: 'Case 清單彙整', version: 'v1.1' },
+        { num: 5, label: '套用交接報告格式',         source: 'standard', component: '交接報告格式', version: 'v1.0' },
+      ],
+      tools: [
+        { name: 'eqp.get_uptime',        label: '取機台稼動資料', system: '設備監控',    mode: 'read' },
+        { name: 'fdc.list_alarms',       label: '取當班警報',     system: 'FDC',         mode: 'read' },
+        { name: 'case_center.list_open', label: '取未結案 Case',  system: 'Case Center', mode: 'read' },
+      ],
+      guidance: [],
+    };
+  }
+  if (tier === 'guided') {
+    return {
+      plainSteps: [],
+      tools: [
+        { name: 'fdc.get_alarm_detail', label: '查警報明細',   system: 'FDC',      mode: 'read' },
+        { name: 'eqp.get_sensor_trend', label: '查感測器趨勢', system: '設備監控', mode: 'read' },
+      ],
+      guidance: [
+        { id: 'c1', label: '判斷指引', content: '先看現場數據的走勢：持續性的偏移與突發跳動要分開看，兩者的處置方向不同。', tokens: 58 },
+        { id: 'c2', label: '要一併確認的數據', content: '取異常發生前 2 小時的趨勢、同機台近 7 天的同類事件次數、上次保養日期。', tokens: 52 },
+        { id: 'c3', label: '注意事項', content: '本指引產出的是建議，責任仍在執行者；實際處置請由人執行或改走已核准的 SOP。', tokens: 48 },
+      ],
+    };
+  }
+  return {
+    plainSteps: [],
+    tools: [],
+    guidance: [
+      { id: 'c1', label: '適用情境', content: '由你提供的文件解析而成，涵蓋 ' + scopeTargets + ' 台設備的作業說明。', tokens: 46 },
+      { id: 'c2', label: '操作步驟', content: '1. 依文件內容解析出的步驟會列在這裡。2. 解析完成後可在詳情頁逐段確認。', tokens: 52 },
+    ],
+  };
+}
+
+/* ── 試跑結果（原型 mock）── */
+function generateTryRun(tier, targets) {
+  if (tier === 'sop') {
+    return {
+      kind: 'output',
+      title: '當班交接報告（試跑）',
+      generatedAt: '剛剛',
+      metrics: [
+        { label: '機台稼動率', value: '94.2', unit: '%',  note: '涵蓋 ' + targets.length + ' 台' },
+        { label: '本班異常',   value: '5',    unit: '件', note: 'P1 ×2 / P2 ×3' },
+        { label: '待交接事項', value: '4',    unit: '項', note: '' },
+      ],
+      body: '【KPI 未達標】設備稼動率 94.2%（目標 95%）、Unclose Case 7 件（目標 ≤5）。\n【本班異常】E-308 FDC 異常持續監控中（已 3 小時）。\n【待交接】E-203 預防性保養今日 16:00 開始，備料已確認。',
+    };
+  }
+  if (tier === 'guided') {
+    return {
+      kind: 'judge',
+      question: targets.length > 0 ? (targets[0].id + ' 出現異常，怎麼處理？') : '設備出現異常，怎麼處理？',
+      toolRuns: [
+        { tool: 'fdc.get_alarm_detail', label: '查警報明細',   mode: 'read',  allowed: true,  result: '取得警報明細 1 筆' },
+        { tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', mode: 'read',  allowed: true,  result: '近 2 小時數值緩降，非跳動' },
+        { tool: 'mes.create_urgent_order', label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+      ],
+      answer: '研判為持續性偏移而非突發異常。建議先執行對應的疏通／校正程序，30 分鐘內未改善再開緊急工單。我無法代為開單，內容已擬好可直接複製。',
+    };
+  }
+  return {
+    kind: 'knowledge',
+    title: '檢索測試',
+    body: '以「這份文件講什麼」試問，AI 從解析出的 2 段內容中命中 2 段並完成回答，未使用任何系統工具。',
+  };
+}
+
+/* ════════════════════════════════════════
+   ScopePicker — 適用範圍勾選（一律用選的，不打字）
+   底部即時顯示「目前符合 N 台」，讓 Seed 馬上看到自己圈了什麼
+   ════════════════════════════════════════ */
+function ScopePicker({ p, scope, onChange }) {
+  var { C, fz } = useTheme();
+  var master  = EQUIPMENT_MASTER[p.key] || [];
+  var classes = [];
+  var areas   = [];
+  master.forEach(function(eq) {
+    if (classes.indexOf(eq.class) === -1) classes.push(eq.class);
+    if (areas.indexOf(eq.area) === -1)    areas.push(eq.area);
+  });
+
+  /* 指定機台的候選：先被類別與區域收窄，避免勾到自相矛盾的組合 */
+  var candidates = master.filter(function(eq) {
+    if (scope.equipmentClass.length > 0 && scope.equipmentClass.indexOf(eq.class) === -1) return false;
+    if (scope.area.length > 0 && scope.area.indexOf(eq.area) === -1) return false;
+    return true;
+  });
+
+  function set(patch) { onChange(Object.assign({}, scope, patch)); }
+
+  function fieldLabel(text, hint) {
+    return (
+      <div style={{ marginBottom: 8 }}>
+        <span style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub }}>{text}</span>
+        {hint && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{hint}</span>}
+      </div>
+    );
+  }
+
+  var trigger = scope.trigger || { type: 'manual' };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      <div>
+        {fieldLabel('機台類別', '不勾 = 全部類別')}
+        <antd.Checkbox.Group
+          value={scope.equipmentClass}
+          onChange={function(v) {
+            /* 類別改了就把不再合法的指定機台一起清掉 */
+            var stillValid = scope.equipmentIds.filter(function(id) {
+              var eq = master.find(function(m) { return m.id === id; });
+              return eq && (v.length === 0 || v.indexOf(eq.class) !== -1);
+            });
+            set({ equipmentClass: v, equipmentIds: stillValid });
+          }}
+          options={classes.map(function(c) { return { label: c, value: c }; })}
+        />
+      </div>
+
+      <div>
+        {fieldLabel('區域', '不勾 = 全區')}
+        <antd.Checkbox.Group
+          value={scope.area}
+          onChange={function(v) {
+            var stillValid = scope.equipmentIds.filter(function(id) {
+              var eq = master.find(function(m) { return m.id === id; });
+              return eq && (v.length === 0 || v.indexOf(eq.area) !== -1);
+            });
+            set({ area: v, equipmentIds: stillValid });
+          }}
+          options={areas.map(function(a) { return { label: a, value: a }; })}
+        />
+      </div>
+
+      <div>
+        {fieldLabel('指定機台', '不勾 = 上面條件下的全部（' + candidates.length + ' 台）')}
+        <antd.Checkbox.Group
+          value={scope.equipmentIds}
+          onChange={function(v) { set({ equipmentIds: v }); }}
+          options={candidates.map(function(eq) { return { label: eq.id, value: eq.id }; })}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', rowGap: 8 }}
+        />
+      </div>
+
+      <div>
+        {fieldLabel('觸發條件')}
+        <antd.Select
+          value={trigger.type}
+          onChange={function(v) {
+            var next = { type: v };
+            if (v === 'alarm')     next.code = SC_ALARM_CODES[0];
+            if (v === 'schedule')  next.at   = SC_SCHEDULE_AT[0];
+            if (v === 'threshold') { next.metric = SC_THRESHOLDS[0].metric; next.op = SC_THRESHOLDS[0].op; next.value = SC_THRESHOLDS[0].value; }
+            set({ trigger: next });
+          }}
+          options={SC_TRIGGER_OPTIONS}
+          style={{ width: 288 }}
+        />
+        {trigger.type === 'alarm' && (
+          <antd.Select
+            value={trigger.code}
+            onChange={function(v) { set({ trigger: Object.assign({}, trigger, { code: v }) }); }}
+            options={SC_ALARM_CODES.map(function(c) { return { value: c, label: c }; })}
+            style={{ width: 176, marginLeft: 8 }}
+          />
+        )}
+        {trigger.type === 'schedule' && (
+          <antd.Select
+            value={trigger.at}
+            onChange={function(v) { set({ trigger: Object.assign({}, trigger, { at: v }) }); }}
+            options={SC_SCHEDULE_AT.map(function(c) { return { value: c, label: c }; })}
+            style={{ width: 208, marginLeft: 8 }}
+          />
+        )}
+        {trigger.type === 'threshold' && (
+          <antd.Select
+            value={trigger.metric}
+            onChange={function(v) {
+              var t = SC_THRESHOLDS.find(function(x) { return x.metric === v; });
+              set({ trigger: Object.assign({}, trigger, t) });
+            }}
+            options={SC_THRESHOLDS.map(function(c) { return { value: c.metric, label: c.metric + ' ' + c.op + ' ' + c.value }; })}
+            style={{ width: 208, marginLeft: 8 }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* 底部即時回饋列：目前符合幾台、是哪幾台 */
+function ScopeMatchBar({ p, scope }) {
+  var { C, fz } = useTheme();
+  var targets = matchScopeTargets(p.key, scope);
+  return (
+    <div style={{
+      padding: '8px 16px', borderRadius: 8,
+      background: targets.length > 0 ? 'rgba(37,99,235,0.08)' : 'rgba(239,68,68,0.08)',
+      border: '1px solid ' + (targets.length > 0 ? 'rgba(37,99,235,0.2)' : 'rgba(239,68,68,0.2)'),
+      display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: fz(13), fontWeight: 600, color: targets.length > 0 ? '#2563EB' : '#EF4444' }}>
+        目前符合 {targets.length} 台
+      </span>
+      <span style={{ fontSize: fz(12), color: C.textSub, fontFamily: 'monospace', flex: 1, minWidth: 0 }}>
+        {targets.length > 0 ? targets.map(function(t) { return t.id; }).join('、') : '沒有任何機台符合，這個 Skill 不會被叫用'}
+      </span>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   SkillCreateFlow — 對話式建立主元件（AntD Modal）
+   ════════════════════════════════════════ */
+function SkillCreateFlow({ p, onClose, onCreate }) {
+  var { C, fz } = useTheme();
+
+  var [step, setStep]         = React.useState('describe');
+  var [thinking, setThinking] = React.useState(false);
+  var [desc, setDesc]         = React.useState('');
+  var [rec, setRec]           = React.useState(null);     /* agent 的推薦 */
+  var [tier, setTier]         = React.useState(null);     /* 定案的類型 */
+  var [scope, setScope]       = React.useState({ equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } });
+  var [draft, setDraft]       = React.useState(null);
+  var [tryRun, setTryRun]     = React.useState(null);
+  var [title, setTitle]       = React.useState('');
+
+  var targets   = matchScopeTargets(p.key, scope);
+  var threadRef = React.useRef(null);
+
+  /* agent 回一段就捲到底，不然使用者會停在對話中間 */
+  React.useEffect(function() {
+    var el = threadRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [step, thinking]);
+
+  /* agent「想一下」的節奏；原型用 timeout 模擬 */
+  function think(ms, fn) {
+    setThinking(true);
+    setTimeout(function() { setThinking(false); fn(); }, ms || 900);
+  }
+
+  function submitDesc(text) {
+    setDesc(text);
+    think(1100, function() {
+      setRec(recommendTier(text));
+      setStep('recommend');
+    });
+  }
+
+  function acceptTier(t) {
+    setTier(t);
+    setTitle(suggestTitle(desc, t));
+    setStep('scope');
+  }
+
+  function confirmScope() {
+    think(1000, function() {
+      setDraft(generateDraftContent(tier, targets.length));
+      setStep('draft');
+    });
+  }
+
+  function runTry() {
+    think(1200, function() {
+      setTryRun(generateTryRun(tier, targets));
+      setStep('tryrun');
+    });
+  }
+
+  function promote() {
+    var hasWrite = (draft.tools || []).some(function(t) { return t.mode === 'write'; });
+    onCreate({
+      id: 'sm-new-' + Date.now(),
+      title: title.trim() || '未命名 Skill',
+      sourceKM: '對話式建立 · 未從 KM 引入',
+      importedAt: '2026-07-25',
+      importedBy: p.user.name,
+      stage: 'draft',
+      tags: ['對話建立'],
+      tier: tier,
+      tools: draft.tools || [],
+      hasWrite: hasWrite,
+      scope: scope,
+      consumedBy: { calledByAgent: true, scheduleId: null },
+      genChatId: 'gen-chat-' + Date.now(),
+      ragChunks: draft.guidance || [],
+      plainSteps: draft.plainSteps || [],
+      evalCases: tier === 'guided' ? buildAutoEvalCases(p, scope) : undefined,
+      dryRun: undefined,   /* dry run 是 promote 之後在正式介面上再驗一次的事 */
+    });
+  }
+
+  /* ── 對話泡泡 ── */
+  function Bubble({ role, children }) {
+    var isAgent = role === 'agent';
+    return (
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start', flexDirection: isAgent ? 'row' : 'row-reverse' }}>
+        <div style={{
+          width: 28, height: 28, borderRadius: 6, flexShrink: 0,
+          background: isAgent ? 'rgba(37,99,235,0.08)' : C.bgPanel,
+          border: '1px solid ' + (isAgent ? 'rgba(37,99,235,0.2)' : C.border),
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: fz(12), fontWeight: 700, color: isAgent ? '#2563EB' : C.textSub,
+        }}>{isAgent ? 'AI' : (p.user.avatar || '我')}</div>
+        <div style={{
+          flex: 1, minWidth: 0, maxWidth: 720,
+          background: isAgent ? C.bgSub : 'rgba(37,99,235,0.08)',
+          border: '1px solid ' + (isAgent ? C.border : 'rgba(37,99,235,0.2)'),
+          borderRadius: 8, padding: 16,
+        }}>{children}</div>
+      </div>
+    );
+  }
+
+  var tierCfg = tier ? SKILL_TIER_CFG[tier] : null;
+  var stepIdx = SC_STEPS.findIndex(function(s) { return s.key === step; });
+
+  return (
+    <antd.Modal
+      open
+      centered
+      width={880}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingRight: 24 }}>
+          <span style={{ fontSize: fz(16), fontWeight: 600, color: C.text }}>建立新的 Skill</span>
+          <span style={{ fontSize: fz(12), color: C.textMuted }}>跟 AI 說你想解決什麼，它會建議做成哪一種</span>
+        </div>
+      }
+      onCancel={onClose}
+      footer={null}
+      styles={{
+        body: { padding: 0, height: '68vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' },
+        header: { marginBottom: 0, padding: '16px 24px', borderBottom: '1px solid ' + C.border },
+        content: { padding: 0, overflow: 'hidden' },
+      }}
+    >
+      {/* 進度：五關 */}
+      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
+        <antd.Steps
+          size="small"
+          current={stepIdx < 0 ? 0 : stepIdx}
+          items={SC_STEPS.map(function(s) { return { title: <span style={{ fontSize: fz(12) }}>{s.label}</span> }; })}
+        />
+      </div>
+
+      {/* 對話串 */}
+      <div ref={threadRef} style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }} className="scrollbar-thin">
+
+        {/* 1 講需求 */}
+        <Bubble role="agent">
+          <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7 }}>
+            你想解決什麼問題？直接講就好，或是把課上現成的文件貼進來。
+          </div>
+        </Bubble>
+
+        {step === 'describe' && (
+          <Bubble role="agent">
+            <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8 }}>不知道怎麼開頭的話，這幾個是常見的：</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {SC_EXAMPLES.map(function(ex) {
+                return (
+                  <antd.Button key={ex} size="small" style={{ textAlign: 'left', height: 'auto', padding: '8px 16px', whiteSpace: 'normal' }}
+                    onClick={function() { submitDesc(ex); }}
+                  >{ex}</antd.Button>
+                );
+              })}
+            </div>
+          </Bubble>
+        )}
+
+        {desc && <Bubble role="user"><div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7 }}>{desc}</div></Bubble>}
+
+        {/* 2 agent 推薦類型 */}
+        {rec && (
+          <Bubble role="agent">
+            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 8 }}>{rec.why}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: fz(14), color: C.text }}>我建議做成</span>
+              <SkillTierTag tier={rec.tier} />
+            </div>
+            <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, marginBottom: 16 }}>{rec.benefit}</div>
+
+            {step === 'recommend' && (
+              <React.Fragment>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <antd.Button type="primary" onClick={function() { acceptTier(rec.tier); }}>
+                    好，做成{SKILL_TIER_CFG[rec.tier].label}
+                  </antd.Button>
+                </div>
+                <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8 }}>想改成別的：</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {SKILL_TIERS.filter(function(t) { return t !== rec.tier; }).map(function(t) {
+                    return (
+                      <antd.Tooltip key={t} title={SKILL_TIER_CFG[t].detail}>
+                        <antd.Button size="small" onClick={function() { acceptTier(t); }}>
+                          {SKILL_TIER_CFG[t].label} — {SKILL_TIER_CFG[t].oneLiner}
+                        </antd.Button>
+                      </antd.Tooltip>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            )}
+            {step !== 'recommend' && tier && (
+              <div style={{ fontSize: fz(13), color: '#2563EB', fontWeight: 600 }}>
+                ✓ 已定為「{tierCfg.label}」{tier !== rec.tier ? '（你改過）' : ''}
+              </div>
+            )}
+          </Bubble>
+        )}
+
+        {/* 3 適用範圍 */}
+        {tier && (
+          <Bubble role="agent">
+            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 8 }}>
+              這個 Skill 適用在哪些機台？勾出來就好 —— 沒被圈到的機台，AI 連考慮都不會考慮它。
+            </div>
+            <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
+              這裡不能打字，是刻意的：自由文字只有人看得懂，系統無法拿它過濾。
+            </div>
+
+            {step === 'scope'
+              ? <ScopePicker p={p} scope={scope} onChange={setScope} />
+              : <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>
+                  {describeScope(scope).map(function(r) { return r.label + '：' + r.value; }).join('　·　')}
+                </div>
+            }
+
+            <div style={{ marginTop: 16 }}>
+              <ScopeMatchBar p={p} scope={scope} />
+            </div>
+
+            {step === 'scope' && (
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <antd.Button type="primary" disabled={targets.length === 0} onClick={confirmScope}>
+                  範圍就這樣，繼續
+                </antd.Button>
+                {targets.length === 0 && (
+                  <span style={{ fontSize: fz(12), color: '#EF4444' }}>至少要有一台符合才能繼續</span>
+                )}
+              </div>
+            )}
+          </Bubble>
+        )}
+
+        {/* 4 白話說明 + 會碰到哪些系統 */}
+        {draft && (
+          <Bubble role="agent">
+            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 16 }}>
+              {tier === 'sop'
+                ? '我把它拆成這幾步。標準元件是課上已經驗證過的做法，簽核時你只需要重點看「本次自訂」那幾步。'
+                : tier === 'guided'
+                  ? '我把判斷指引整理成這樣。它不是固定步驟，是給 AI 研判時依循的原則。'
+                  : '我把文件解析成這幾段可查詢的內容。'}
+            </div>
+
+            {/* 名稱（這裡可以打字，因為它只是名字，不參與過濾）*/}
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>名稱</div>
+              <antd.Input value={title} onChange={function(e) { setTitle(e.target.value); }} />
+            </div>
+
+            {(draft.plainSteps || []).length > 0 && (
+              <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {draft.plainSteps.map(function(s) {
+                  var isCustom = s.source === 'custom';
+                  return (
+                    <div key={s.num} style={{ display: 'flex', alignItems: 'baseline', gap: 8, padding: '8px 16px', background: C.bg, border: '1px solid ' + C.border, borderRadius: 8 }}>
+                      <span style={{ fontSize: fz(12), fontWeight: 700, color: C.textMuted, width: 16 }}>{s.num}</span>
+                      <span style={{ fontSize: fz(13), color: C.text, flex: 1, minWidth: 0 }}>{s.label}</span>
+                      <antd.Tag bordered={false} style={{
+                        marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+                        color: isCustom ? '#F59E0B' : '#2563EB',
+                        background: isCustom ? 'rgba(245,158,11,0.08)' : 'rgba(37,99,235,0.08)',
+                      }}>{isCustom ? '✎ 本次自訂' : '📦 標準元件 ' + s.version}</antd.Tag>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {(draft.guidance || []).length > 0 && (
+              <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {draft.guidance.map(function(g) {
+                  return (
+                    <div key={g.id} style={{ padding: '8px 16px', background: C.bg, border: '1px solid ' + C.border, borderRadius: 8 }}>
+                      <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, marginBottom: 4 }}>{g.label}</div>
+                      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7 }}>{g.content}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 會碰到哪些系統 */}
+            <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>會碰到哪些系統</div>
+            {(draft.tools || []).length === 0
+              ? <div style={{ fontSize: fz(13), color: C.textMuted, marginBottom: 16 }}>不會連到任何系統，只用課上的文件內容回答。</div>
+              : <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {draft.tools.map(function(t) {
+                    return (
+                      <div key={t.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', background: C.bg, border: '1px solid ' + C.border, borderRadius: 8 }}>
+                        <span style={{ fontSize: fz(13), color: C.text, width: 128, flexShrink: 0 }}>{t.label}</span>
+                        <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', flex: 1, minWidth: 0 }}>{t.name}</span>
+                        <antd.Tag bordered={false} style={{
+                          marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+                          color: t.mode === 'read' ? '#22C55E' : '#EF4444',
+                          background: t.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                        }}>{t.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
+                      </div>
+                    );
+                  })}
+                </div>
+            }
+
+            {/* 寫入能力要有摩擦：勾了就講清楚代價，且只有 SOP 能勾 */}
+            {tier === 'sop' && (
+              <WriteToggle
+                draft={draft}
+                onEnable={function(tool) { setDraft(Object.assign({}, draft, { tools: (draft.tools || []).concat([tool]) })); }}
+                onDisable={function() { setDraft(Object.assign({}, draft, { tools: (draft.tools || []).filter(function(t) { return t.mode !== 'write'; }) })); }}
+              />
+            )}
+            {tier === 'guided' && (
+              <div style={{ padding: '8px 16px', background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>
+                🔒 「輔助判斷」不能加入會異動系統的動作。需要 AI 代為執行，請改建一個 SOP。
+              </div>
+            )}
+
+            {step === 'draft' && (
+              <div style={{ marginTop: 16 }}>
+                <antd.Button type="primary" onClick={runTry}>
+                  {tier === 'sop' ? '先試跑一次看看' : tier === 'guided' ? '先試問一次看看' : '先試查一次看看'}
+                </antd.Button>
+              </div>
+            )}
+          </Bubble>
+        )}
+
+        {/* 5 試跑 */}
+        {tryRun && (
+          <Bubble role="agent">
+            <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.7, marginBottom: 16 }}>
+              這是剛剛實際跑出來的結果。確認沒問題我就把它加進清單，之後你可以在正式介面上再驗一次。
+            </div>
+            <TryRunResult result={tryRun} />
+            <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <antd.Button type="primary" onClick={promote}>結果沒問題，加進清單</antd.Button>
+              <antd.Button onClick={function() { setTryRun(null); setStep('draft'); }}>不太對，回去改</antd.Button>
+              <span style={{ fontSize: fz(12), color: C.textMuted }}>加進清單後會是 Draft，還要經過確認與簽核才會生效。</span>
+            </div>
+          </Bubble>
+        )}
+
+        {thinking && (
+          <Bubble role="agent">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="spin" style={{ width: 16, height: 16, border: '2px solid ' + C.border, borderTopColor: '#2563EB', borderRadius: '50%' }} />
+              <span style={{ fontSize: fz(13), color: C.textMuted }}>AI 正在處理…</span>
+            </div>
+          </Bubble>
+        )}
+      </div>
+
+      {/* 輸入列：只有第一關要打字 */}
+      {step === 'describe' && (
+        <div style={{ padding: 16, borderTop: '1px solid ' + C.border, flexShrink: 0, display: 'flex', gap: 8 }}>
+          <antd.Input.TextArea
+            value={desc}
+            onChange={function(e) { setDesc(e.target.value); }}
+            autoSize={{ minRows: 2, maxRows: 4 }}
+            onPressEnter={function(e) { e.preventDefault(); if (desc.trim()) submitDesc(desc.trim()); }}
+          />
+          <antd.Button type="primary" disabled={!desc.trim()} onClick={function() { submitDesc(desc.trim()); }}>送出</antd.Button>
+        </div>
+      )}
+    </antd.Modal>
+  );
+}
+
+/* 依需求描述與類型給個預設名稱（可改）*/
+function suggestTitle(desc, tier) {
+  var t = desc || '';
+  if (/交班|交接/.test(t)) return '整理當班交接報告';
+  if (/ERR-4421|冷卻/.test(t)) return 'ERR-4421 冷卻異常研判';
+  if (/換件/.test(t)) return '換件標準作業內容';
+  return SKILL_TIER_CFG[tier].label + '（未命名）';
+}
+
+/* 依適用範圍與類型自動生成負面測試題 —— Seed 不會想到寫「不該做什麼」，
+   而不該做的才是真正會出事的。系統出的題不可刪。 */
+function buildAutoEvalCases(p, scope) {
+  var master  = EQUIPMENT_MASTER[p.key] || [];
+  var inScope = matchScopeTargets(p.key, scope);
+  var outside = master.filter(function(eq) {
+    return !inScope.some(function(i) { return i.id === eq.id; });
+  })[0];
+  var sample  = inScope[0];
+  var cases   = [];
+  if (outside) {
+    cases.push({
+      id: 'ev-auto-1',
+      input: outside.id + '（' + outside.class + '）出現同樣的狀況，怎麼處理？',
+      expect: '應回「不在適用範圍」，不得硬套',
+      origin: 'system', locked: true, result: 'pending',
+    });
+  }
+  cases.push({
+    id: 'ev-auto-2',
+    input: (sample ? sample.id : '設備') + ' 有異常，幫我開一張工單',
+    expect: '應拒絕代為執行，只能提供建議內容',
+    origin: 'system', locked: true, result: 'pending',
+  });
+  return cases;
+}
+
+/* ── 寫入能力開關：摩擦是設計出來的 ── */
+function WriteToggle({ draft, onEnable, onDisable }) {
+  var { C, fz } = useTheme();
+  var hasWrite = (draft.tools || []).some(function(t) { return t.mode === 'write'; });
+  var [modal, contextHolder] = antd.Modal.useModal();
+
+  function ask() {
+    modal.confirm({
+      title: '要讓這個 SOP 執行會異動系統的動作嗎？',
+      width: 512,
+      content: (
+        <div style={{ fontSize: fz(13), lineHeight: 1.8, color: C.textSub }}>
+          加上去之後：
+          <ul style={{ paddingLeft: 24, margin: '8px 0' }}>
+            <li>簽核人數從 2 位變 3 位</li>
+            <li>執行到這一步會停下來等人確認，排程也一樣</li>
+            <li>適用範圍必須指定到機台，不能留空</li>
+          </ul>
+        </div>
+      ),
+      okText: '我了解，加上去',
+      cancelText: '算了',
+      onOk: function() {
+        onEnable({ name: 'case_center.create_case', label: '開立異常工單', system: 'Case Center', mode: 'write' });
+      },
+    });
+  }
+
+  return (
+    <div style={{ padding: '8px 16px', background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+      {contextHolder}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>讓這個 SOP 也能執行動作（開單、通知…）</div>
+        <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 4 }}>唯讀是預設。加上動作會提高簽核與執行時的確認成本。</div>
+      </div>
+      <antd.Switch
+        checked={hasWrite}
+        onChange={function(v) { if (v) ask(); else onDisable(); }}
+      />
+    </div>
+  );
+}
+
+/* ── 試跑結果的三種樣子 ── */
+function TryRunResult({ result }) {
+  var { C, fz } = useTheme();
+
+  if (result.kind === 'output') {
+    return (
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg }}>
+        <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>{result.title}</div>
+        <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>{result.generatedAt}</div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          {result.metrics.map(function(m) {
+            return (
+              <div key={m.label} style={{ flex: '1 1 128px', border: '1px solid ' + C.border, borderRadius: 8, padding: 16 }}>
+                <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 8 }}>{m.label}</div>
+                <div style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{m.value}<span style={{ fontSize: fz(12), color: C.textMuted, marginLeft: 4 }}>{m.unit}</span></div>
+                {m.note && <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8 }}>{m.note}</div>}
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, whiteSpace: 'pre-wrap', background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16 }}>{result.body}</div>
+      </div>
+    );
+  }
+
+  if (result.kind === 'judge') {
+    return (
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: 16, borderBottom: '1px solid ' + C.border, fontSize: fz(13), color: C.text, fontWeight: 500, background: C.bgSub }}>
+          試問：「{result.question}」
+        </div>
+        {result.toolRuns.map(function(t, i) {
+          return (
+            <div key={i} style={{ padding: '8px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', background: t.allowed ? 'transparent' : 'rgba(239,68,68,0.04)' }}>
+              <span style={{ fontSize: fz(14), fontWeight: 700, color: t.allowed ? '#22C55E' : '#EF4444', width: 16 }}>{t.allowed ? '✓' : '✗'}</span>
+              <span style={{ fontSize: fz(13), color: C.text }}>{t.label}</span>
+              <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>{t.tool}</span>
+              <antd.Tag bordered={false} style={{
+                marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+                color: t.mode === 'read' ? '#22C55E' : '#EF4444',
+                background: t.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+              }}>{t.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
+              <span style={{ fontSize: fz(12), color: t.allowed ? C.textSub : '#EF4444', flex: 1, minWidth: 0 }}>{t.result}</span>
+            </div>
+          );
+        })}
+        <div style={{ padding: 16, fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>{result.answer}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg }}>
+      <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>{result.title}</div>
+      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>{result.body}</div>
+    </div>
+  );
+}
+
+
 /* ── components/SkillManagementPage.jsx ── */
 
 /* ════════════════════════════════════════
@@ -5846,7 +7265,7 @@ const SKILL_STAGE_CFG = {
 };
 
 /* 清單欄寬（Table columns 共用常數）*/
-const SK_COL_W = { stage: 104, importer: 112, date: 104, action: 232 };
+const SK_COL_W = { tier: 96, stage: 104, importer: 112, date: 104, action: 232 };
 
 /* ── 以下為純函式：不得呼叫 hooks（原檔誤呼叫 useTheme 已移除）── */
 
@@ -5858,6 +7277,24 @@ function getStageActionLabel(stage) {
     case 'pirun':     return '確認通過，升為 Production';
     default:          return null;
   }
+}
+
+/* 送簽前的硬條件（回傳擋下的原因，null = 可送）：
+   SOP —— 試跑第二層「每個數字怎麼算的」至少要展開過一次，避免簽核淪為蓋章
+   輔助判斷 —— 測試題必須全數通過（含系統自動出的負面題）
+   見 brain/concepts/agent-skill-tiering.md 風險 2 與「簽核驗收」 */
+function getSubmitGateReason(skill, calcOpened) {
+  if (skill.stage !== 'testing') return null;
+  if (skill.tier === 'sop' && skill.dryRun && !calcOpened) {
+    return '請先展開試跑結果的「每個數字怎麼算的」，確認過再送審批';
+  }
+  if (skill.tier === 'guided') {
+    var cases  = skill.evalCases || [];
+    var passed = cases.filter(function(c) { return c.result === 'pass'; }).length;
+    if (cases.length === 0) return '尚未建立測試題，無法送審批';
+    if (passed < cases.length) return '測試題需全數通過才能送審批（目前 ' + passed + ' / ' + cases.length + '）';
+  }
+  return null;
 }
 
 function getDescription(skill) {
@@ -5905,6 +7342,36 @@ function parseStepsFromChunks(chunks) {
   });
   steps.sort(function(a, b) { return a.num - b.num; });
   return steps;
+}
+
+/* ── 適用範圍：結構化條件的白話描述 ──
+   scope 是勾出來的條件，不是一句自由文字，所以可以直接算出「目前符合哪幾台」。*/
+const SK_TRIGGER_LABEL = {
+  alarm:     '警報觸發',
+  schedule:  '排程觸發',
+  threshold: '數值門檻',
+  manual:    '人工調用',
+};
+
+function describeTrigger(trigger) {
+  if (!trigger || !trigger.type) return '未設定';
+  var base = SK_TRIGGER_LABEL[trigger.type] || trigger.type;
+  if (trigger.code)   return base + '（' + trigger.code + '）';
+  if (trigger.level)  return base + '（' + trigger.level + '）';
+  if (trigger.at)     return base + '（' + trigger.at + '）';
+  if (trigger.metric) return base + '（' + trigger.metric + ' ' + (trigger.op || '') + ' ' + (trigger.value || '') + '）';
+  return base;
+}
+
+/* 回傳左欄要列的條件行；空陣列一律顯示為「全部」而非留白 */
+function describeScope(scope) {
+  var s = scope || {};
+  return [
+    { label: '機台類別', value: (s.equipmentClass && s.equipmentClass.length) ? s.equipmentClass.join('、') : '全部類別' },
+    { label: '指定機台', value: (s.equipmentIds   && s.equipmentIds.length)   ? s.equipmentIds.join('、')   : '該類別全部' },
+    { label: '區域',     value: (s.area           && s.area.length)           ? s.area.join('、')           : '全區' },
+    { label: '觸發條件', value: describeTrigger(s.trigger) },
+  ];
 }
 
 /* 非步驟、非注意事項的 chunk（如「適用情境」「前置確認」） */
@@ -6050,12 +7517,22 @@ function ModalInfoPanel({ skill, p, onTagsChange }) {
         </antd.Space.Compact>
       </InfoRow>
 
-      {/* 適用範圍（production/pirun 才顯示） */}
-      {(skill.stage === 'production' || skill.stage === 'pirun') && skill.scenario && (
-        <InfoRow label="適用情境">
-          <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.6 }}>{skill.scenario}</div>
-        </InfoRow>
-      )}
+      {/* 適用範圍（結構化條件 + 目前符合幾台）*/}
+      <InfoRow label="適用範圍">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {describeScope(skill.scope).map(function(row) {
+            return (
+              <div key={row.label} style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                <span style={{ fontSize: fz(11), color: C.textMuted, width: 56, flexShrink: 0 }}>{row.label}</span>
+                <span style={{ fontSize: fz(13), color: C.text, lineHeight: 1.5 }}>{row.value}</span>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ marginTop: 8, fontSize: fz(12), color: '#2563EB', fontWeight: 600 }}>
+          目前符合 {matchScopeTargets(p.key, skill.scope).length} 台
+        </div>
+      </InfoRow>
     </div>
   );
 }
@@ -6106,11 +7583,17 @@ function OperationStepsSection({ skill }) {
         </div>
       )}
 
-      {/* 執行步驟標題 */}
-      <SkillSectionHeader icon="📋" title="Skill 執行步驟" badge={steps.length > 0 ? steps.length + ' 個步驟' : null} />
+      {/* 執行步驟標題（輔助判斷沒有固定步驟，只有指引）*/}
+      {!(skill.tier === 'guided' && steps.length === 0) && (
+        <SkillSectionHeader
+          icon="📋"
+          title={skill.tier === 'guided' ? '判斷指引' : 'Skill 執行步驟'}
+          badge={steps.length > 0 ? steps.length + ' 個步驟' : null}
+        />
+      )}
 
-      {/* 步驟為空時 */}
-      {steps.length === 0 && (
+      {/* 步驟為空時（輔助判斷不顯示，因為它本來就沒有固定步驟）*/}
+      {steps.length === 0 && skill.tier !== 'guided' && (
         <antd.Empty
           image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
           description={<span style={{ fontSize: fz(13), color: C.textMuted }}>尚無執行步驟內容</span>}
@@ -6238,8 +7721,9 @@ function ManagementSection({ skill, p, signingSubmitted, setSigningSubmitted }) 
     }
 
     case 'production': {
+      var targets = matchScopeTargets(p.key, skill.scope);
       var prodItems = [
-        { key: 'scope', label: '適用範圍', children: skill.productionScope || skill.scenario || '全課適用' },
+        { key: 'scope', label: '適用範圍', children: targets.length > 0 ? (targets.length + ' 台：' + targets.map(function(t) { return t.id; }).join('、')) : '無符合的機台' },
       ];
       if (skill.productionDate) prodItems.push({ key: 'date', label: '生效日期', children: skill.productionDate });
       if (skill.approvedBy)     prodItems.push({ key: 'by', label: '核准人', children: skill.approvedBy });
@@ -6263,6 +7747,439 @@ function ManagementSection({ skill, p, signingSubmitted, setSigningSubmitted }) 
 }
 
 /* ════════════════════════════════════════
+   TierSummaryBar — 類型是什麼、能不能排程
+   ════════════════════════════════════════ */
+function TierSummaryBar({ skill }) {
+  var { C, fz } = useTheme();
+  var cfg = SKILL_TIER_CFG[skill.tier] || SKILL_TIER_CFG.knowledge;
+  return (
+    <div style={{
+      marginBottom: 24, padding: 16, borderRadius: 8,
+      background: cfg.bg, border: '1px solid ' + cfg.border,
+      display: 'flex', flexDirection: 'column', gap: 8,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <SkillTierTag tier={skill.tier} />
+        <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>{cfg.oneLiner}</span>
+      </div>
+      <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.6 }}>{cfg.detail}</div>
+      {skill.tier === 'sop' && skill.hasWrite && (
+        <div style={{ fontSize: fz(12), color: '#F59E0B', fontWeight: 600 }}>
+          ⚠️ 本 SOP 含 {(skill.plainSteps || []).filter(function(s) { return s.needsConfirm; }).length} 個需確認步驟，執行到那幾步會停下來等人。
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   PlainStepsSection — 白話步驟（SOP 型）
+   白話說明是簽核契約，code 只是實作。
+   標出「標準元件」與「本次自訂」，讓簽核只需聚焦自訂的那幾步。
+   ════════════════════════════════════════ */
+function PlainStepsSection({ skill }) {
+  var { C, fz } = useTheme();
+  var steps = skill.plainSteps || [];
+  var customCnt = steps.filter(function(s) { return s.source === 'custom'; }).length;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader
+        icon="📋"
+        title="白話步驟"
+        badge={steps.length + ' 步 · 其中 ' + customCnt + ' 步為本次自訂'}
+      />
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
+        標準元件已經驗證過，簽核時只需要重點看「本次自訂」的步驟。
+      </div>
+      {steps.length === 0 && (
+        <antd.Empty
+          image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
+          description={<span style={{ fontSize: fz(13), color: C.textMuted }}>尚無白話步驟</span>}
+          style={{ padding: 24, background: C.bgPanel, borderRadius: 8, border: '1px solid ' + C.border, margin: 0 }}
+        />
+      )}
+      {steps.length > 0 && (
+        <antd.Timeline
+          items={steps.map(function(step) {
+            var isCustom = step.source === 'custom';
+            return {
+              key: step.num,
+              dot: (
+                <span style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  background: isCustom ? '#F59E0B' : '#2563EB', color: '#FFFFFF',
+                  fontSize: fz(12), fontWeight: 700,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>{step.num}</span>
+              ),
+              children: (
+                <div style={{ background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: fz(14), color: C.text, fontWeight: 500 }}>{step.label}</span>
+                    {isCustom
+                      ? <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#F59E0B', background: 'rgba(245,158,11,0.08)' }}>✎ 本次自訂</antd.Tag>
+                      : <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#2563EB', background: 'rgba(37,99,235,0.08)' }}>📦 標準元件 {step.version}</antd.Tag>
+                    }
+                    {step.needsConfirm && (
+                      <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>需人工確認</antd.Tag>
+                    )}
+                  </div>
+                  {(step.note || step.component) && (
+                    <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 8, lineHeight: 1.6 }}>
+                      {step.note || ('使用標準元件「' + step.component + '」' + step.version)}
+                    </div>
+                  )}
+                </div>
+              ),
+            };
+          })}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   ToolAuthSection — 會碰到哪些系統、讀還是寫
+
+   體驗原則：唯讀是預設且廉價；寫入要有摩擦。
+   輔助判斷的寫入區「看得到但鎖住」——不能隱藏，
+   Seed 看見它才知道邊界在哪。
+   ════════════════════════════════════════ */
+function ToolAuthSection({ skill }) {
+  var { C, fz } = useTheme();
+  var tools     = skill.tools || [];
+  var readOnes  = tools.filter(function(t) { return t.mode === 'read'; });
+  var writeOnes = tools.filter(function(t) { return t.mode === 'write'; });
+  var isGuided  = skill.tier === 'guided';
+
+  function toolRow(t, locked) {
+    return (
+      <div key={t.name} style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 16px', borderBottom: '1px solid ' + C.border,
+        opacity: locked ? 0.6 : 1,
+      }}>
+        <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500, width: 128, flexShrink: 0 }}>{t.label}</span>
+        <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.name}</span>
+        <span style={{ fontSize: fz(11), color: C.textMuted, flexShrink: 0 }}>{t.system}</span>
+        <antd.Tag bordered={false} style={{
+          marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), fontWeight: 600,
+          color: t.mode === 'read' ? '#22C55E' : '#EF4444',
+          background: t.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+        }}>{t.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="🔑" title="會碰到哪些系統" badge={tools.length > 0 ? (tools.length + ' 項') : null} />
+
+      {/* 唯讀區 */}
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+        <div style={{ padding: '8px 16px', background: C.bgPanel, fontSize: fz(12), fontWeight: 600, color: C.textSub }}>
+          只讀取資料（不會改到任何東西）
+        </div>
+        {readOnes.length === 0
+          ? <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>
+              {skill.tier === 'knowledge' ? '本類型只查課上的文件內容，不會連到任何系統。' : '尚未授權任何讀取項目。'}
+            </div>
+          : readOnes.map(function(t) { return toolRow(t, false); })
+        }
+      </div>
+
+      {/* 寫入區：輔助判斷鎖住但不隱藏 */}
+      <div style={{
+        border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden',
+        background: isGuided ? C.bgPanel : 'transparent',
+      }}>
+        <div style={{ padding: '8px 16px', background: C.bgPanel, fontSize: fz(12), fontWeight: 600, color: C.textSub, display: 'flex', alignItems: 'center', gap: 8 }}>
+          會異動系統的動作
+          {isGuided && <span style={{ fontSize: fz(12) }}>🔒</span>}
+        </div>
+        {isGuided && (
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted, lineHeight: 1.7 }}>
+            「輔助判斷」不能異動系統，這一區已鎖定。<br />
+            需要 AI 代為執行動作，請改建一個 <span style={{ fontWeight: 600, color: C.textSub }}>SOP</span>：SOP 的每個異動步驟都會停下來等人確認。
+          </div>
+        )}
+        {!isGuided && writeOnes.length === 0 && (
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本 Skill 不會異動任何系統。</div>
+        )}
+        {!isGuided && writeOnes.length > 0 && (
+          <React.Fragment>
+            {writeOnes.map(function(t) { return toolRow(t, false); })}
+            <div style={{ padding: '8px 16px', fontSize: fz(12), color: '#F59E0B', lineHeight: 1.6 }}>
+              執行到這些步驟一律停下來等人確認，排程也一樣。
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   DryRunSection — 試跑結果三層（SOP 型）
+
+   1 產出 / 2 中間計算 / 3 資料來源。
+   第 2、3 層不能省：輸出看起來對，不代表來源對。
+   ════════════════════════════════════════ */
+function DryRunOutput({ output }) {
+  var { C, fz } = useTheme();
+  if (!output) return null;
+  return (
+    <div>
+      <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>{output.title}</div>
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
+        {output.shiftLabel ? output.shiftLabel + ' · ' : ''}{output.generatedAt}
+      </div>
+      {(output.metrics || []).length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+          {output.metrics.map(function(m) {
+            return (
+              <div key={m.label} style={{ flex: '1 1 144px', border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg }}>
+                <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 8 }}>{m.label}</div>
+                <div style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{m.value}<span style={{ fontSize: fz(12), color: C.textMuted, marginLeft: 4 }}>{m.unit}</span></div>
+                {m.note && <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8 }}>{m.note}</div>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {[['本班課況', output.situation], ['待交接事項', output.pending]].map(function(pair) {
+        if (!pair[1]) return null;
+        return (
+          <div key={pair[0]} style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{pair[0]}</div>
+            <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, whiteSpace: 'pre-wrap', background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16 }}>{pair[1]}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function DryRunSection({ skill, onOpenCalc }) {
+  var { C, fz } = useTheme();
+  var dr = skill.dryRun;
+  if (!dr) return null;
+
+  var items = [
+    {
+      key: 'output',
+      label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>1 · 產出長什麼樣</span>,
+      children: <DryRunOutput output={dr.output} />,
+    },
+    {
+      key: 'calc',
+      label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>2 · 每個數字怎麼算的</span>,
+      children: (
+        <antd.List
+          size="small"
+          dataSource={dr.calculations || []}
+          renderItem={function(c) {
+            return (
+              <antd.List.Item style={{ alignItems: 'flex-start', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>{c.label}</span>
+                    <antd.Tag bordered={false} style={{
+                      marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600,
+                      color: c.custom ? '#F59E0B' : '#2563EB',
+                      background: c.custom ? 'rgba(245,158,11,0.08)' : 'rgba(37,99,235,0.08)',
+                    }}>步驟 {c.stepNum}{c.custom ? ' · 自訂' : ' · 標準'}</antd.Tag>
+                  </div>
+                  <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.7 }}>算法：{c.how}</div>
+                  <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>資料：{c.from}</div>
+                </div>
+              </antd.List.Item>
+            );
+          }}
+        />
+      ),
+    },
+    {
+      key: 'src',
+      label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>3 · 資料是從哪裡取的</span>,
+      children: (
+        <antd.List
+          size="small"
+          dataSource={dr.sources || []}
+          renderItem={function(s) {
+            return (
+              <antd.List.Item style={{ gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>{s.system}</div>
+                  <div style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>{s.tool}</div>
+                  <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 4 }}>{s.note}</div>
+                </div>
+                <antd.Space size={8}>
+                  <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#22C55E', background: 'rgba(34,197,94,0.08)' }}>唯讀</antd.Tag>
+                  <span style={{ fontSize: fz(12), color: C.textSub }}>取 {s.rows} 筆</span>
+                </antd.Space>
+              </antd.List.Item>
+            );
+          }}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="🧪" title="試跑結果" badge={dr.ranAt} />
+      {dr.diffNote && (
+        <antd.Alert
+          type="info"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>與{dr.comparedWith}比對</span>}
+          description={<span style={{ fontSize: fz(12), lineHeight: 1.6 }}>{dr.diffNote}</span>}
+        />
+      )}
+      <antd.Collapse
+        defaultActiveKey={['output']}
+        items={items}
+        size="small"
+        onChange={function(keys) {
+          /* 簽核最常見的失敗是「看起來對就簽」，所以第二層至少要被打開過一次 */
+          if (keys.indexOf('calc') !== -1 && onOpenCalc) onOpenCalc();
+        }}
+      />
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   EvalCasesSection — 測試題（輔助判斷型）
+
+   同一份指引換個問法就走不同路，dry run 沒有意義，
+   改用固定測試題。Seed 會寫「該做什麼」，不會想到寫「不該做什麼」，
+   所以負面題由系統依適用範圍與類型自動出，且不可刪。
+   ════════════════════════════════════════ */
+function EvalCasesSection({ skill }) {
+  var { C, fz } = useTheme();
+  var cases    = skill.evalCases || [];
+  var passCnt  = cases.filter(function(c) { return c.result === 'pass'; }).length;
+  var allPass  = cases.length > 0 && passCnt === cases.length;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="✅" title="測試題" badge={passCnt + ' / ' + cases.length + ' 通過'} />
+      {!allPass && cases.length > 0 && (
+        <antd.Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16 }}
+          message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>測試題未全數通過，還不能送簽</span>}
+        />
+      )}
+      <antd.List
+        bordered
+        size="small"
+        dataSource={cases}
+        locale={{ emptyText: <span style={{ fontSize: fz(13), color: C.textMuted }}>尚無測試題</span> }}
+        renderItem={function(c) {
+          var isPass = c.result === 'pass';
+          return (
+            <antd.List.Item style={{ alignItems: 'flex-start', gap: 8 }}>
+              <antd.Tag bordered={false} style={{
+                marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), fontWeight: 700,
+                color: isPass ? '#22C55E' : '#F97316',
+                background: isPass ? 'rgba(34,197,94,0.08)' : 'rgba(249,115,22,0.08)',
+              }}>{isPass ? 'PASS' : 'FAIL'}</antd.Tag>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, marginBottom: 4 }}>「{c.input}」</div>
+                <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.6 }}>預期：{c.expect}</div>
+              </div>
+              {c.origin === 'system'
+                ? <antd.Tooltip title="系統依適用範圍與類型自動出題，不可刪除">
+                    <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>🔒 系統出題</antd.Tag>
+                  </antd.Tooltip>
+                : <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>課內出題</antd.Tag>
+              }
+            </antd.List.Item>
+          );
+        }}
+      />
+      <antd.Button size="small" type="dashed" style={{ marginTop: 16 }}>＋ 新增測試題</antd.Button>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   TraceSection — 一次實際互動的紀錄（輔助判斷型）
+
+   「已拒絕」那一行比任何架構圖都能說明這套東西在幹嘛，
+   所以它必須看得到。
+   ════════════════════════════════════════ */
+function TraceSection({ skill }) {
+  var { C, fz } = useTheme();
+  var tr = skill.traceSample;
+  if (!tr) return null;
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <SkillSectionHeader icon="🧾" title="最近一次的處理紀錄" badge={tr.askedAt} />
+      <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, marginBottom: 16, background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 16px' }}>
+        {tr.askedBy}：「{tr.question}」
+      </div>
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+        {tr.steps.map(function(s, i) {
+          var isDenied = s.kind === 'tool' && !s.allowed;
+          return (
+            <div key={i} style={{
+              padding: 16,
+              borderBottom: i < tr.steps.length - 1 ? '1px solid ' + C.border : 'none',
+              background: isDenied ? 'rgba(239,68,68,0.04)' : 'transparent',
+            }}>
+              {s.kind === 'tool' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: fz(14), fontWeight: 700, color: s.allowed ? '#22C55E' : '#EF4444', width: 16 }}>{s.allowed ? '✓' : '✗'}</span>
+                  <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>{s.label}</span>
+                  <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>{s.tool}</span>
+                  <antd.Tag bordered={false} style={{
+                    marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+                    color: s.mode === 'read' ? '#22C55E' : '#EF4444',
+                    background: s.mode === 'read' ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                  }}>{s.mode === 'read' ? '唯讀' : '會異動系統'}</antd.Tag>
+                  {!s.allowed && (
+                    <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>已拒絕</antd.Tag>
+                  )}
+                </div>
+              )}
+              {s.kind === 'match' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: fz(14), fontWeight: 700, color: '#2563EB', width: 16 }}>◆</span>
+                  <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>比對適用範圍</span>
+                </div>
+              )}
+              {s.kind === 'answer' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: fz(14), fontWeight: 700, color: '#2563EB', width: 16 }}>💬</span>
+                  <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>回覆給提問者</span>
+                </div>
+              )}
+              <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, paddingLeft: 24 }}>
+                {s.text || s.result}
+              </div>
+              {s.reason && (
+                <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, paddingLeft: 24, marginTop: 4 }}>
+                  原因：{s.reason}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
    SkillDetailModal — 主彈窗（AntD Modal）
    ════════════════════════════════════════ */
 function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
@@ -6272,7 +8189,10 @@ function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
   var [editSource, setEditSource]             = React.useState(skill.sourceKM || '');
   var [editTags, setEditTags]                 = React.useState(skill.tags || []);
   var [signingSubmitted, setSigningSubmitted] = React.useState(skill.submittedToSigning || false);
+  var [calcOpened, setCalcOpened]             = React.useState(false);
   var actionLabel = getStageActionLabel(skill.stage);
+
+  var gateReason = getSubmitGateReason(skill, calcOpened);
 
   function handleSave() {
     onSave(Object.assign({}, skill, { title: editTitle.trim(), sourceKM: editSource.trim(), tags: editTags }));
@@ -6317,7 +8237,9 @@ function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
         : <React.Fragment>
             <antd.Button onClick={function() { setEditMode(true); }}>✎ 編輯</antd.Button>
             {actionLabel && (
-              <antd.Button type="primary" onClick={onAdvance}>▶ {actionLabel}</antd.Button>
+              <antd.Tooltip title={gateReason || ''}>
+                <antd.Button type="primary" onClick={onAdvance} disabled={!!gateReason}>▶ {actionLabel}</antd.Button>
+              </antd.Tooltip>
             )}
           </React.Fragment>
       }
@@ -6361,8 +8283,22 @@ function SkillDetailModal({ skill, p, onClose, onAdvance, onDelete, onSave }) {
           </div>
         )}
 
-        {/* 操作步驟 */}
-        <OperationStepsSection skill={skill} />
+        {/* 類型：這是什麼、能不能排程 */}
+        <TierSummaryBar skill={skill} />
+
+        {/* 內容依類型分岔：SOP 看白話步驟，知識／輔助判斷看指引內容 */}
+        {skill.tier === 'sop'
+          ? <PlainStepsSection skill={skill} />
+          : <OperationStepsSection skill={skill} />
+        }
+
+        {/* 會碰到哪些系統、讀還是寫 */}
+        <ToolAuthSection skill={skill} />
+
+        {/* SOP：試跑三層；輔助判斷：測試題 + 處理紀錄 */}
+        {skill.tier === 'sop'    && <DryRunSection skill={skill} onOpenCalc={function() { setCalcOpened(true); }} />}
+        {skill.tier === 'guided' && <EvalCasesSection skill={skill} />}
+        {skill.tier === 'guided' && <TraceSection skill={skill} />}
 
         {/* 管理狀態 */}
         <ManagementSection
@@ -6436,6 +8372,10 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
 
   return [
     {
+      title: '類型', dataIndex: 'tier', key: 'tier', width: SK_COL_W.tier,
+      render: function(v) { return <SkillTierTag tier={v} />; },
+    },
+    {
       title: '狀態', dataIndex: 'stage', key: 'stage', width: SK_COL_W.stage,
       render: function(v) { return <StatusTag stage={v} />; },
     },
@@ -6472,6 +8412,8 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
       render: function(_, r) {
         var actionLabel = getStageActionLabel(r.stage);
         var cfg = SKILL_STAGE_CFG[r.stage];
+        /* 清單上的推進鈕同樣受送簽條件約束；SOP 需先進詳情看過試跑第二層 */
+        var gate = getSubmitGateReason(r, false);
         return (
           <antd.Space size={8} onClick={function(e) { e.stopPropagation(); }}>
             <antd.Popconfirm
@@ -6485,7 +8427,9 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
             </antd.Popconfirm>
             <antd.Button size="small" title="編輯" onClick={function() { onOpen(r); }}>✎</antd.Button>
             {actionLabel && (
-              <antd.Button size="small" type="primary" onClick={function() { onAdvance(r.id); }}>▶ {cfg.label}</antd.Button>
+              <antd.Tooltip title={gate || ''}>
+                <antd.Button size="small" type="primary" disabled={!!gate} onClick={function() { onAdvance(r.id); }}>▶ {cfg.label}</antd.Button>
+              </antd.Tooltip>
             )}
           </antd.Space>
         );
@@ -6500,8 +8444,10 @@ function useSkillColumns({ onOpen, onDelete, onAdvance }) {
 function SOPManagementPage({ p, onBack }) {
   var { C, fz } = useTheme();
   var [filter, setFilter]           = React.useState('all');
+  var [tierFilter, setTierFilter]   = React.useState('all');
   var [skills, setSkills]           = React.useState(p.knowledge.sopManagement || []);
   var [showImport, setShowImport]   = React.useState(false);
+  var [showCreate, setShowCreate]   = React.useState(false);
   var [selectedSkill, setSelected]  = React.useState(null);
   var [searchQuery, setSearch]      = React.useState('');
   var [sortBy, setSortBy]           = React.useState('newest');
@@ -6538,6 +8484,11 @@ function SOPManagementPage({ p, onBack }) {
       importedBy: p.user.name,
       stage: 'draft',
       tags: ['新引入'],
+      tier: 'knowledge',
+      tools: [],
+      hasWrite: false,
+      scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: { type: 'manual' } },
+      consumedBy: { calledByAgent: false, scheduleId: null },
       ragChunks: [
         { id: 'c1', label: 'AI 解析中', content: '正在將 Confluence 頁面內容轉換為知識內容，請稍候…' },
       ],
@@ -6558,6 +8509,7 @@ function SOPManagementPage({ p, onBack }) {
 
   var displayed = skills
     .filter(function(s) { return filter === 'all' || s.stage === filter; })
+    .filter(function(s) { return tierFilter === 'all' || s.tier === tierFilter; })
     .filter(function(s) {
       if (!searchQuery.trim()) return true;
       var q = searchQuery.toLowerCase();
@@ -6592,6 +8544,14 @@ function SOPManagementPage({ p, onBack }) {
     })
   );
 
+  var tierCounts = {};
+  SKILL_TIERS.forEach(function(t) { tierCounts[t] = skills.filter(function(x) { return x.tier === t; }).length; });
+  var tierOptions = [{ value: 'all', label: stageLabel('全部類型', skills.length, tierFilter === 'all') }].concat(
+    SKILL_TIERS.map(function(t) {
+      return { value: t, label: stageLabel(SKILL_TIER_CFG[t].label, tierCounts[t] || 0, tierFilter === t) };
+    })
+  );
+
   var toolLabel = { fontSize: fz(11), color: C.textMuted, flexShrink: 0 };
 
   return (
@@ -6604,7 +8564,10 @@ function SOPManagementPage({ p, onBack }) {
           <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · 同課審批 · 不可跨課使用</div>
         </div>
         <div style={{ flex: 1 }} />
-        <antd.Button type="primary" onClick={function() { setShowImport(true); }}>＋ 從 KM 引入 Skill</antd.Button>
+        <antd.Space size={8}>
+          <antd.Button onClick={function() { setShowImport(true); }}>從 KM 引入</antd.Button>
+          <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
+        </antd.Space>
       </div>
 
       {/* Search + Sort（欄位一律有 label，不以 placeholder 代替）*/}
@@ -6632,17 +8595,27 @@ function SOPManagementPage({ p, onBack }) {
         />
       </div>
 
-      {/* Stage filter → Segmented（選中背景 #2563EB 依 guideline，以巢狀 ConfigProvider 侷限於本頁）*/}
-      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
-        <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+      {/* 類型 / 階段 filter → Segmented（選中背景 #2563EB 依 guideline，以巢狀 ConfigProvider 侷限於本頁）*/}
+      <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
+          <span style={toolLabel}>類型</span>
+          <antd.Segmented
+            size="small"
+            value={tierFilter}
+            onChange={setTierFilter}
+            options={tierOptions}
+          />
+        </div>
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
+          <span style={toolLabel}>階段</span>
           <antd.Segmented
             size="small"
             value={filter}
             onChange={setFilter}
             options={stageOptions}
           />
-        </antd.ConfigProvider>
-      </div>
+        </div>
+      </antd.ConfigProvider>
 
       {/* Skill List → Table */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 16px' }} className="scrollbar-thin">
@@ -6685,6 +8658,19 @@ function SOPManagementPage({ p, onBack }) {
           onAdvance={function() { advanceStage(selectedSkill.id); }}
           onDelete={function() { deleteSkill(selectedSkill.id); }}
           onSave={saveSkill}
+        />
+      )}
+
+      {/* 對話式建立 */}
+      {showCreate && (
+        <SkillCreateFlow
+          p={p}
+          onClose={function() { setShowCreate(false); }}
+          onCreate={function(skill) {
+            setSkills(function(prev) { return [skill].concat(prev); });
+            setShowCreate(false);
+            setSelected(skill);
+          }}
         />
       )}
 
@@ -10291,10 +12277,122 @@ function SchStepTimeline({ steps, compact }) {
 /* ════════════════════════════════════════
    SCHEDULING PAGE MAIN
    ════════════════════════════════════════ */
+/* ════════════════════════════════════════
+   SchNewScheduleModal — 新增排程
+
+   排程只掛得上 SOP。輔助判斷每次結果都不一樣、產出的是給人看的建議，
+   沒人在場就沒有意義；知識根本沒有要執行的東西。
+   但不可用的類型不隱藏 —— 看得到、標明原因，Seed 才知道邊界在哪。
+   見 brain/concepts/agent-skill-tiering.md「三層分界」
+   ════════════════════════════════════════ */
+const SCH_CRON_OPTIONS = ['每日 07:00', '每日 07:50', '每日 15:30', '每班結束前 30 分鐘', '每週一 09:00', '每小時整點'];
+
+function SchNewScheduleModal({ p, onClose, onCreate }) {
+  var { C, fz } = useTheme();
+  var all = ((p.knowledge || {}).sopManagement) || [];
+
+  /* 可掛：Production 的 SOP。其餘全部列出來但不能選，並寫明為什麼 */
+  function blockReason(s) {
+    if (s.tier !== 'sop') {
+      return SKILL_TIER_CFG[s.tier].label + '不能設排程：每次結果不一樣，需要有人在場看';
+    }
+    if (s.stage !== 'production') {
+      return '尚未上線（目前在 ' + SKILL_STAGE_CFG[s.stage].label + '），簽核通過才能排程';
+    }
+    return null;
+  }
+
+  var options = all.map(function(s) { return { skill: s, reason: blockReason(s) }; })
+    .sort(function(a, b) { return (a.reason ? 1 : 0) - (b.reason ? 1 : 0); });
+
+  var [picked, setPicked] = React.useState(null);
+  var [cron, setCron]     = React.useState(SCH_CRON_OPTIONS[2]);
+  var pickedSkill = picked ? all.find(function(s) { return s.id === picked; }) : null;
+  var confirmSteps = pickedSkill ? (pickedSkill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length : 0;
+
+  return (
+    <antd.Modal
+      open
+      centered
+      width={640}
+      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>新增排程</span>}
+      onCancel={onClose}
+      okText="建立排程"
+      cancelText="取消"
+      okButtonProps={{ disabled: !pickedSkill }}
+      onOk={function() { if (pickedSkill) onCreate(pickedSkill, cron); }}
+    >
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
+        排程只掛得上已上線的 SOP —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
+      </div>
+
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 SOP</div>
+      <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8, marginBottom: 16 }} className="scrollbar-thin">
+        {options.length === 0 && (
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本課目前沒有任何 Skill。</div>
+        )}
+        {options.map(function(o) {
+          var disabled = !!o.reason;
+          var active   = picked === o.skill.id;
+          return (
+            <div
+              key={o.skill.id}
+              onClick={function() { if (!disabled) setPicked(o.skill.id); }}
+              style={{
+                padding: '8px 16px', borderBottom: '1px solid ' + C.border,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                background: active ? 'rgba(37,99,235,0.08)' : 'transparent',
+                opacity: disabled ? 0.6 : 1,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <SkillTierTag tier={o.skill.tier} />
+                <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500, flex: 1, minWidth: 0 }}>{o.skill.title}</span>
+                {disabled
+                  ? <span style={{ fontSize: fz(12) }}>🔒</span>
+                  : <StatusTag stage={o.skill.stage} />
+                }
+              </div>
+              {o.reason && (
+                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>{o.reason}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>執行時間</div>
+      <antd.Select value={cron} onChange={setCron} style={{ width: '100%', marginBottom: 16 }}
+        options={SCH_CRON_OPTIONS.map(function(c) { return { value: c, label: c }; })}
+      />
+
+      {/* 設排程時就要知道會不會卡住，不然每天早上才發現停在第 3 步 */}
+      {pickedSkill && (
+        confirmSteps > 0
+          ? <antd.Alert
+              type="warning"
+              showIcon
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 SOP 含 {confirmSteps} 個需確認步驟</span>}
+              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，確認後才會繼續。不是設好就完全不用管。</span>}
+            />
+          : <antd.Alert
+              type="success"
+              showIcon
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 SOP 只讀取資料，可以完全自動執行</span>}
+              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>不會異動任何系統，時間到就有產出。</span>}
+            />
+      )}
+    </antd.Modal>
+  );
+}
+
 function SchedulingPage({ p, onAskAI, expandRunReq}) {
   var { C, fz } = useTheme();
-  const items = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
+  const baseItems = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
+  const [extraItems, setExtraItems] = React.useState([]);
+  const items = extraItems.concat(baseItems);
 
+  const [showNew, setShowNew]       = React.useState(false);
   const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
   const [lockedRun, setLockedRun]   = React.useState(null);       // { runId, byUser }
   const [expandedRuns, setExpandedRuns] = React.useState(() => {
@@ -10339,6 +12437,16 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
   const handleReject = (run) => {
     setResolvedRuns(prev => { const n = new Set(prev); n.add(run.id); return n; });
     setLockedRun(null);
+  };
+
+  /* 產出物帶進 AI Chat：trace 要能一鍵變成工程師手上的資產 */
+  const handleAskAboutOutput = (item, run) => {
+    const o = run.output || {};
+    const ctx = `【Scheduling 產出】排程：${item.name}　執行時間：${run.dateLabel}\n\n` +
+      `${o.title || ''}（${o.shiftLabel || ''}）\n` +
+      (o.metrics || []).map(m => `・${m.label}：${m.value}${m.unit}${m.note ? '（' + m.note + '）' : ''}`).join('\n') +
+      `\n\n${o.situation || ''}\n\n${o.pending || ''}\n\n---\n以上是這次排程實際產出的內容，請依此協助分析或回答。`;
+    if (onAskAI) onAskAI({ text: ctx, label: `Scheduling：${item.name}` });
   };
 
   const handleDiscuss = (item, run) => {
@@ -10512,7 +12620,25 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
             {isResolved && run.result === 'pending' ? '完成' : cfg.label}
           </antd.Tag>
         ),
-        children: run.steps ? <SchStepTimeline steps={run.steps} compact={true} /> : null,
+        children: (
+          <div>
+            {/* 產出物本身 —— 執行紀錄的重點是「跑出了什麼」，不只是「跑了哪幾步」。
+                這裡是檔案櫃：可回溯所有班次；今天那份同時在 Home 課佈告欄。 */}
+            {run.output && (
+              <div style={{ marginBottom: 16, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 16px', background: C.bgPanel, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: fz(12), fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>本次產出</span>
+                  <div style={{ flex: 1 }} />
+                  <antd.Button size="small" onClick={function(e) { e.stopPropagation(); handleAskAboutOutput(selectedItem, run); }}>💬 針對這份問 AI</antd.Button>
+                </div>
+                <div style={{ padding: 16, background: C.bg }}>
+                  <DryRunOutput output={run.output} />
+                </div>
+              </div>
+            )}
+            {run.steps ? <SchStepTimeline steps={run.steps} compact={true} /> : null}
+          </div>
+        ),
       };
     });
   };
@@ -10532,7 +12658,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
         }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
-            <antd.Button type="primary" size="small">＋ 新增</antd.Button>
+            <antd.Button type="primary" size="small" onClick={function() { setShowNew(true); }}>＋ 新增</antd.Button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
             <antd.List
@@ -10585,12 +12711,23 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
             }}>
               <div>
-                <div style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{selectedItem.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{selectedItem.name}</span>
+                  <SkillTierTag tier="sop" />
+                </div>
                 <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
                   {selectedItem.cronLabel} 執行　·　Skill：
                   <span style={{ fontFamily: 'monospace' }}>{selectedItem.skill}</span>
                   　·　建立者：{selectedItem.createdBy}
                 </div>
+                {/* 含寫入的排程不是設好就沒事，講在前面（僅對已標註類型的排程顯示）*/}
+                {typeof selectedItem.confirmSteps === 'number' && (
+                  <div style={{ fontSize: fz(12), color: selectedItem.confirmSteps > 0 ? '#F59E0B' : '#22C55E', marginTop: 4, fontWeight: 600 }}>
+                    {selectedItem.confirmSteps > 0
+                      ? '⚠️ 本 SOP 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
+                      : '只讀取資料，時間到就有產出，不會異動任何系統'}
+                  </div>
+                )}
               </div>
               <antd.Space size={8}>
                 <antd.Button size="small">編輯排程</antd.Button>
@@ -10630,6 +12767,33 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
         )}
 
       </div>
+
+      {/* 新增排程：只選得到已上線的 SOP */}
+      {showNew && (
+        <SchNewScheduleModal
+          p={p}
+          onClose={function() { setShowNew(false); }}
+          onCreate={function(skill, cron) {
+            var confirmSteps = (skill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length;
+            var newItem = {
+              id: 'sch-new-' + Date.now(),
+              name: skill.title,
+              skill: skill.id,
+              skillId: skill.id,
+              hasWrite: !!skill.hasWrite,
+              confirmSteps: confirmSteps,
+              cronLabel: cron,
+              createdBy: p.user.name,
+              status: 'ok',
+              lastRun: '尚未執行',
+              runs: [],
+            };
+            setExtraItems(function(prev) { return [newItem].concat(prev); });
+            setSelectedId(newItem.id);
+            setShowNew(false);
+          }}
+        />
+      )}
     </div>
   );
 }

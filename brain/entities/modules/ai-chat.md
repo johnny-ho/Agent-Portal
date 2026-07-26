@@ -27,6 +27,14 @@ status: current
 
 ChatPage UI 已於 2026-07-25 完成 **AntD 遷移 Phase 5**（見 [antd-migration-plan](../../concepts/antd-migration-plan.md)）：對話清單改 `List`（刪除加 `Popconfirm`）、Quick prompts 改 `Card`、**Context Badge 改 `Alert closable`**（關閉＝移除 context）、Skill 抽屜改 `Drawer`。對話泡泡保留自製（AntD 無 bubble 元件）。四個 Ask AI 入口帶 context 的行為不變。
 
+## 三態徽章（2026-07-25 已實作）
+
+依 [agent-skill-tiering](../../concepts/agent-skill-tiering.md)「兩種 user，兩種語言」，每則 AI 回答**永遠**帶徽章，不是只有特殊情況才標：**依核准流程**（引用已簽核 Skill，可點進去看）／**AI 依指引研判**（標明依據哪份指引，附「非核准流程 · 這是建議，責任在執行者」，並攤開這次查了哪些數據當證據，含被拒絕的寫入請求）／**一般回答**（沒有引用課上的知識）。判定在 `getAnswerMode(msg)`：`msg.sop` → approved、`msg.guidedBy` → guided、否則 general。
+
+這是採用率問題不是資訊架構問題——工程師若分不出「照核准流程做」跟「照 AI 建議做」，每次採納都是在賭。
+
+**尚未實作**：SOP 卡片的「不適用」一鍵轉輔助判斷、飛輪 1 的「要不要變成 SOP？」提示。
+
 ## 現況與缺口
 
 UI 完整 ✅，**後端全 mock**。F-AI-01 目標：真實 LLM 串接（課上下文 system prompt）、對話後端持久化、**每則回答附 SOP 來源版本標注**（KR1.3 ≥90%）——對應設計原則「知識可信任」，見 [design-principles](../../concepts/design-principles.md)。未來 EE/PE Agent 暫不實作；屆時異常判斷卡片**必須附判斷依據**（波形圖、數據來源），不得只給結論。

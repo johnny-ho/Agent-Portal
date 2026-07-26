@@ -399,41 +399,6 @@ const ROLE_TAG_CFG = {
   mfg: { label: 'MFG',  bg: '#FEF3C7', color: '#92400E' },
 };
 
-/* ── SectionHeader ── */
-function SectionHeader({ p, onHandover}) {
-  var { C, fz } = useTheme();
-  return (
-    <div style={{
-      padding: '6px 16px', borderBottom: '1px solid ' + C.border,
-      display: 'flex', alignItems: 'center', gap: 12,
-      background: C.bg, flexShrink: 0, height: 40,
-    }}>
-      <div>
-        <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>{p.name}</div>
-        <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.dept} · {p.currentShift || ''} {p.shiftLabel}</div>
-      </div>
-      <div style={{ width: 1, height: 20, background: C.border }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <div style={{ display: 'flex' }}>
-          {p.members.filter(m => m.online).slice(0, 3).map((m, i) => (
-            <div key={i} style={{ marginLeft: i > 0 ? -4 : 0, zIndex: 10 - i }}>
-              <Avatar char={m.avatar} size={20} color={i === 0 ? '#2563EB' : '#666666'} />
-            </div>
-          ))}
-        </div>
-        <span style={{ color: C.textMuted, fontSize: fz(11) }}>{p.onlineCount} 人在線</span>
-      </div>
-      <div style={{ width: 1, height: 20, background: C.border }} />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <button onClick={onHandover}
-          style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #2563EB', background: 'transparent', color: '#2563EB', fontSize: fz(11), fontWeight: 600, cursor: 'pointer' }}
-          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(37,99,235,0.08)'; }}
-          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
-        >發起交班</button>
-      </div>
-    </div>
-  );
-}
 
 /* ── MustBeZeroStrip ── */
 function MustBeZeroStrip({ items}) {
@@ -1059,11 +1024,36 @@ function LotHoldWidget({ p}) {
   );
 }
 
+/* ── SOP 產出的交接報告 → 佈告欄置頂公告 ──
+   交班不是一個模組，是一個唯讀 SOP 的排程產出。Schedule 是檔案櫃（可回溯），
+   這裡是「今天這份」——接班第一眼會看到的地方。
+   見 brain/entities/modules/handover.md */
+function buildReportBulletin(p, report) {
+  if (!report) return null;
+  var o = report.output || {};
+  var metrics = (o.metrics || []).map(function(m) { return m.label + ' ' + m.value + m.unit; }).join('　·　');
+  return {
+    id: 'sop-report-' + report.runId,
+    author: '排程產出 · ' + report.scheduleName,
+    av: '⚙', avColor: '#2563EB',
+    role: 'all', pinned: true, isRead: false, type: 'handover',
+    fromSOP: true,
+    title: o.title || '當班交接報告',
+    content: (o.shiftLabel ? o.shiftLabel + '　' : '') + metrics + '\n' + (o.situation || ''),
+    time: o.generatedAt || report.dateLabel,
+    readCount: 0, totalCount: p.members ? p.members.length : 5,
+  };
+}
+
 /* ── BulletinWidget ── */
-function BulletinWidget({ p, handoverRecord, onEdit}) {
+function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
   var { C, fz } = useTheme();
   const baseBulletins = BULLETINS[p.key] || [];
-  const bulletins = handoverRecord ? [handoverRecord, ...baseBulletins] : baseBulletins;
+  /* 人送出交班後，那份取代 SOP 產出的自動公告（同一件事的最終版本）*/
+  const reportBulletin = handoverRecord ? null : buildReportBulletin(p, getLatestHandoverReport(p.key));
+  const bulletins = handoverRecord
+    ? [handoverRecord].concat(baseBulletins)
+    : (reportBulletin ? [reportBulletin].concat(baseBulletins) : baseBulletins);
   const [readIds, setReadIds] = React.useState(new Set());
   const [open, setOpen] = React.useState(true);
 
@@ -1116,9 +1106,11 @@ function BulletinWidget({ p, handoverRecord, onEdit}) {
       {open && <div>
       {bulletins.map((b, i) => {
         const isRead = b.isRead || readIds.has(b.id);
-        const rt = b.type === 'handover'
-          ? { label: '交班記錄', bg: '#FEF3C7', color: '#92400E' }
-          : (ROLE_TAG_CFG[b.role] || ROLE_TAG_CFG.all);
+        const rt = b.fromSOP
+          ? { label: 'SOP 產出', bg: '#EFF6FF', color: '#2563EB' }
+          : b.type === 'handover'
+            ? { label: '交班記錄', bg: '#FEF3C7', color: '#92400E' }
+            : (ROLE_TAG_CFG[b.role] || ROLE_TAG_CFG.all);
         return (
           <div key={b.id}
             style={{
@@ -1144,7 +1136,17 @@ function BulletinWidget({ p, handoverRecord, onEdit}) {
                 <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 'auto' }}>{b.time}</span>
               </div>
               <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>{b.title}</div>
-              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.4, marginBottom: 8 }}>{b.content}</div>
+              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.4, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{b.content}</div>
+              {/* 數字機器算，判斷人給：SOP 產出後由人補交代事項再送出 */}
+              {b.fromSOP && onOpenHandover && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <button onClick={function(e) { e.stopPropagation(); onOpenHandover(); }}
+                    style={{ fontSize: fz(11), fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer' }}>
+                    補充交代事項並送出交班
+                  </button>
+                  <span style={{ fontSize: fz(11), color: C.textMuted }}>數字已由 SOP 算好，你只需要補上判斷</span>
+                </div>
+              )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 {!isRead ? (
                   <button onClick={e => markRead(b.id, e)}
@@ -1881,9 +1883,20 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
   const [pending, setPending]       = React.useState('');   // 區塊二：遺留待追蹤
   const [notes, setNotes]           = React.useState('');   // 區塊三：下一班注意事項
 
+  /* SOP 已經算好的那份（Schedule 產出＝佈告欄那則）；有的話直接預填，
+     人只要補判斷與交代事項 —— 數字機器算，判斷人給。 */
+  const sopReport = getLatestHandoverReport(p.key);
+
   React.useEffect(() => {
     const timer = setTimeout(() => {
-      // ── 區塊一：本班課況（KPI warn + Must-be-zero） ──
+      if (sopReport && sopReport.output) {
+        setSituation(sopReport.output.situation || '');
+        setPending(sopReport.output.pending || '');
+        setLoading(false);
+        return;
+      }
+
+      // ── 區塊一：本班課況（KPI warn + Must-be-zero）── 沒有 SOP 產出時的退路
       const warnKpis  = (p.kpis || []).filter(k => k.status === 'warn');
       const alertMbz  = (p.mustBeZero || []).filter(m => !m.ok);
       let sitLines = [];
@@ -1934,9 +1947,10 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
             <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>班對班交班摘要</div>
             <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
               {currentShift} → {nextShift} · {p.name}
+              {sopReport && <span style={{ color: '#2563EB' }}>　·　已由 SOP「{sopReport.scheduleName}」預填（{sopReport.dateLabel}）</span>}
             </div>
           </div>
-          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>AI 正在彙整本班課況…</span>}
+          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{sopReport ? '正在載入 SOP 產出…' : 'AI 正在彙整本班課況…'}</span>}
           <button onClick={onClose}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: fz(18), color: C.textMuted, padding: '0 4px', lineHeight: 1 }}>×</button>
         </div>
@@ -1946,20 +1960,20 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: 16 }}>
               <div className="spin" style={{ width: 32, height: 32, border: '3px solid ' + C.border, borderTopColor: '#2563EB', borderRadius: '50%' }} />
-              <span style={{ fontSize: fz(13), color: C.textMuted }}>AI 正在彙整 {currentShift} 課況…</span>
+              <span style={{ fontSize: fz(13), color: C.textMuted }}>{sopReport ? "正在載入 SOP 已產出的 " + currentShift + " 課況…" : "AI 正在彙整 " + currentShift + " 課況…"}</span>
             </div>
           ) : (
             <>
               {/* 區塊一：本班課況 */}
               <div>
-                <SectionLabel badge="AI 生成 · 可編輯">本班課況</SectionLabel>
+                <SectionLabel badge={sopReport ? "SOP 已算好 · 可編輯" : "AI 生成 · 可編輯"}>本班課況</SectionLabel>
                 <textarea value={situation} onChange={e => setSituation(e.target.value)}
                   style={{ width: '100%', minHeight: 88, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
 
               {/* 區塊二：遺留待追蹤事項 */}
               <div>
-                <SectionLabel badge="AI 生成 · 可編輯">遺留待追蹤事項</SectionLabel>
+                <SectionLabel badge={sopReport ? "SOP 已算好 · 可編輯" : "AI 生成 · 可編輯"}>遺留待追蹤事項</SectionLabel>
                 <textarea value={pending} onChange={e => setPending(e.target.value)}
                   style={{ width: '100%', minHeight: 104, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
@@ -2141,10 +2155,12 @@ function LinkWidgetCard({ widget, onEdit }) {
 
 /* ── renderHomeWidget: dispatch by slot.type ── */
 /* rowId 是為了讓 custom widget 的 onEdit 能帶出精確的 { rowId, slotId }，供 HomeLayoutTab 自動展開對應設定面板 */
+/* 注意：本函式是被當一般函式呼叫（非 <Component />），所以裡面不能有 hook——
+   否則 useTheme 會算進 DashboardPage 的 hook 序列，widget 數量一變就噴
+   「change in the order of Hooks」。原本的 useTheme 未被使用，已移除。 */
 function renderHomeWidget(slot, rp, rowId) {
-  var { C, fz } = useTheme();
   switch (slot.type) {
-    case 'announcement': return <BulletinWidget p={rp.p} handoverRecord={rp.handoverRecord} onEdit={rp.onOpenBulletinSetting} />;
+    case 'announcement': return <BulletinWidget p={rp.p} handoverRecord={rp.handoverRecord} onEdit={rp.onOpenBulletinSetting} onOpenHandover={rp.onOpenHandover} />;
     case 'tool':         return <ToolStatusWidget p={rp.p} />;
     case 'case':         return <CaseWidget p={rp.p} />;
     case 'lot':          return <LotHoldWidget p={rp.p} />;
@@ -2175,7 +2191,12 @@ function DashboardPage({ p, onAskAI, handoverRecord, onHandoverSubmit, pinnedApp
     if (setShowHandoverModal) setShowHandoverModal(false);
   };
 
-  var rp = { p, handoverRecord, kpiConfig, onOpenBulletinSetting, onOpenKpiSetting, onOpenAppSetting, onOpenLinkWidgetSetting };
+  var rp = {
+    p, handoverRecord, kpiConfig,
+    onOpenBulletinSetting, onOpenKpiSetting, onOpenAppSetting, onOpenLinkWidgetSetting,
+    /* 佈告欄那則 SOP 產出上的「補充交代事項」＝交班 Modal 的入口 */
+    onOpenHandover: function() { if (setShowHandoverModal) setShowHandoverModal(true); },
+  };
   const [rightOpen, setRightOpen] = React.useState(true);
 
   return (

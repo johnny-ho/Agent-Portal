@@ -33,6 +33,7 @@ JS_MODULES = [
     os.path.join(SRC_DIR, 'components', 'KPIPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'KnowledgePage.jsx'),
     os.path.join(SRC_DIR, 'components', 'ChatPage.jsx'),
+    os.path.join(SRC_DIR, 'components', 'SkillCreateFlow.jsx'),
     os.path.join(SRC_DIR, 'components', 'SkillManagementPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SettingPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'TaskManagementPage.jsx'),

@@ -129,10 +129,122 @@ function SchStepTimeline({ steps, compact }) {
 /* ════════════════════════════════════════
    SCHEDULING PAGE MAIN
    ════════════════════════════════════════ */
+/* ════════════════════════════════════════
+   SchNewScheduleModal — 新增排程
+
+   排程只掛得上 SOP。輔助判斷每次結果都不一樣、產出的是給人看的建議，
+   沒人在場就沒有意義；知識根本沒有要執行的東西。
+   但不可用的類型不隱藏 —— 看得到、標明原因，Seed 才知道邊界在哪。
+   見 brain/concepts/agent-skill-tiering.md「三層分界」
+   ════════════════════════════════════════ */
+const SCH_CRON_OPTIONS = ['每日 07:00', '每日 07:50', '每日 15:30', '每班結束前 30 分鐘', '每週一 09:00', '每小時整點'];
+
+function SchNewScheduleModal({ p, onClose, onCreate }) {
+  var { C, fz } = useTheme();
+  var all = ((p.knowledge || {}).sopManagement) || [];
+
+  /* 可掛：Production 的 SOP。其餘全部列出來但不能選，並寫明為什麼 */
+  function blockReason(s) {
+    if (s.tier !== 'sop') {
+      return SKILL_TIER_CFG[s.tier].label + '不能設排程：每次結果不一樣，需要有人在場看';
+    }
+    if (s.stage !== 'production') {
+      return '尚未上線（目前在 ' + SKILL_STAGE_CFG[s.stage].label + '），簽核通過才能排程';
+    }
+    return null;
+  }
+
+  var options = all.map(function(s) { return { skill: s, reason: blockReason(s) }; })
+    .sort(function(a, b) { return (a.reason ? 1 : 0) - (b.reason ? 1 : 0); });
+
+  var [picked, setPicked] = React.useState(null);
+  var [cron, setCron]     = React.useState(SCH_CRON_OPTIONS[2]);
+  var pickedSkill = picked ? all.find(function(s) { return s.id === picked; }) : null;
+  var confirmSteps = pickedSkill ? (pickedSkill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length : 0;
+
+  return (
+    <antd.Modal
+      open
+      centered
+      width={640}
+      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>新增排程</span>}
+      onCancel={onClose}
+      okText="建立排程"
+      cancelText="取消"
+      okButtonProps={{ disabled: !pickedSkill }}
+      onOk={function() { if (pickedSkill) onCreate(pickedSkill, cron); }}
+    >
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
+        排程只掛得上已上線的 SOP —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
+      </div>
+
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 SOP</div>
+      <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8, marginBottom: 16 }} className="scrollbar-thin">
+        {options.length === 0 && (
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本課目前沒有任何 Skill。</div>
+        )}
+        {options.map(function(o) {
+          var disabled = !!o.reason;
+          var active   = picked === o.skill.id;
+          return (
+            <div
+              key={o.skill.id}
+              onClick={function() { if (!disabled) setPicked(o.skill.id); }}
+              style={{
+                padding: '8px 16px', borderBottom: '1px solid ' + C.border,
+                cursor: disabled ? 'not-allowed' : 'pointer',
+                background: active ? 'rgba(37,99,235,0.08)' : 'transparent',
+                opacity: disabled ? 0.6 : 1,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <SkillTierTag tier={o.skill.tier} />
+                <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500, flex: 1, minWidth: 0 }}>{o.skill.title}</span>
+                {disabled
+                  ? <span style={{ fontSize: fz(12) }}>🔒</span>
+                  : <StatusTag stage={o.skill.stage} />
+                }
+              </div>
+              {o.reason && (
+                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>{o.reason}</div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>執行時間</div>
+      <antd.Select value={cron} onChange={setCron} style={{ width: '100%', marginBottom: 16 }}
+        options={SCH_CRON_OPTIONS.map(function(c) { return { value: c, label: c }; })}
+      />
+
+      {/* 設排程時就要知道會不會卡住，不然每天早上才發現停在第 3 步 */}
+      {pickedSkill && (
+        confirmSteps > 0
+          ? <antd.Alert
+              type="warning"
+              showIcon
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 SOP 含 {confirmSteps} 個需確認步驟</span>}
+              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，確認後才會繼續。不是設好就完全不用管。</span>}
+            />
+          : <antd.Alert
+              type="success"
+              showIcon
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 SOP 只讀取資料，可以完全自動執行</span>}
+              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>不會異動任何系統，時間到就有產出。</span>}
+            />
+      )}
+    </antd.Modal>
+  );
+}
+
 function SchedulingPage({ p, onAskAI, expandRunReq}) {
   var { C, fz } = useTheme();
-  const items = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
+  const baseItems = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
+  const [extraItems, setExtraItems] = React.useState([]);
+  const items = extraItems.concat(baseItems);
 
+  const [showNew, setShowNew]       = React.useState(false);
   const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
   const [lockedRun, setLockedRun]   = React.useState(null);       // { runId, byUser }
   const [expandedRuns, setExpandedRuns] = React.useState(() => {
@@ -177,6 +289,16 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
   const handleReject = (run) => {
     setResolvedRuns(prev => { const n = new Set(prev); n.add(run.id); return n; });
     setLockedRun(null);
+  };
+
+  /* 產出物帶進 AI Chat：trace 要能一鍵變成工程師手上的資產 */
+  const handleAskAboutOutput = (item, run) => {
+    const o = run.output || {};
+    const ctx = `【Scheduling 產出】排程：${item.name}　執行時間：${run.dateLabel}\n\n` +
+      `${o.title || ''}（${o.shiftLabel || ''}）\n` +
+      (o.metrics || []).map(m => `・${m.label}：${m.value}${m.unit}${m.note ? '（' + m.note + '）' : ''}`).join('\n') +
+      `\n\n${o.situation || ''}\n\n${o.pending || ''}\n\n---\n以上是這次排程實際產出的內容，請依此協助分析或回答。`;
+    if (onAskAI) onAskAI({ text: ctx, label: `Scheduling：${item.name}` });
   };
 
   const handleDiscuss = (item, run) => {
@@ -350,7 +472,25 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
             {isResolved && run.result === 'pending' ? '完成' : cfg.label}
           </antd.Tag>
         ),
-        children: run.steps ? <SchStepTimeline steps={run.steps} compact={true} /> : null,
+        children: (
+          <div>
+            {/* 產出物本身 —— 執行紀錄的重點是「跑出了什麼」，不只是「跑了哪幾步」。
+                這裡是檔案櫃：可回溯所有班次；今天那份同時在 Home 課佈告欄。 */}
+            {run.output && (
+              <div style={{ marginBottom: 16, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ padding: '8px 16px', background: C.bgPanel, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: fz(12), fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>本次產出</span>
+                  <div style={{ flex: 1 }} />
+                  <antd.Button size="small" onClick={function(e) { e.stopPropagation(); handleAskAboutOutput(selectedItem, run); }}>💬 針對這份問 AI</antd.Button>
+                </div>
+                <div style={{ padding: 16, background: C.bg }}>
+                  <DryRunOutput output={run.output} />
+                </div>
+              </div>
+            )}
+            {run.steps ? <SchStepTimeline steps={run.steps} compact={true} /> : null}
+          </div>
+        ),
       };
     });
   };
@@ -370,7 +510,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
         }}>
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
-            <antd.Button type="primary" size="small">＋ 新增</antd.Button>
+            <antd.Button type="primary" size="small" onClick={function() { setShowNew(true); }}>＋ 新增</antd.Button>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
             <antd.List
@@ -423,12 +563,23 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
             }}>
               <div>
-                <div style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{selectedItem.name}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{selectedItem.name}</span>
+                  <SkillTierTag tier="sop" />
+                </div>
                 <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
                   {selectedItem.cronLabel} 執行　·　Skill：
                   <span style={{ fontFamily: 'monospace' }}>{selectedItem.skill}</span>
                   　·　建立者：{selectedItem.createdBy}
                 </div>
+                {/* 含寫入的排程不是設好就沒事，講在前面（僅對已標註類型的排程顯示）*/}
+                {typeof selectedItem.confirmSteps === 'number' && (
+                  <div style={{ fontSize: fz(12), color: selectedItem.confirmSteps > 0 ? '#F59E0B' : '#22C55E', marginTop: 4, fontWeight: 600 }}>
+                    {selectedItem.confirmSteps > 0
+                      ? '⚠️ 本 SOP 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
+                      : '只讀取資料，時間到就有產出，不會異動任何系統'}
+                  </div>
+                )}
               </div>
               <antd.Space size={8}>
                 <antd.Button size="small">編輯排程</antd.Button>
@@ -468,6 +619,33 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
         )}
 
       </div>
+
+      {/* 新增排程：只選得到已上線的 SOP */}
+      {showNew && (
+        <SchNewScheduleModal
+          p={p}
+          onClose={function() { setShowNew(false); }}
+          onCreate={function(skill, cron) {
+            var confirmSteps = (skill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length;
+            var newItem = {
+              id: 'sch-new-' + Date.now(),
+              name: skill.title,
+              skill: skill.id,
+              skillId: skill.id,
+              hasWrite: !!skill.hasWrite,
+              confirmSteps: confirmSteps,
+              cronLabel: cron,
+              createdBy: p.user.name,
+              status: 'ok',
+              lastRun: '尚未執行',
+              runs: [],
+            };
+            setExtraItems(function(prev) { return [newItem].concat(prev); });
+            setSelectedId(newItem.id);
+            setShowNew(false);
+          }}
+        />
+      )}
     </div>
   );
 }

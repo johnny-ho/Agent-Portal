@@ -18,6 +18,10 @@ status: current
 - **Personal Zone**（v3.8）：My Tasks **全高右側面板**（原 widget 卡片改制）；sticky header、獨立捲動、可往右收合。任務 P1/P2/P3 由發起人指定、不自動重排、P1 置頂
 - **AmbientBar**：底部常駐課上下文快問欄（AI 入口之一）
 
+## 交班觸點（2026-07-25 改）
+
+[Handover 模組已廢除](handover.md)，交班改由 SOP 排程產出驅動，Home 是「今天這份」的觸達點：`BulletinWidget` 取 `getLatestHandoverReport()` 組成置頂公告（標「SOP 產出」），公告上的「補充交代事項並送出交班」是 `ShiftHandoverModal` 的入口（此入口為本次新增——原本的 `SectionHeader` 發起交班按鈕是死碼，已刪）。Modal 以產出預填、標籤為「SOP 已算好 · 可編輯」，人補判斷送出後，交班記錄取代那則自動公告。**數字機器算，判斷人給。**
+
 ## 現況與缺口
 
 已實作 ✅（v3.9 mock）。缺口：Must-be-zero 橫幅元件已建**未掛載**（F-DB-02）、Priority Feed 為 mock 卡片（F-DB-01）、課的應用 deep-link 未實作（P3）。「我的釘選」widget 已於 v2.8 **移除**——釘選統一在 [APP Center](app-center.md)，見 [decisions](../../decisions.md)。

@@ -10,6 +10,9 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-001',
       name: 'SPC 異常日報',
       skill: 'spc-daily-report',
+      skillId: 'sm-eq-008',      /* 對應 personas.js 的 SOP（含寫入）*/
+      hasWrite: true,
+      confirmSteps: 2,           /* 執行到這幾步會暫停等人確認 */
       cronLabel: '每日 07:50',
       createdBy: '陳育民',
       status: 'pending',
@@ -94,6 +97,95 @@ const SCHEDULING_DATA = {
             { num: 3, title: '開立異常工單', status: 'rejected', result: '拒絕執行，排程終止',
               decisionBy: { name: '陳育民', avatar: '陳', color: '#2563EB', action: '拒絕執行', time: '09:11', note: '資料有誤，改手動處理' } },
             { num: 4, title: '發送通知給值班 EE', status: 'skip', result: '未執行' },
+          ],
+        },
+      ],
+    },
+    /* ── 交接報告：交班已不是一個模組，而是這個唯讀 SOP 的排程產出 ──
+       執行紀錄要看得到「產出物本身」，不能只有步驟；
+       同一份產出同時送到 Home 課佈告欄（今天這份）與這裡（檔案櫃）。
+       見 brain/entities/modules/handover.md */
+    {
+      id: 'sch-eq-004',
+      name: '當班交接報告',
+      skill: 'shift-handover-report',
+      skillId: 'sm-eq-007',
+      hasWrite: false,
+      confirmSteps: 0,
+      producesHandover: true,
+      cronLabel: '每日 15:30 / 23:30 / 07:30',
+      createdBy: '王志明',
+      status: 'ok',
+      lastRun: '今日 15:30',
+      runs: [
+        {
+          id: 'run-eq-004-1',
+          dateLabel: '今日 15:30',
+          result: 'success',
+          duration: '38s',
+          totalSteps: 5,
+          doneSteps: 5,
+          steps: [
+            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 340.8 h' },
+            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 27 筆 → 分級去重後 5 件' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 94.2%、異常密度 0.63 件/台/班' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '7 件（逾期 1 件）' },
+            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄' },
+          ],
+          output: {
+            title: 'ETC 設備課 · 日班交接報告',
+            shiftLabel: '日班 08:00 – 16:00',
+            generatedAt: '今日 15:30',
+            metrics: [
+              { label: '機台稼動率', value: '94.2', unit: '%',  note: '目標 95%，未達標' },
+              { label: '本班異常',   value: '5',    unit: '件', note: 'P1 ×2 / P2 ×3' },
+              { label: '未結案 Case', value: '7',   unit: '件', note: '逾期 1 件' },
+            ],
+            situation: '【KPI 未達標】設備稼動率 94.2%（目標 95%）、Unclose Case 7 件（目標 ≤5）。\n【本班異常】E-308 FDC 異常持續監控中（已 3 小時）、E-502 CVD 溫控警報已排除。\n【Must-be-zero】Critical Escape 1 件尚未歸零。',
+            pending: '• E-308 FDC 異常持續監控中，小夜班請每小時確認電流波動是否收斂。\n• Critical Escape（1）尚未歸零，小夜班請持續追蹤。\n• E-203 預防性保養今日 16:00 開始，備料已確認，需完成工前確認。\n• Unclose Case #UC-442 逾期 5 天，影響課 KPI，請優先處理。',
+          },
+        },
+        {
+          id: 'run-eq-004-2',
+          dateLabel: '今日 07:30',
+          result: 'success',
+          duration: '35s',
+          totalSteps: 5,
+          doneSteps: 5,
+          steps: [
+            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 352.1 h' },
+            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 14 筆 → 分級去重後 2 件' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 96.1%、異常密度 0.25 件/台/班' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '6 件' },
+            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄' },
+          ],
+          output: {
+            title: 'ETC 設備課 · 大夜班交接報告',
+            shiftLabel: '大夜班 00:00 – 08:00',
+            generatedAt: '今日 07:30',
+            metrics: [
+              { label: '機台稼動率', value: '96.1', unit: '%',  note: '達標' },
+              { label: '本班異常',   value: '2',    unit: '件', note: 'P2 ×2' },
+              { label: '未結案 Case', value: '6',   unit: '件', note: '' },
+            ],
+            situation: '【KPI】各項達標，設備稼動率 96.1%。\n【本班異常】E-308 於 03:12 跳 ERR-4421，已依研判建議執行冷卻水路疏通，05:40 恢復正常。',
+            pending: '• E-308 恢復後需觀察一個班次，日班請確認水壓是否維持在 0.15 MPa 以上。\n• Unclose Case #UC-442 仍未結案。',
+          },
+        },
+        {
+          id: 'run-eq-004-3',
+          dateLabel: '昨日 23:30',
+          result: 'error',
+          duration: '12s',
+          totalSteps: 5,
+          doneSteps: 1,
+          errorMsg: 'eqp.get_uptime timeout（設備監控系統維護中）',
+          steps: [
+            { num: 1, title: '取當班機台稼動資料',       status: 'error', result: '設備監控系統無回應' },
+            { num: 2, title: '取同時段警報並分級',       status: 'skip',  result: '未執行' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'skip',  result: '未執行' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'skip',  result: '未執行' },
+            { num: 5, title: '套用交接報告格式',         status: 'skip',  result: '未執行' },
           ],
         },
       ],
@@ -339,3 +431,17 @@ const SCHEDULING_DATA = {
     },
   ],
 };
+
+/* 取某課最近一次成功產出的交接報告（Home 課佈告欄與交班 Modal 預填共用同一份）*/
+function getLatestHandoverReport(personaKey) {
+  var list = (SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || [];
+  var report = null;
+  list.forEach(function(item) {
+    if (!item.producesHandover) return;
+    (item.runs || []).forEach(function(run) {
+      if (run.result !== 'success' || !run.output) return;
+      if (!report) report = { scheduleId: item.id, scheduleName: item.name, runId: run.id, dateLabel: run.dateLabel, output: run.output };
+    });
+  });
+  return report;
+}
