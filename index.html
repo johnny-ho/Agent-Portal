@@ -1782,8 +1782,13 @@ function findKnowledgeDoc(personaKey, docId) {
 
    ── 腳本播放模型 ──
    turns[] 為線性腳本。使用者的發言以底部「建議接話」按鈕呈現，
-   點了才推進；AI 回合會自動接著出現，直到遇到需要使用者操作的東西
-   （sheet 由下而上的選單 / action 行動按鈕）才停下來等人。
+   點了才推進；AI 回合逐一自動接上（步驟會一步一步跑出來），
+   直到遇到決策卡（sheet）或下一句又是使用者發言才停下來等人。
+
+   ── 2026-07-26 第二輪收斂（PO 指定）──
+   互動模態只留兩種：**對話式（建議接話）** 與 **決策卡（sheet）**。
+   決策卡只給「會異動系統且流程卡住」的時刻；其餘一律用對話推進。
+   原本的 action 行動按鈕（不用／好）已全數改寫成 user turn。
 
    turn 形狀：
      { role: 'user', text }
@@ -1792,14 +1797,16 @@ function findKnowledgeDoc(personaKey, docId) {
        skill: { id, title, tier },                  // 命中的 Skill／SOP
        knowledge: [{ id, title }],                  // 引用的知識文件
        text,                                        // 主要回應（無氣泡，全寬）
-       run:    { title, steps: [...] },             // 執行過程／工具呼叫
-       result: { variant, title, lines: [] },       // 結果卡
-       links:  [{ label, url, note }],              // 操作入口
-       sheet:  { ... },                             // 由下而上的選單
-       action: { ... },                             // 行動按鈕
+       run:      { title, steps: [...] },           // SOP 執行進度 → 對話流只顯示步驟名
+       evidence: { title, steps: [...] },           // 輔助判斷查過的數據 → 只進右側面板
+       blocked:  { label, tool, reason },           // 被 Tool Gateway 擋下的寫入請求
+       result:   { variant, title, lines: [] },     // 結果卡
+       links:    [{ label, url }],                  // 操作入口（只渲染 label 成按鈕）
+       sheet:    { ... },                           // 決策卡
      }
 
    run.steps[].status：ok（完成）/ pause（停下等人）/ fail（失敗）/ skip（略過）
+   步驟的 tool / io / detail / reason **不在對話流顯示**，只餵右側執行面板。
    ════════════════════════════════════════ */
 
 const CHAT_SCENARIOS = {
@@ -1811,7 +1818,7 @@ const CHAT_SCENARIOS = {
     {
       id: 'sc-eq-1',
       title: '執行 SPC 異常開單 SOP（中途需人工確認）',
-      goal: '呼叫 SOP → 執行到寫入步驟停下 → 確認開單 → 成功',
+      goal: '呼叫 SOP → 寫入步驟停下 → 確認開單 → 接著跑第二份 SOP（面板出現兩個任務）',
       time: '今天 07:52',
       turns: [
         { role: 'user', text: '幫我跑一次今天的 SPC 異常日報與開單。' },
@@ -1870,7 +1877,7 @@ const CHAT_SCENARIOS = {
                     ],
                   },
                   links: [
-                    { label: '在 Case Center 開啟這張工單', url: '/app/case-center/case/CS-20260726-014', note: '查看與追蹤處理進度' },
+                    { label: '開啟 Case 單', url: '/app/case-center/case/CS-20260726-014' },
                   ],
                 },
               },
@@ -1894,6 +1901,39 @@ const CHAT_SCENARIOS = {
               },
             ],
           },
+        },
+
+        /* ── 第二份 SOP：讓右側面板出現兩個任務 ──
+           sm-eq-007 是純唯讀、不會停下來的 SOP，正好對比出
+           「任務 1 停過一次要人確認、任務 2 一路跑完」。 */
+        { role: 'user', text: '順便把當班交接報告也整理一下。' },
+        {
+          role: 'ai',
+          mode: 'approved',
+          skill: { id: 'sm-eq-007', title: '整理當班交接報告', tier: 'sop' },
+          text: '好，這份全程只讀資料、不動任何系統，所以中途不會停下來問你，我直接跑完。',
+          run: {
+            title: 'SOP 執行中',
+            steps: [
+              { num: 1, label: '取當班機台稼動資料', tool: 'eqp.get_uptime', io: 'read', status: 'ok', detail: '12 台機台 · 08:00–15:30' },
+              { num: 2, label: '取同時段警報並分級', tool: 'fdc.list_alarms', io: 'read', status: 'ok', detail: '警報 5 件（Level-2 ×1）' },
+              { num: 3, label: '計算稼動率與異常密度', io: 'compute', status: 'ok', detail: '稼動率 94.2%（已排除 PM 時數）、異常密度 2.7 件／8h' },
+              { num: 4, label: '取未結案 Case 與待交接事項', tool: 'case_center.list_open', io: 'read', status: 'ok', detail: '未結案 7 件，其中 1 件逾期' },
+              { num: 5, label: '套用交接報告格式', io: 'compute', status: 'ok', detail: '已套用課內格式' },
+            ],
+          },
+          result: {
+            variant: 'success',
+            title: 'ETC 設備課 · 日班交接報告已產出',
+            lines: [
+              '稼動率 94.2%（目標 95%，未達標）',
+              '本班異常 5 件 · 未結案 Case 7 件',
+              '今早開的 #CS-20260726-014 已列入待交接事項',
+            ],
+          },
+          links: [
+            { label: '開啟交接報告', url: '/app/handover/report/20260726-day' },
+          ],
         },
       ],
     },
@@ -1986,28 +2026,25 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
-          text: '分兩件事處理，先顧眼前的警報，再修 SOP。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 SOP 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 SOP 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 SOP 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 SOP owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 SOP 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 SOP 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 SOP 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。',
+          text: '分兩件事處理，先顧眼前的警報，再修 SOP。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 SOP 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 SOP 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 SOP 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 SOP owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 SOP 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 SOP 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 SOP 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。\n\n要不要我把「標準元件升版 ＋ 盤點其他排程 SOP」列成一張追蹤任務？',
           links: [
-            { label: '手動開單（工單內容已預填）', url: '/app/case-center/create?prefill=fdc-e308-20260726', note: 'P1 · E-308 Chamber A 氣體流量異常' },
-            { label: '回報 SOP 失效給 owner 與平台', url: '/app/skill/sm-eq-004/report-issue', note: '會附上本次的失敗紀錄與 API 回應' },
+            { label: '手動開單', url: '/app/case-center/create?prefill=fdc-e308-20260726' },
+            { label: '回報失效', url: '/app/skill/sm-eq-004/report-issue' },
           ],
-          action: {
-            label: '幫我建立一張追蹤任務',
-            desc: '把「標準元件升版 + 檢查其他排程 SOP」列成任務',
-            outcome: {
-              role: 'ai',
-              mode: 'general',
-              text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 SOP、升版後重跑一次 dry run 比對差異。',
-              result: {
-                variant: 'success',
-                title: '任務 #T-2026-0726-03 已建立',
-                lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 SOP 執行失敗紀錄'],
-              },
-              links: [
-                { label: '在任務管理開啟', url: '/app/tasks/T-2026-0726-03', note: '追蹤處理進度' },
-              ],
-            },
+        },
+        { role: 'user', text: '好，幫我建一張追蹤任務。' },
+        {
+          role: 'ai',
+          mode: 'general',
+          text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 SOP、升版後重跑一次 dry run 比對差異。',
+          result: {
+            variant: 'success',
+            title: '任務 #T-2026-0726-03 已建立',
+            lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 SOP 執行失敗紀錄'],
           },
+          links: [
+            { label: '開啟任務', url: '/app/tasks/T-2026-0726-03' },
+          ],
         },
       ],
     },
@@ -2026,8 +2063,10 @@ const CHAT_SCENARIOS = {
           skill: { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
           knowledge: [{ id: 'kd-eq-003', title: 'ERR-4421 冷卻系統異常排除 v2' }],
           text: '這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你查了現場數據。\n\n**研判：冷卻水路阻塞**\n\n依據有三：過濾器壓差 0.07 MPa，超過 0.05 的判斷門檻；水壓是緩降不是跳動，形態符合阻塞而非感測器老化；同機台近 7 天沒有其他同碼警報，不像感測器問題。\n\n**建議處置**\n1. 先執行冷卻水路疏通程序（清洗過濾器）\n2. 疏通後觀察 30 分鐘，水壓應回到 0.18 MPa 以上\n3. 若 30 分鐘內未回升，再開緊急工單請廠務支援\n\n這是依指引研判的建議，不是已核准的流程，最後判斷仍在你身上。',
-          run: {
-            title: '查了這些現場數據',
+          /* 證據已寫進上面的文字（「依據有三…」），對話流不再重複列一次步驟表；
+             這份明細只餵右側面板的「這次用到的」。 */
+          evidence: {
+            title: '查過的現場數據',
             steps: [
               { label: '比對適用範圍', io: 'match', status: 'ok', detail: 'E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合' },
               { label: '查警報明細', tool: 'fdc.get_alarm_detail', io: 'read', status: 'ok', detail: '冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa' },
@@ -2040,16 +2079,15 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'guided',
           skill: { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
-          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是輔助判斷型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 你可以在下面的紀錄看到那一行。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
-          run: {
-            title: '這次的工具呼叫紀錄',
-            steps: [
-              { label: '變更 SPC 管制界限', tool: 'spc.update_control_limit', io: 'write', status: 'fail', detail: '已拒絕 → 改為建議', reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具' },
-            ],
+          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是輔助判斷型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 下面那一行就是。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
+          blocked: {
+            label: '變更 SPC 管制界限',
+            tool: 'spc.update_control_limit',
+            reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具',
           },
           links: [
-            { label: 'SPC Console · 管制界限設定', url: '/app/spc-console/limits?station=E-101&recipe=CMP-Standard', note: '已帶入 E-101 與 CMP-Standard，可直接編輯' },
-            { label: '製程變更申請（DCR）', url: '/app/dcr/create?type=spc-limit&station=E-101', note: '管制界限變更須走此流程' },
+            { label: '開啟 SPC Console', url: '/app/spc-console/limits?station=E-101&recipe=CMP-Standard' },
+            { label: '開 DCR 申請', url: '/app/dcr/create?type=spc-limit&station=E-101' },
           ],
         },
       ],
@@ -2093,28 +2131,25 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'general',
           text: '我查了課上所有的 Skill、SOP 與知識文件，**ERR-9105 完全沒有紀錄**。\n\n我也不打算靠猜的給你一個聽起來合理的答案 —— 半夜三點照著一個猜出來的步驟去動 CVD 機台，風險不對等。\n\n**現在可以做的**\n\n1. 問課上處理過 CVD 的資深同事。依課內的活動紀錄，陳育民與張文凱過去半年碰過 E-502 的異常最多。\n2. 若無人可問且警報持續，依《FDC 警報分級對照表》的通報原則升報 Section Admin，由課長決定是否停機。\n3. 查設備原廠手冊的 ERR-91xx 章節。\n\n**另外想跟你確認一件事**\n\n這次問不到不只是這一次的問題 —— 下一個值班的人半夜遇到一樣的狀況，還是會問不到。要不要我把這件事列成一張任務，追蹤到有人把 ERR-9105 的處理方式補進知識庫為止？',
-          action: {
-            label: '好，建立追蹤任務',
-            desc: '追蹤到 ERR-9105 的處理方式補進知識庫為止',
-            outcome: {
-              role: 'ai',
-              mode: 'general',
-              text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 SOP；如果每次要看現場數據判斷，就建成輔助判斷。到時候系統會提示。',
-              result: {
-                variant: 'success',
-                title: '任務 #T-2026-0725-11 已建立',
-                lines: [
-                  '標題：補齊 E-502 ERR-9105 處理知識',
-                  '指派：陳育民 · 副本：林課長',
-                  '到期：2026-08-01',
-                  '附件：本次對話紀錄、E-502 當下警報明細',
-                ],
-              },
-              links: [
-                { label: '在任務管理開啟', url: '/app/tasks/T-2026-0725-11', note: '追蹤補齊進度' },
-              ],
-            },
+        },
+        { role: 'user', text: '好，幫我建一張追蹤任務。' },
+        {
+          role: 'ai',
+          mode: 'general',
+          text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 SOP；如果每次要看現場數據判斷，就建成輔助判斷。到時候系統會提示。',
+          result: {
+            variant: 'success',
+            title: '任務 #T-2026-0725-11 已建立',
+            lines: [
+              '標題：補齊 E-502 ERR-9105 處理知識',
+              '指派：陳育民 · 副本：林課長',
+              '到期：2026-08-01',
+              '附件：本次對話紀錄、E-502 當下警報明細',
+            ],
           },
+          links: [
+            { label: '開啟任務', url: '/app/tasks/T-2026-0725-11' },
+          ],
         },
       ],
     },
@@ -2217,8 +2252,8 @@ const CHAT_SCENARIOS = {
           skill: { id: 'sm-pr-006', title: 'CP 值下滑趨勢研判', tier: 'guided' },
           knowledge: [{ id: 'kd-pr-002', title: 'SPC 失控快速處置指引 v2' }],
           text: '這個狀況本課沒有標準流程，我依《CP 值下滑趨勢研判》幫你看了三條時間軸。\n\n**研判：與 03/28 的配方版本異動高度相關**\n\n下滑的起點落在 03/28，正好是 R-512 從 v4.1 升到 v4.2、壓力上限由 4.0 調到 4.2 torr 的那一天。同期間原料批號沒有切換，可以排除材料變異。\n\n**建議**\n1. 先做 Process Window Study，驗證壓力確實是主因\n2. 若確認，走 DCR 把壓力上限回調至 4.0 torr\n3. 回調後觀察 2 週，確認 CP 值回升\n\n這是依指引研判的建議，責任仍在執行者。',
-          run: {
-            title: '查了這些現場數據',
+          evidence: {
+            title: '查過的現場數據',
             steps: [
               { label: '比對適用範圍', io: 'match', status: 'ok', detail: 'R-512 屬 CMP、位於 ETC-3F、CPK 1.41 < 1.5 —— 符合' },
               { label: '查 SPC 趨勢', tool: 'spc.get_trend', io: 'read', status: 'ok', detail: '近 30 天連續 9 點同側（Nelson Rule 2）' },
@@ -2233,15 +2268,14 @@ const CHAT_SCENARIOS = {
           mode: 'guided',
           skill: { id: 'sm-pr-006', title: 'CP 值下滑趨勢研判', tier: 'guided' },
           text: '我不能幫你改。剛才確實試了，被擋下來了 —— 下面那一行就是。\n\n這份 Skill 是輔助判斷型，允許清單裡只有唯讀工具。而且「調回去」在管制上跟「調過去」是同一件事：兩者都是製程參數變更，都要走 DCR，都要影響評估與回滾計畫。\n\n**你要自己做的話**\n\n1. 開一張 DCR（下面連結已帶好 R-512 與壓力參數）\n2. 影響評估這欄可以直接用我剛才的研判內容，我把時間軸整理好了\n3. 送 Section Admin 初審 → 課長核准 → 生效\n\n**不過我還是建議先做 Process Window Study。** 現在的證據是時間吻合，不是因果確立。直接回調有機會做對，但如果真正原因是別的，你會白繞一圈，而且下次還會再發生。',
-          run: {
-            title: '這次的工具呼叫紀錄',
-            steps: [
-              { label: '調整配方參數', tool: 'recipe.update_param', io: 'write', status: 'fail', detail: '已拒絕 → 改為建議', reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具' },
-            ],
+          blocked: {
+            label: '調整配方參數',
+            tool: 'recipe.update_param',
+            reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具',
           },
           links: [
-            { label: '製程變更申請（DCR）', url: '/app/dcr/create?recipe=R-512&param=pressure_upper', note: '已帶入 R-512 與壓力上限參數' },
-            { label: 'Process Window Study 排程', url: '/app/recipe/R-512/pws/create', note: '建議先做這個再決定要不要回調' },
+            { label: '開 DCR 申請', url: '/app/dcr/create?recipe=R-512&param=pressure_upper' },
+            { label: '排 Process Window Study', url: '/app/recipe/R-512/pws/create' },
           ],
         },
       ],
@@ -2344,28 +2378,25 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'general',
           text: '我查了課上的 Skill、SOP 與知識文件，**沒有找到「客戶臨時要求」這類插隊情境的決策依據**。\n\n課上有一份《排程優先序決策研判》，但它目前還在簽核中（尚未生效），而且它處理的是三線內部資源競爭，不涵蓋客戶端臨時變更 —— 那牽涉到業務承諾與違約條款，不是排程規則能決定的。\n\n這件事我不適合替你判斷。**建議直接問組長或部長**，因為要衡量的是客戶關係與其他訂單的交期風險，那些資訊不在系統裡。\n\n**另外**\n\n這種狀況應該不是第一次。要不要我列成一張任務，請課上有經驗的人把「客戶臨時變更的處理原則」寫成知識？下次有人半夜遇到，至少有東西可以參考。',
-          action: {
-            label: '好，建立追蹤任務',
-            desc: '請資深同事補齊客戶臨時變更的處理原則',
-            outcome: {
-              role: 'ai',
-              mode: 'general',
-              text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份輔助判斷 Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是輔助判斷的場景。',
-              result: {
-                variant: 'success',
-                title: '任務 #T-2026-0725-08 已建立',
-                lines: [
-                  '標題：補齊客戶臨時變更的排程處理原則',
-                  '指派：林組長 · 副本：吳部長',
-                  '到期：2026-08-05',
-                  '附件：W26-042 本次情境與對話紀錄',
-                ],
-              },
-              links: [
-                { label: '在任務管理開啟', url: '/app/tasks/T-2026-0725-08', note: '追蹤補齊進度' },
-              ],
-            },
+        },
+        { role: 'user', text: '好，幫我建一張追蹤任務。' },
+        {
+          role: 'ai',
+          mode: 'general',
+          text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份輔助判斷 Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是輔助判斷的場景。',
+          result: {
+            variant: 'success',
+            title: '任務 #T-2026-0725-08 已建立',
+            lines: [
+              '標題：補齊客戶臨時變更的排程處理原則',
+              '指派：林組長 · 副本：吳部長',
+              '到期：2026-08-05',
+              '附件：W26-042 本次情境與對話紀錄',
+            ],
           },
+          links: [
+            { label: '開啟任務', url: '/app/tasks/T-2026-0725-08' },
+          ],
         },
       ],
     },
@@ -7689,41 +7720,36 @@ function KnowledgePage({ p }) {
 /* ════════════════════════════════════════
    CHAT PAGE
 
-   2026-07-26 改版（PO 指定）：
-     · 版面改成當代 AI 對話：沒有頭像、AI 回應不包氣泡、全寬純文字
-     · 加入五種情境的腳本播放（見 data/chatScenarios.js），
-       標題直接就是該情境的目標
-     · 三態徽章保留但降級為回應下方一行細字 meta，不再是一顆大 Tag
+   2026-07-26 第一輪（PO 指定）：
+     · 當代 AI 對話版面：沒有頭像、AI 回應不包氣泡、全寬純文字
+     · 五種情境的腳本播放（見 data/chatScenarios.js）
 
-   為什麼徽章不能省：工程師若分不出「照核准流程做」跟「照 AI 建議做」，
-   每次採納都是在賭，他們會選擇不賭。這是採用率問題不是資訊架構問題。
-   見 brain/concepts/agent-skill-tiering.md「兩種 user，兩種語言」
+   2026-07-26 第二輪（PO 指定）：
+     · 互動模態收斂成兩種 —— 對話式（建議接話）＋ 決策卡
+     · 決策卡從全寬 overlay 改成對話流裡的卡片，加數字鍵與兩個出口
+     · 對話流瘦身，明細移到右側執行面板
+     · 步驟逐步播放
+
+   2026-07-26 第三輪（PO 指定，本次）：
+     · 決策卡選完會留下「✓ 已選擇：…」，回顧得到當時做了什麼決定
+     · 操作按鈕只留在最後一則；對話往下走就收起，改由右側「這次的產出」承接
+       （避免「按了會從哪裡執行、要不要帶後面的 context」的歧義）
+     · 執行面板改兩層：任務清單 → 展開看步驟，**支援同一則對話跑多份 SOP**
+     · 砍掉讀取／判斷／計算／會異動四顆 tag 與工具識別碼
+     · 砍掉每則的三態徽章 —— PO：「能執行就表示系統中有核准的 SOP」。
+       ⚠️ 代價：「這不是核准流程、責任在你」的告知責任，從 UI 轉移到
+       回應文字本身。接真實 LLM 時這是 system prompt 的硬要求，
+       見 brain/entities/modules/ai-chat.md 的 F-AI-01 驗收條件。
+
+   2026-07-26 第四輪（PO 指定，本次）：
+     · 「這次的產出」只收真的做出來的東西 —— 失敗不是產出
+     · 產物名稱本身就是連結，右側 ↗ 表示會另開分頁；不再另外掛一顆按鈕
+     · 展開收合的箭頭原本 10px 藏在左邊，改成跟標題同字級、擺在右側
    ════════════════════════════════════════ */
 
-const CHAT_ANSWER_MODE = {
-  approved: {
-    label: '依核准流程',
-    note: '本回答直接引用課上已簽核的流程，照做即可。',
-    color: '#2563EB',
-  },
-  guided: {
-    label: 'AI 依指引研判',
-    note: '本課沒有對應的標準流程，這是 AI 依課上的指引研判的建議，責任仍在執行者。',
-    color: '#7C3AED',
-  },
-  general: {
-    label: '一般回答',
-    note: '沒有引用課上已核准的 Skill，僅為一般性說明或依知識文件的整理。',
-    color: '#6B7280',
-  },
-};
-
-function getAnswerMode(msg) {
-  if (msg.mode) return msg.mode;
-  if (msg.sop) return 'approved';
-  if (msg.guidedBy) return 'guided';
-  return 'general';
-}
+/* 步驟播放速度（毫秒）：一步跑完的體感時間 / 兩個 AI 回合之間的停頓 */
+const CHAT_STEP_MS = 700;
+const CHAT_TURN_MS = 450;
 
 /* ── 極輕量 markdown：**粗體** 與段落。不引外部套件 ── */
 function ChatText({ text }) {
@@ -7750,82 +7776,39 @@ function ChatText({ text }) {
 }
 
 /* ════════════════════════════════════════
-   AnswerMeta — 回應下方的一行細字
-   （原本是大 Tag，現在降級成 meta，不打斷閱讀）
-   ════════════════════════════════════════ */
-function AnswerMeta({ msg, onOpenSkill }) {
-  var { C, fz } = useTheme();
-  var mode = getAnswerMode(msg);
-  var cfg  = CHAT_ANSWER_MODE[mode];
-  var skill = msg.skill || (msg.sop ? { title: msg.sop } : null) || (msg.guidedBy ? { title: msg.guidedBy } : null);
-  var knowledge = msg.knowledge || [];
-
-  return (
-    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-      <antd.Tooltip title={cfg.note}>
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'default' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
-          <span style={{ fontSize: fz(11), color: cfg.color, fontWeight: 600 }}>{cfg.label}</span>
-        </span>
-      </antd.Tooltip>
-
-      {skill && (
-        <React.Fragment>
-          <span style={{ fontSize: fz(11), color: C.textMuted }}>·</span>
-          <span
-            onClick={function() { onOpenSkill && onOpenSkill(skill); }}
-            style={{ fontSize: fz(11), color: C.textMuted, cursor: 'pointer', textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}
-          >{skill.title}</span>
-        </React.Fragment>
-      )}
-
-      {knowledge.map(function(k) {
-        return (
-          <React.Fragment key={k.id}>
-            <span style={{ fontSize: fz(11), color: C.textMuted }}>·</span>
-            <span style={{ fontSize: fz(11), color: C.textMuted }}>依《{k.title}》</span>
-          </React.Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ════════════════════════════════════════
-   RunBlock — 執行過程 / 工具呼叫
-   細行、灰字、不包框；「已拒絕」那一行用紅字，是全場最該被看見的一行
+   RunBlock — SOP 執行進度（對話流版）
+   只有「狀態圖示 ＋ 步驟 N ＋ 步驟名」。明細一律在右側面板。
    ════════════════════════════════════════ */
 const CHAT_RUN_STATUS = {
-  ok:    { icon: '✓', color: '#22C55E' },
-  pause: { icon: '⏸', color: '#F59E0B' },
-  fail:  { icon: '✗', color: '#EF4444' },
-  skip:  { icon: '—', color: '#9E9E9E' },
+  ok:      { icon: '✓', color: '#22C55E' },
+  pause:   { icon: '⏸', color: '#F59E0B' },
+  fail:    { icon: '✗', color: '#EF4444' },
+  skip:    { icon: '—', color: '#9E9E9E' },
+  running: { icon: '◍', color: '#2563EB' },
 };
 
-function RunBlock({ run }) {
+function RunBlock({ run, visible, inFlightIndex }) {
   var { C, fz } = useTheme();
   if (!run) return null;
+  var steps = run.steps || [];
+  var count = visible == null ? steps.length : Math.min(visible, steps.length);
+
   return (
     <div style={{ marginTop: 16, marginBottom: 8, borderLeft: '2px solid ' + C.border, paddingLeft: 16 }}>
       <div style={{ fontSize: fz(11), color: C.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: '0.04em' }}>{run.title}</div>
-      {(run.steps || []).map(function(s, i) {
-        var st = CHAT_RUN_STATUS[s.status] || CHAT_RUN_STATUS.ok;
-        var isBad = s.status === 'fail';
+      {steps.slice(0, count).map(function(s, i) {
+        var isInFlight = i === inFlightIndex;
+        var st = isInFlight ? CHAT_RUN_STATUS.running : (CHAT_RUN_STATUS[s.status] || CHAT_RUN_STATUS.ok);
+        var isBad = !isInFlight && s.status === 'fail';
         return (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-              <span style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0 }}>{st.icon}</span>
-              {s.num != null && <span style={{ fontSize: fz(11), color: C.textMuted }}>步驟 {s.num}</span>}
-              <span style={{ fontSize: fz(13), color: isBad ? '#EF4444' : C.textSub, fontWeight: 500 }}>{s.label}</span>
-              {s.tool && <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace' }}>{s.tool}</span>}
-              {s.io && <SkillIoTag io={s.io} />}
-            </div>
-            {s.detail && (
-              <div style={{ fontSize: fz(12), color: isBad ? '#EF4444' : C.textMuted, lineHeight: 1.7, paddingLeft: 20 }}>{s.detail}</div>
-            )}
-            {s.reason && (
-              <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, paddingLeft: 20 }}>原因：{s.reason}</div>
-            )}
+          <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+            <span
+              className={isInFlight ? 'pulse-dot' : ''}
+              style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0 }}
+            >{st.icon}</span>
+            {s.num != null && <span style={{ fontSize: fz(11), color: C.textMuted, flexShrink: 0 }}>步驟 {s.num}</span>}
+            <span style={{ fontSize: fz(13), color: isBad ? '#EF4444' : C.textSub, fontWeight: 500 }}>{s.label}</span>
+            {isBad && <span style={{ fontSize: fz(12), color: '#EF4444' }}>· 失敗</span>}
           </div>
         );
       })}
@@ -7833,9 +7816,21 @@ function RunBlock({ run }) {
   );
 }
 
-/* ════════════════════════════════════════
-   ResultCard — 成功 / 失敗的結果卡
-   ════════════════════════════════════════ */
+/* ── 被 Tool Gateway 擋下的寫入請求：值班的人只需要知道「AI 真的去試了，被擋下來」 ── */
+function BlockedNote({ blocked }) {
+  var { fz } = useTheme();
+  if (!blocked) return null;
+  return (
+    <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ fontSize: fz(12), flexShrink: 0 }}>🚫</span>
+      <span style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7 }}>
+        已嘗試{blocked.label}，被系統擋下
+      </span>
+    </div>
+  );
+}
+
+/* ── 成功 / 失敗的結果卡 ── */
 function ResultCard({ result }) {
   var { C, fz } = useTheme();
   if (!result) return null;
@@ -7863,94 +7858,590 @@ function ResultCard({ result }) {
 }
 
 /* ════════════════════════════════════════
-   LinkList — 操作入口
-   AI 不能代為執行時，至少要把人直接送到能做那件事的畫面
+   LinkButtons — 操作入口
+   2026-07-26 三輪：**只在最後一則顯示**。對話一往下走就收起，
+   避免「這顆還能按嗎？按了會帶哪段 context？」的歧義。
+   入口不會消失 —— 它永久落在右側面板的「這次的產出」。
    ════════════════════════════════════════ */
-function LinkList({ links }) {
-  var { C, fz } = useTheme();
+function LinkButtons({ links }) {
   if (!links || links.length === 0) return null;
   return (
-    <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ marginTop: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       {links.map(function(l, i) {
-        return (
-          <div key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '8px 16px', border: '1px solid ' + C.border, borderRadius: 8,
-            background: C.bg, cursor: 'pointer',
-          }}>
-            <span style={{ fontSize: fz(12), color: '#2563EB', flexShrink: 0 }}>↗</span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: fz(13), color: '#2563EB', fontWeight: 500 }}>{l.label}</div>
-              {l.note && <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>{l.note}</div>}
-              <div style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace', marginTop: 2, wordBreak: 'break-all' }}>{l.url}</div>
-            </div>
-          </div>
-        );
+        return <antd.Button key={i} size="small">{l.label}</antd.Button>;
       })}
     </div>
   );
 }
 
-/* ════════════════════════════════════════
-   HitlSheet — 由下而上的選單
-   人工介入的決策點。刻意不是 Modal：它是「流程停在這裡等你」，
-   不是「跳出來打斷你」。
-   ════════════════════════════════════════ */
-function HitlSheet({ sheet, onPick, onDismiss }) {
+/* ── 決策卡選完留下的痕跡：回顧時要看得出當時做了什麼決定 ── */
+function DecisionEcho({ label }) {
   var { C, fz } = useTheme();
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 20, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }}>
-      <div onClick={onDismiss} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.32)' }} />
+    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
       <div style={{
-        position: 'relative',
-        background: C.bg, borderTop: '1px solid ' + C.border,
-        borderTopLeftRadius: 16, borderTopRightRadius: 16,
-        padding: '16px 24px 24px', maxHeight: '72%', overflowY: 'auto',
-      }} className="scrollbar-thin">
-        {/* 抓握條 */}
-        <div style={{ width: 40, height: 4, borderRadius: 999, background: C.borderStrong, margin: '0 auto 16px' }} />
+        display: 'inline-flex', alignItems: 'center', gap: 8,
+        padding: '8px 16px', borderRadius: 8,
+        border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.06)',
+      }}>
+        <span style={{ fontSize: fz(12), fontWeight: 700, color: '#22C55E' }}>✓</span>
+        <span style={{ fontSize: fz(13), color: C.text }}>已選擇：{label}</span>
+      </div>
+    </div>
+  );
+}
 
-        <div style={{ maxWidth: 720, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: fz(11), fontWeight: 700, color: '#F59E0B', letterSpacing: '0.04em' }}>⏸ 流程已暫停</span>
+/* ════════════════════════════════════════
+   DecisionCard — 決策卡（唯一的「彈窗型」互動）
+   只給「會異動系統且流程卡住」的時刻出現，所以它有份量。
+   不遮罩：上面那些已完成的步驟與查到的數據，正是做決定要看的東西。
+
+   兩個出口（對到 Claude 的 Type something else / Skip）：
+     · 我有其他指示… → 收合成 chip，游標進輸入框
+     · 稍後再決定     → 收合成 chip，不動輸入框
+   ════════════════════════════════════════ */
+function DecisionCard({ sheet, stepNum, onPick, onOther, onDefer }) {
+  var { C, fz } = useTheme();
+  var options = (sheet.options || []).concat([
+    { key: '__other', label: '我有其他指示…', desc: '用下方輸入框告訴我要怎麼做', other: true },
+  ]);
+
+  /* 數字鍵：半夜三點、時限在跑，手不必離開鍵盤 */
+  React.useEffect(function() {
+    function onKey(e) {
+      var tag = (e.target && e.target.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      var idx = parseInt(e.key, 10) - 1;
+      if (isNaN(idx) || idx < 0 || idx >= options.length) return;
+      e.preventDefault();
+      var o = options[idx];
+      if (o.other) onOther(); else onPick(o);
+    }
+    window.addEventListener('keydown', onKey);
+    return function() { window.removeEventListener('keydown', onKey); };
+  }, [sheet, options.length]);
+
+  return (
+    <div className="fade-in" style={{
+      marginTop: 16, borderRadius: 8,
+      border: '1px solid ' + C.border, borderLeft: '3px solid #F59E0B',
+      background: C.bg, padding: 16,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: fz(11), fontWeight: 700, color: '#F59E0B', letterSpacing: '0.04em' }}>
+          ⏸ 流程已暫停{stepNum != null ? ' · 步驟 ' + stepNum : ''}
+        </span>
+        <div style={{ flex: 1 }} />
+        <antd.Button size="small" type="text" style={{ color: C.textMuted, fontSize: fz(12) }} onClick={onDefer}>
+          稍後再決定
+        </antd.Button>
+      </div>
+
+      <div style={{ fontSize: fz(16), fontWeight: 600, color: C.text, marginBottom: 8 }}>{sheet.title}</div>
+      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.75, marginBottom: 16 }}>{sheet.desc}</div>
+
+      {(sheet.context || []).length > 0 && (
+        <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 16px', marginBottom: 16, background: C.bgSub }}>
+          {sheet.context.map(function(c, i) {
+            return (
+              <div key={i} style={{ display: 'flex', gap: 16, padding: '4px 0' }}>
+                <span style={{ fontSize: fz(12), color: C.textMuted, width: 72, flexShrink: 0 }}>{c.label}</span>
+                <span style={{ fontSize: fz(12), color: C.text, lineHeight: 1.6 }}>{c.value}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {options.map(function(o, i) {
+          var isPrimary = !!o.primary;
+          return (
+            <button
+              key={o.key}
+              onClick={function() { if (o.other) onOther(); else onPick(o); }}
+              style={{
+                textAlign: 'left', cursor: 'pointer', width: '100%',
+                display: 'flex', alignItems: 'center', gap: 16,
+                padding: '8px 16px', borderRadius: 8, minHeight: 56,
+                border: '1px solid ' + (isPrimary ? '#2563EB' : C.border),
+                background: isPrimary ? '#2563EB' : C.bg,
+                color: isPrimary ? '#FFFFFF' : C.text,
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: fz(14), fontWeight: 600, marginBottom: 2 }}>{o.label}</div>
+                <div style={{ fontSize: fz(12), lineHeight: 1.6, color: isPrimary ? 'rgba(255,255,255,0.85)' : C.textMuted }}>{o.desc}</div>
+              </div>
+              <span style={{
+                flexShrink: 0, width: 24, height: 24, borderRadius: 6,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: fz(11), fontWeight: 600,
+                border: '1px solid ' + (isPrimary ? 'rgba(255,255,255,0.4)' : C.border),
+                color: isPrimary ? 'rgba(255,255,255,0.85)' : C.textMuted,
+              }}>{i + 1}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ── 決策卡收合後留在輸入框上方的 chip：流程沒有消失，只是先讓路 ── */
+function PendingChip({ stepNum, label, onExpand }) {
+  var { C, fz } = useTheme();
+  return (
+    <div
+      onClick={onExpand}
+      style={{
+        marginBottom: 8, cursor: 'pointer',
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 16px', borderRadius: 8,
+        border: '1px solid rgba(245,158,11,0.4)', background: 'rgba(245,158,11,0.06)',
+      }}
+    >
+      <span style={{ fontSize: fz(12), color: '#F59E0B', fontWeight: 700 }}>⏸</span>
+      <span style={{ fontSize: fz(12), color: C.text, flex: 1, minWidth: 0 }}>
+        {stepNum != null ? '步驟 ' + stepNum + ' ' : ''}等待確認中{label ? ' · ' + label : ''}
+      </span>
+      <span style={{ fontSize: fz(11), color: '#F59E0B', fontWeight: 600 }}>展開</span>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   執行面板的資料推導
+
+   計畫來源＝那份已核准 SOP 的 plainSteps（personas.js）。
+   這是我們跟一般 agent 最大的差別：計畫不是 AI 邊跑邊生的，
+   執行前就知道總共幾步、哪幾步需要人確認。
+
+   2026-07-26 三輪：改成**多段**。同一則對話可能連續呼叫好幾份 SOP，
+   以 skill.id 變化切段，每段是右側面板第一層的一個「任務」。
+   ════════════════════════════════════════ */
+const CHAT_PLAN_STATUS = {
+  todo:    { icon: '○', color: '#9E9E9E' },
+  running: { icon: '◍', color: '#2563EB' },
+  ok:      { icon: '✓', color: '#22C55E' },
+  pause:   { icon: '⏸', color: '#F59E0B' },
+  fail:    { icon: '✗', color: '#EF4444' },
+  skip:    { icon: '—', color: '#9E9E9E' },
+  branch:  { icon: '⤳', color: '#9E9E9E' },
+};
+
+const CHAT_SEG_STATUS = {
+  running: { label: '執行中',   color: '#2563EB', icon: '◍' },
+  pause:   { label: '等你決定', color: '#F59E0B', icon: '⏸' },
+  fail:    { label: '失敗',     color: '#EF4444', icon: '✗' },
+  done:    { label: '已完成',   color: '#22C55E', icon: '✓' },
+};
+
+/* 條件分支的名字：從 SOP 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
+function findBranchLabel(graph, byNum) {
+  if (!graph || !graph.edges) return null;
+  var hit = graph.edges.filter(function(e) {
+    return typeof e.from === 'number' && typeof e.to === 'number'
+      && e.to > e.from + 1 && e.label && byNum[e.from] && byNum[e.to];
+  })[0];
+  return hit ? hit.label : null;
+}
+
+function buildRunSegments(chat, sopList, stepShown, playing) {
+  if (!chat) return [];
+  var msgs = chat.messages || [];
+  var raw = [];
+  var cur = null;
+
+  msgs.forEach(function(m, idx) {
+    /* 換了一份 SOP＝開一段新任務 */
+    if (m.skill && m.skill.tier === 'sop') {
+      if (!cur || cur.skillId !== m.skill.id) {
+        var sop = (sopList || []).filter(function(s) { return s.id === m.skill.id; })[0];
+        cur = (sop && sop.plainSteps)
+          ? { skillId: m.skill.id, sop: sop, exec: {}, maxNum: 0, inFlight: null }
+          : null;
+        if (cur) raw.push(cur);
+      }
+    }
+    if (!cur) return;
+
+    var steps = (m.run && m.run.steps) || [];
+    var isLast = idx === msgs.length - 1;
+    var limit = (isLast && playing) ? Math.min(stepShown, steps.length) : steps.length;
+    for (var i = 0; i < limit; i++) {
+      var s = steps[i];
+      if (s.num == null) continue;
+      cur.exec[s.num] = s;
+      if (s.num > cur.maxNum) cur.maxNum = s.num;
+    }
+    /* 正在跑的那一步 */
+    if (isLast && playing && stepShown < steps.length && steps[stepShown].num != null) {
+      cur.inFlight = steps[stepShown].num;
+      if (cur.inFlight > cur.maxNum) cur.maxNum = cur.inFlight;
+    }
+  });
+
+  return raw.map(function(seg, i) {
+    var branchLabel = findBranchLabel(seg.sop.graph, seg.exec);
+    var steps = seg.sop.plainSteps.map(function(ps) {
+      var hit = seg.exec[ps.num];
+      var status;
+      if (ps.num === seg.inFlight) status = 'running';
+      else if (hit) status = hit.status || 'ok';
+      else if (ps.num < seg.maxNum) status = 'branch';
+      else status = 'todo';
+      return Object.assign({}, ps, {
+        status: status,
+        /* 明細一律不顯示，只有失敗要看得見原因 */
+        failDetail: status === 'fail' && hit ? hit.detail : null,
+        failReason: status === 'fail' && hit ? hit.reason : null,
+        branchLabel: status === 'branch' ? branchLabel : null,
+      });
+    });
+
+    var segStatus = 'running';
+    if (steps.filter(function(s) { return s.status === 'fail'; })[0]) segStatus = 'fail';
+    else if (steps.filter(function(s) { return s.status === 'pause'; })[0]) segStatus = 'pause';
+    else if (seg.inFlight != null) segStatus = 'running';
+    else if (!steps.filter(function(s) { return s.status === 'todo'; })[0]) segStatus = 'done';
+
+    return {
+      key: seg.skillId + '#' + i,
+      sop: seg.sop,
+      steps: steps,
+      at: seg.maxNum,
+      total: steps.length,
+      status: segStatus,
+      pauseStep: steps.filter(function(s) { return s.status === 'pause'; })[0] || null,
+    };
+  });
+}
+
+/* 這次的產出
+   **只收真的做出來的東西**。失敗不是產出（「工單未開立」放在這裡只會讓人困惑），
+   它的位置在「執行任務」那一步的紅字與對話流的結果卡。
+   入口跟著它自己那則訊息的產物走，不跨則收集 —— 這樣「手動開單／回報失效」
+   這種「你自己去做」的入口就不會混進產出清單。 */
+function collectOutputs(messages) {
+  var items = [];
+  messages.forEach(function(m) {
+    if (!m.result || m.result.variant === 'error') return;
+    items.push({ title: m.result.title, links: m.links || [] });
+  });
+  return items;
+}
+
+/* 這次用到的：只給 Skill／SOP 標題與知識文件，詳情點進去看 */
+function collectUsed(messages) {
+  var skills = [], knowledge = [], blocked = [];
+  messages.forEach(function(m) {
+    if (m.skill && !skills.filter(function(x) { return x.id === m.skill.id; })[0]) skills.push(m.skill);
+    (m.knowledge || []).forEach(function(k) {
+      if (!knowledge.filter(function(x) { return x.id === k.id; })[0]) knowledge.push(k);
+    });
+    if (m.blocked) blocked.push(m.blocked);
+  });
+  return { skills: skills, knowledge: knowledge, blocked: blocked };
+}
+
+function formatElapsed(sec) {
+  var m = Math.floor(sec / 60), s = sec % 60;
+  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+/* ════════════════════════════════════════
+   SkillPeekModal — 從面板點 Skill／SOP 進來看詳情
+   只給「有人想看」的場景，不做 Graph / Signoff / Ask AI，
+   那些在 Setting 的 Skill 管理全頁裡。
+   ════════════════════════════════════════ */
+function SkillPeekModal({ skill, sopList, onClose }) {
+  var { C, fz } = useTheme();
+  var full = (sopList || []).filter(function(s) { return s.id === skill.id; })[0];
+
+  return (
+    <antd.Modal
+      open onCancel={onClose} footer={null} width={640}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <SkillTierTag tier={skill.tier || (full && full.tier)} />
+          <span style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>{skill.title}</span>
+          {full && (
+            <span style={{ fontSize: fz(11), color: C.textMuted, fontWeight: 400 }}>
+              {full.stage === 'production' ? '已生效' : (full.stage === 'pirun' ? 'Pilot Run' : '尚未生效')}
+            </span>
+          )}
+        </div>
+      }
+    >
+      {!full ? (
+        <div style={{ fontSize: fz(13), color: C.textMuted, lineHeight: 1.8 }}>
+          這次引用的內容不在本課的 Skill 清單裡，可能來自知識文件或一般說明。
+        </div>
+      ) : (
+        <React.Fragment>
+          <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.8, marginBottom: 16 }}>{full.purpose}</div>
+
+          <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
+            {describeScope(full.scope).map(function(row, i) {
+              return (
+                <div key={row.label} style={{ display: 'flex', gap: 16, padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none' }}>
+                  <span style={{ fontSize: fz(12), color: C.textMuted, width: 72, flexShrink: 0 }}>{row.label}</span>
+                  <span style={{ fontSize: fz(13), color: C.text, lineHeight: 1.6 }}>{row.value}</span>
+                </div>
+              );
+            })}
           </div>
-          <div style={{ fontSize: fz(16), fontWeight: 600, color: C.text, marginBottom: 8 }}>{sheet.title}</div>
-          <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, marginBottom: 16 }}>{sheet.desc}</div>
 
-          {(sheet.context || []).length > 0 && (
-            <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-              {sheet.context.map(function(c, i) {
+          {(full.plainSteps || []).length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: fz(11), fontWeight: 600, color: C.textMuted, letterSpacing: '0.06em', marginBottom: 8 }}>步驟</div>
+              {full.plainSteps.map(function(s) {
                 return (
-                  <div key={i} style={{ display: 'flex', gap: 16, padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none', background: C.bgSub }}>
-                    <span style={{ fontSize: fz(12), color: C.textMuted, width: 80, flexShrink: 0 }}>{c.label}</span>
-                    <span style={{ fontSize: fz(13), color: C.text, lineHeight: 1.6 }}>{c.value}</span>
+                  <div key={s.num} style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: fz(12), color: C.textMuted, width: 16, flexShrink: 0 }}>{s.num}.</span>
+                    <span style={{ fontSize: fz(13), color: C.text, lineHeight: 1.6 }}>{s.label}</span>
+                    {s.needsConfirm && <span style={{ fontSize: fz(11), color: '#F59E0B', flexShrink: 0 }}>需人工確認</span>}
                   </div>
                 );
               })}
             </div>
           )}
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {sheet.options.map(function(o) {
+          <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.9, whiteSpace: 'pre-line' }}>
+            {(full.description || '').replace(/\*\*/g, '').replace(/^#+\s/gm, '')}
+          </div>
+        </React.Fragment>
+      )}
+    </antd.Modal>
+  );
+}
+
+/* ── 面板的可收合區塊 ──
+   2026-07-26 四輪：箭頭原本是 10px 擺在標題左邊，PO 反映「完全沒發現他是
+   一個可以展開收合的功能」。改成跟標題同一個字級、緊跟在標題右側（對齊
+   Cowork 的 `Progress ⌄` 寫法），標題也從 11px 細字提到 13px。 ── */
+function PanelGroup({ title, defaultOpen, children }) {
+  var { C, fz } = useTheme();
+  var [open, setOpen] = React.useState(defaultOpen !== false);
+  return (
+    <div style={{ borderTop: '1px solid ' + C.border }}>
+      <button
+        onClick={function() { setOpen(function(v) { return !v; }); }}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+          padding: '12px 16px', background: 'transparent', border: 'none', textAlign: 'left',
+        }}
+      >
+        <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>{title}</span>
+        <span style={{ fontSize: fz(13), color: C.textMuted, lineHeight: 1 }}>{open ? '⌃' : '⌄'}</span>
+        <span style={{ flex: 1 }} />
+      </button>
+      {open && <div style={{ padding: '0 16px 16px' }}>{children}</div>}
+    </div>
+  );
+}
+
+/* ── 產出項：產物名稱本身就是連結，右側外開 icon 表示會另開分頁 ── */
+function OutputLink({ label, onOpen }) {
+  var { C, fz } = useTheme();
+  return (
+    <button
+      onClick={onOpen}
+      style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+        padding: '4px 0', background: 'transparent', border: 'none', textAlign: 'left',
+      }}
+    >
+      <span style={{ fontSize: fz(12), fontWeight: 700, color: '#22C55E', width: 12, flexShrink: 0 }}>✓</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: fz(12), color: '#2563EB', lineHeight: 1.6, textDecoration: 'underline', textDecorationStyle: 'dotted', textUnderlineOffset: 3 }}>{label}</span>
+      <span style={{ fontSize: fz(12), color: '#2563EB', flexShrink: 0 }}>↗</span>
+    </button>
+  );
+}
+
+/* ════════════════════════════════════════
+   RunPanel — 右側執行面板
+   第一層：這則對話跑過的每一份 SOP（任務）
+   第二層：展開看步驟
+   使用者只在意兩件事 —— 執行了什麼、執行到哪。
+   ════════════════════════════════════════ */
+function RunPanel({ segments, outputs, used, elapsed, onClose, onGoDecision, onPeekSkill }) {
+  var { C, fz } = useTheme();
+  var [expanded, setExpanded] = React.useState({});
+  var hasAnything = segments.length > 0 || outputs.length > 0
+    || used.skills.length > 0 || used.knowledge.length > 0 || used.blocked.length > 0;
+
+  function isOpen(seg, i) {
+    if (expanded[seg.key] !== undefined) return expanded[seg.key];
+    return i === segments.length - 1;   /* 預設只展開最後一段 */
+  }
+
+  return (
+    <div style={{
+      width: 320, flexShrink: 0, borderLeft: '1px solid ' + C.border,
+      background: C.bgPanel, display: 'flex', flexDirection: 'column', minHeight: 0,
+    }}>
+      <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, flex: 1 }}>執行面板</div>
+        <antd.Button size="small" type="text" style={{ color: C.textMuted }} onClick={onClose} aria-label="關閉執行面板">✕</antd.Button>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-thin">
+        {!hasAnything && (
+          <div style={{ padding: 16, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+            這則對話還沒有執行紀錄。呼叫 SOP 時，這裡會列出完整的執行計畫。
+          </div>
+        )}
+
+        {/* ── 第一層：任務清單 ── */}
+        {segments.length > 0 && (
+          <PanelGroup title="執行任務">
+            {segments.map(function(seg, i) {
+              var open = isOpen(seg, i);
+              var st = CHAT_SEG_STATUS[seg.status];
+              var live = seg.status === 'running' || seg.status === 'pause';
+              return (
+                <div key={seg.key} style={{ marginBottom: 8 }}>
+                  <button
+                    onClick={function() {
+                      setExpanded(function(prev) {
+                        var n = Object.assign({}, prev); n[seg.key] = !open; return n;
+                      });
+                    }}
+                    style={{
+                      width: '100%', display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer',
+                      padding: '8px 8px', borderRadius: 6, textAlign: 'left',
+                      background: open ? C.bg : 'transparent',
+                      border: '1px solid ' + (open ? C.border : 'transparent'),
+                    }}
+                  >
+                    <span
+                      className={seg.status === 'running' ? 'pulse-dot' : ''}
+                      style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0, lineHeight: 1.6 }}
+                    >{st.icon}</span>
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span style={{ display: 'block', fontSize: fz(12), fontWeight: 600, color: C.text, lineHeight: 1.6 }}>{seg.sop.title}</span>
+                      <span style={{ display: 'block', fontSize: fz(11), color: st.color, marginTop: 2 }}>
+                        {st.label} · {seg.at}/{seg.total}
+                        {live ? ' · ' + formatElapsed(elapsed) : ''}
+                      </span>
+                    </span>
+                    <span style={{ fontSize: fz(12), color: C.textMuted, flexShrink: 0, lineHeight: 1.6 }}>{open ? '⌃' : '⌄'}</span>
+                  </button>
+
+                  {/* ── 第二層：步驟 ── */}
+                  {open && (
+                    <div style={{ paddingLeft: 24, paddingTop: 8 }}>
+                      {seg.steps.map(function(s) {
+                        var ss = CHAT_PLAN_STATUS[s.status] || CHAT_PLAN_STATUS.todo;
+                        var dim = s.status === 'todo' || s.status === 'branch' || s.status === 'skip';
+                        return (
+                          <div key={s.num} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                            <span
+                              className={s.status === 'running' ? 'pulse-dot' : ''}
+                              style={{ fontSize: fz(12), fontWeight: 700, color: ss.color, width: 12, flexShrink: 0, lineHeight: 1.6 }}
+                            >{ss.icon}</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: fz(12), color: dim ? C.textMuted : C.text, lineHeight: 1.6 }}>
+                                {s.num}. {s.label}
+                              </div>
+
+                              {/* 已經停在這裡等人 */}
+                              {s.status === 'pause' && (
+                                <React.Fragment>
+                                  <div style={{ fontSize: fz(11), color: '#F59E0B', marginTop: 2 }}>等待確認中…</div>
+                                  <antd.Button size="small" type="primary" style={{ marginTop: 8 }} onClick={onGoDecision}>去決定</antd.Button>
+                                </React.Fragment>
+                              )}
+                              {/* 還沒跑到，但跑到時會停 —— 不確定性要在開始前消掉 */}
+                              {s.status === 'todo' && s.needsConfirm && (
+                                <div style={{ fontSize: fz(11), color: '#F59E0B', marginTop: 2 }}>需人工確認</div>
+                              )}
+                              {s.status === 'branch' && (
+                                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
+                                  本次不走{s.branchLabel ? '（' + s.branchLabel + '）' : ''}
+                                </div>
+                              )}
+                              {s.failDetail && (
+                                <div style={{ fontSize: fz(11), color: '#EF4444', lineHeight: 1.7, marginTop: 2 }}>{s.failDetail}</div>
+                              )}
+                              {s.failReason && (
+                                <div style={{ fontSize: fz(11), color: '#EF4444', lineHeight: 1.7, marginTop: 2 }}>{s.failReason}</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </PanelGroup>
+        )}
+
+        {/* ── 這次的產出：產物名稱本身就是連結，右側 ↗ 表示另開分頁 ── */}
+        {outputs.length > 0 && (
+          <PanelGroup title="這次的產出">
+            {outputs.map(function(o, i) {
+              var main = o.links[0];
+              return (
+                <React.Fragment key={i}>
+                  {main
+                    ? <OutputLink label={o.title} onOpen={function() {}} />
+                    : (
+                      <div style={{ display: 'flex', gap: 8, padding: '4px 0' }}>
+                        <span style={{ fontSize: fz(12), fontWeight: 700, color: '#22C55E', width: 12, flexShrink: 0 }}>✓</span>
+                        <span style={{ fontSize: fz(12), color: C.text, lineHeight: 1.6 }}>{o.title}</span>
+                      </div>
+                    )}
+                  {/* 同一個產物若有第二個入口，各自一行 */}
+                  {o.links.slice(1).map(function(l, j) {
+                    return <OutputLink key={j} label={l.label} onOpen={function() {}} />;
+                  })}
+                </React.Fragment>
+              );
+            })}
+          </PanelGroup>
+        )}
+
+        {/* ── 這次用到的：只給標題，詳情點進去 ── */}
+        {(used.skills.length > 0 || used.knowledge.length > 0 || used.blocked.length > 0) && (
+          <PanelGroup title="這次用到的" defaultOpen={false}>
+            {used.skills.map(function(s) {
               return (
                 <button
-                  key={o.key}
-                  onClick={function() { onPick(o); }}
+                  key={s.id}
+                  onClick={function() { onPeekSkill(s); }}
                   style={{
-                    textAlign: 'left', cursor: 'pointer', width: '100%',
-                    padding: '16px 16px', borderRadius: 8,
-                    border: '1px solid ' + (o.primary ? '#2563EB' : C.border),
-                    background: o.primary ? '#2563EB' : C.bg,
-                    color: o.primary ? '#FFFFFF' : C.text,
+                    width: '100%', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
+                    padding: '8px 8px', marginBottom: 4, borderRadius: 6, textAlign: 'left',
+                    background: 'transparent', border: '1px solid ' + C.border,
                   }}
                 >
-                  <div style={{ fontSize: fz(14), fontWeight: 600, marginBottom: 4 }}>{o.label}</div>
-                  <div style={{ fontSize: fz(12), lineHeight: 1.6, color: o.primary ? 'rgba(255,255,255,0.85)' : C.textMuted }}>{o.desc}</div>
+                  <SkillTierTag tier={s.tier} size="small" />
+                  <span style={{ flex: 1, minWidth: 0, fontSize: fz(12), color: C.text, lineHeight: 1.5 }}>{s.title}</span>
+                  <span style={{ fontSize: fz(12), color: C.textMuted, flexShrink: 0 }}>›</span>
                 </button>
               );
             })}
-          </div>
-        </div>
+
+            {used.knowledge.map(function(k) {
+              return (
+                <div key={k.id} style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.9, padding: '0 8px' }}>《{k.title}》</div>
+              );
+            })}
+
+            {used.blocked.map(function(b, i) {
+              return (
+                <div key={i} style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.9, padding: '0 8px' }}>
+                  🚫 {b.label} · 已擋下
+                </div>
+              );
+            })}
+          </PanelGroup>
+        )}
       </div>
     </div>
   );
@@ -7980,10 +8471,10 @@ var QUICK_PROMPTS = {
 
 /* ════════════════════════════════════════
    MessageList — 訊息渲染
-   AI：全寬純文字、無氣泡無框、無頭像
-   User：右對齊淡底，不用藍底白字實心塊
+   AI：全寬純文字、無氣泡無框、無頭像、無徽章
+   User：右對齊淡底
    ════════════════════════════════════════ */
-function MessageList({ messages, onOpenSkill, onAction, actionUsed }) {
+function MessageList({ messages, stepShown, playing }) {
   var { C, fz } = useTheme();
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
@@ -7999,35 +8490,22 @@ function MessageList({ messages, onOpenSkill, onAction, actionUsed }) {
             </div>
           );
         }
+        var isLast = i === messages.length - 1;
+        var live = isLast && playing;
+        var total = (msg.run && msg.run.steps && msg.run.steps.length) || 0;
         return (
           <div key={i} style={{ marginTop: i === 0 ? 0 : 24, marginBottom: 8 }}>
             <ChatText text={msg.text} />
-            <RunBlock run={msg.run} />
+            <RunBlock
+              run={msg.run}
+              visible={live ? Math.min(stepShown + 1, total) : total}
+              inFlightIndex={live && stepShown < total ? stepShown : -1}
+            />
+            <BlockedNote blocked={msg.blocked} />
             <ResultCard result={msg.result} />
-            <LinkList links={msg.links} />
-            <AnswerMeta msg={msg} onOpenSkill={onOpenSkill} />
-
-            {/* 行動按鈕（例如：把這件事列成任務） */}
-            {msg.action && !actionUsed[i] && (
-              <div style={{ marginTop: 16, padding: '8px 16px', border: '1px dashed ' + C.borderStrong, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>{msg.action.label}</div>
-                  {msg.action.desc && <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>{msg.action.desc}</div>}
-                </div>
-                <antd.Space size={8}>
-                  <antd.Button size="small" onClick={function() { onAction(i, null); }}>不用</antd.Button>
-                  <antd.Button size="small" type="primary" onClick={function() { onAction(i, msg.action.outcome); }}>好</antd.Button>
-                </antd.Space>
-              </div>
-            )}
-
-            {/* 舊資料的貢獻知識動作 */}
-            {msg.action == null && msg.actionLegacy === 'contribute' && (
-              <antd.Space size={8} style={{ marginTop: 16 }}>
-                <antd.Button size="small" type="primary">確認提交</antd.Button>
-                <antd.Button size="small">略過</antd.Button>
-              </antd.Space>
-            )}
+            {/* 操作入口只留在最後一則，往下走就交給右側面板 */}
+            {isLast && <LinkButtons links={msg.links} />}
+            {msg.sheetAnswered && <DecisionEcho label={msg.sheetAnswered} />}
           </div>
         );
       })}
@@ -8042,7 +8520,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
   var { C, fz } = useTheme();
   const hasDraft = !!(aiDraft && aiDraft.text);
 
-  /* ── 對話來源：五個情境腳本 + 歷史對話 ── */
+  /* ── 對話來源：情境腳本 + 歷史對話 ── */
   function buildChats(persona) {
     var scenarios = getChatScenarios(persona.key).map(function(sc) {
       return {
@@ -8055,9 +8533,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
       return {
         id: 'h-' + c.id, title: c.title, time: c.time,
         scenario: false,
-        messages: (c.messages || []).map(function(m) {
-          return Object.assign({}, m, { actionLegacy: m.action });
-        }),
+        messages: (c.messages || []).slice(),
       };
     });
     return scenarios.concat(history);
@@ -8069,90 +8545,183 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
   const [contextExpanded, setContextExpanded] = React.useState(false);
   const [searchQuery, setSearchQuery] = React.useState('');
   const [hoveredChatId, setHoveredChatId] = React.useState(null);
-  const [sheetOpen, setSheetOpen] = React.useState(false);
-  const [actionUsed, setActionUsed] = React.useState({});
-  const [skillDrawer, setSkillDrawer] = React.useState(null);
   const scrollRef = React.useRef(null);
+  const inputRef  = React.useRef(null);
+
+  /* ── 逐步播放 ──
+     playing：腳本正在自己往下跑
+     stepShown：最後一則訊息裡「已經跑完」的步驟數（第 stepShown 步正在跑） */
+  const [playing, setPlaying]     = React.useState(false);
+  const [stepShown, setStepShown] = React.useState(999);
+
+  /* ── 決策卡與執行面板 ── */
+  const [sheetCollapsed, setSheetCollapsed] = React.useState(false);
+  const [panelOpen, setPanelOpen]           = React.useState(false);
+  const [panelDismissed, setPanelDismissed] = React.useState({});
+  const [elapsed, setElapsed]               = React.useState(0);
+  const [peekSkill, setPeekSkill]           = React.useState(null);
+
+  const activeChat = chats.filter(function(c) { return c.id === activeId; })[0];
+  const isNewChat = activeId === null;
 
   /* persona 切換時重建 */
   React.useEffect(function() {
     var next = buildChats(p);
     setChats(next);
     setActiveId((next[0] || {}).id || null);
-    setActionUsed({});
-    setSheetOpen(false);
+    setPlaying(false);
+    setStepShown(999);
+    setSheetCollapsed(false);
+    setPanelOpen(false);
+    setPanelDismissed({});
+    setElapsed(0);
+    setPeekSkill(null);
   }, [p.key]);
 
-  const activeChat = chats.filter(function(c) { return c.id === activeId; })[0];
-  const isNewChat = activeId === null;
-
-  /* 捲到底 */
-  React.useEffect(function() {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [activeChat && activeChat.messages.length, activeId]);
-
-  /* ── 腳本播放 ──
-     使用者按下「建議接話」→ 揭露那句 user turn，接著自動揭露後續 AI 回合，
-     直到遇到需要操作的東西（sheet / action）或下一句又是使用者發言為止。 */
-  function advanceScript(chatId) {
-    setChats(function(prev) {
-      return prev.map(function(c) {
-        if (c.id !== chatId || !c.scenario) return c;
-        var msgs = c.messages.slice();
-        var cur  = c.cursor;
-        var turns = c.turns;
-        if (cur >= turns.length) return c;
-
-        /* 第一句一定是 user */
-        msgs.push(turns[cur]);
-        cur += 1;
-
-        /* 接著把連續的 AI 回合放出來，遇到需要操作的就停 */
-        while (cur < turns.length && turns[cur].role === 'ai') {
-          var t = turns[cur];
-          msgs.push(t);
-          cur += 1;
-          if (t.sheet || t.action) break;
-        }
-        return Object.assign({}, c, { messages: msgs, cursor: cur });
-      });
-    });
+  /* ── 待決策的卡：掃全部訊息（使用者可能在暫停時先問了別的）── */
+  var pendingSheet = null;
+  if (activeChat) {
+    for (var si = activeChat.messages.length - 1; si >= 0; si--) {
+      if (activeChat.messages[si].sheet) { pendingSheet = activeChat.messages[si].sheet; break; }
+    }
   }
 
-  /* 由下而上的選單：選完把 outcome 接上去，再繼續往下播 */
+  /* ── 執行面板資料 ── */
+  const sopList  = (p.knowledge && p.knowledge.sopManagement) || [];
+  const segments = activeChat ? buildRunSegments(activeChat, sopList, stepShown, playing) : [];
+  const outputs  = collectOutputs((activeChat && activeChat.messages) || []);
+  const used     = collectUsed((activeChat && activeChat.messages) || []);
+  const pauseSeg = segments.filter(function(s) { return s.pauseStep; })[0] || null;
+  const pauseStepNum   = pauseSeg ? pauseSeg.pauseStep.num : null;
+  const pauseStepLabel = pauseSeg ? pauseSeg.pauseStep.label : null;
+  const hasPlan = segments.length > 0;
+
+  /* 偵測到 SOP 執行就自動把面板打開；使用者關過之後，同一則對話不再自動開 */
+  React.useEffect(function() {
+    if (hasPlan && activeId && !panelDismissed[activeId]) setPanelOpen(true);
+  }, [hasPlan, activeId]);
+
+  function closePanel() {
+    setPanelOpen(false);
+    if (activeId) setPanelDismissed(function(prev) {
+      var n = Object.assign({}, prev); n[activeId] = true; return n;
+    });
+  }
+  function togglePanel() {
+    if (panelOpen) closePanel();
+    else {
+      setPanelOpen(true);
+      if (activeId) setPanelDismissed(function(prev) {
+        var n = Object.assign({}, prev); delete n[activeId]; return n;
+      });
+    }
+  }
+
+  /* 計時：只在真的在跑、或流程停下等人的時候走
+     —— 這兩個時刻才是「分秒必爭」的時刻 */
+  React.useEffect(function() {
+    if (!hasPlan || (!playing && !pendingSheet)) return;
+    var t = setInterval(function() { setElapsed(function(v) { return v + 1; }); }, 1000);
+    return function() { clearInterval(t); };
+  }, [hasPlan, playing, !!pendingSheet]);
+
+  /* 捲到底：逐步播放時每一步都要跟上 */
+  React.useEffect(function() {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [activeChat && activeChat.messages.length, activeId, stepShown]);
+
+  /* 新的決策卡出現時預設展開 */
+  React.useEffect(function() {
+    if (pendingSheet) setSheetCollapsed(false);
+  }, [pendingSheet]);
+
+  /* ── 腳本推進：一次只揭露一個 turn ── */
+  function pushTurn(chatId) {
+    setChats(function(prev) {
+      return prev.map(function(c) {
+        if (c.id !== chatId || !c.scenario || c.cursor >= c.turns.length) return c;
+        return Object.assign({}, c, {
+          messages: c.messages.concat([c.turns[c.cursor]]),
+          cursor: c.cursor + 1,
+        });
+      });
+    });
+    setStepShown(0);
+  }
+
+  /* ── 播放器：步驟一步一步跑完，再接下一個 AI 回合，遇到決策卡或輪到使用者就停 ── */
+  React.useEffect(function() {
+    if (!playing) return;
+    if (!activeChat || !activeChat.scenario) { setPlaying(false); return; }
+    var msgs = activeChat.messages;
+    var last = msgs[msgs.length - 1];
+
+    /* 1. 這一則還有步驟沒跑完 */
+    if (last && last.run && last.run.steps && stepShown < last.run.steps.length) {
+      var t1 = setTimeout(function() { setStepShown(function(s) { return s + 1; }); }, CHAT_STEP_MS);
+      return function() { clearTimeout(t1); };
+    }
+    /* 2. 流程停在決策卡 */
+    if (last && last.sheet) { setPlaying(false); return; }
+    /* 3. 下一個回合；輪到使用者就停下來等他按建議接話 */
+    var nt = activeChat.turns[activeChat.cursor];
+    if (!nt || nt.role === 'user') { setPlaying(false); return; }
+    var t2 = setTimeout(function() { pushTurn(activeChat.id); }, CHAT_TURN_MS);
+    return function() { clearTimeout(t2); };
+  }, [playing, stepShown, activeId, activeChat && activeChat.messages.length, activeChat && activeChat.cursor]);
+
+  /* 建議接話：揭露那句使用者發言，然後交給播放器 */
+  function advanceScript() {
+    if (!activeChat) return;
+    pushTurn(activeChat.id);
+    setPlaying(true);
+  }
+
+  /* 決策卡：把選擇留在畫面上（DecisionEcho），再接 AI 的執行結果 */
   function pickSheetOption(option) {
-    setSheetOpen(false);
     setChats(function(prev) {
       return prev.map(function(c) {
         if (c.id !== activeId) return c;
         var msgs = c.messages.slice();
-        /* 把已回答的 sheet 標記掉，避免重複開啟 */
         for (var k = msgs.length - 1; k >= 0; k--) {
           if (msgs[k].sheet) { msgs[k] = Object.assign({}, msgs[k], { sheet: null, sheetAnswered: option.label }); break; }
         }
         if (option.outcome) msgs.push(option.outcome);
-        var cur = c.cursor;
-        while (cur < c.turns.length && c.turns[cur].role === 'ai') {
-          var t = c.turns[cur];
-          msgs.push(t);
-          cur += 1;
-          if (t.sheet || t.action) break;
-        }
-        return Object.assign({}, c, { messages: msgs, cursor: cur });
+        return Object.assign({}, c, { messages: msgs });
       });
     });
+    setStepShown(0);
+    setSheetCollapsed(false);
+    setPlaying(true);
   }
 
-  /* 行動按鈕（建立任務等） */
-  function handleAction(msgIndex, outcome) {
-    setActionUsed(function(prev) { var n = Object.assign({}, prev); n[msgIndex] = true; return n; });
-    if (!outcome) return;
+  /* 出口一：我有其他指示 → 收起卡片，游標進輸入框 */
+  function deferToInput() {
+    setSheetCollapsed(true);
+    setTimeout(function() { if (inputRef.current) inputRef.current.focus(); }, 0);
+  }
+  /* 出口二：稍後再決定 → 只收起卡片 */
+  function deferSheet() { setSheetCollapsed(true); }
+
+  /* 自由輸入：情境展示尚未接模型，誠實說明而不是靜靜吃掉 */
+  function sendFreeText() {
+    var t = inputVal.trim();
+    if (!t) return;
+    setInputVal('');
+    if (clearAiDraft) clearAiDraft();
+    if (!activeChat) return;
     setChats(function(prev) {
       return prev.map(function(c) {
         if (c.id !== activeId) return c;
-        return Object.assign({}, c, { messages: c.messages.concat([outcome]) });
+        return Object.assign({}, c, {
+          messages: c.messages.concat([
+            { role: 'user', text: t },
+            { role: 'ai', text: '這是情境展示，自由輸入還沒接上模型。請用下方的建議接話推進；如果流程正停在決策點，點上方的卡片繼續。' },
+          ]),
+        });
       });
     });
+    setStepShown(999);
   }
 
   function deleteChat(chatId) {
@@ -8166,26 +8735,27 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
         return c.id === chatId && c.scenario ? Object.assign({}, c, { messages: [], cursor: 0 }) : c;
       });
     });
-    setActionUsed({});
-    setSheetOpen(false);
+    setPlaying(false);
+    setStepShown(999);
+    setSheetCollapsed(false);
+    setElapsed(0);
+    setPanelOpen(false);
+    setPanelDismissed(function(prev) { var n = Object.assign({}, prev); delete n[chatId]; return n; });
   }
 
-  /* 待處理的 sheet（腳本停在需要人工介入的那一刻） */
-  var pendingSheet = null;
-  if (activeChat && activeChat.messages.length > 0) {
-    var last = activeChat.messages[activeChat.messages.length - 1];
-    if (last.sheet) pendingSheet = last.sheet;
+  function selectChat(chatId) {
+    setActiveId(chatId);
+    setPlaying(false);
+    setStepShown(999);
+    setSheetCollapsed(false);
+    setElapsed(0);
   }
-  /* 需要人工介入時自動把選單升起來 */
-  React.useEffect(function() {
-    if (pendingSheet) setSheetOpen(true);
-  }, [pendingSheet]);
 
-  /* 下一句建議接話 */
+  /* 下一句建議接話（播放中不給點，避免連按跳過步驟） */
   var nextTurn = null;
   if (activeChat && activeChat.scenario && activeChat.cursor < activeChat.turns.length) {
-    var nt = activeChat.turns[activeChat.cursor];
-    if (nt.role === 'user') nextTurn = nt;
+    var nt0 = activeChat.turns[activeChat.cursor];
+    if (nt0.role === 'user') nextTurn = nt0;
   }
 
   /* ── 側欄分組 ── */
@@ -8198,13 +8768,6 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
     { label: '歷史對話', items: filteredChats.filter(function(c) { return !c.scenario; }) },
   ].filter(function(g) { return g.items.length > 0; });
 
-  /* ── Skill 抽屜（點回應下方的來源） ── */
-  function openSkillDrawer(skill) {
-    var all = (p.knowledge && p.knowledge.sopManagement) || [];
-    var found = all.filter(function(s) { return s.id === skill.id || s.title === skill.title; })[0];
-    setSkillDrawer(found || { title: skill.title, missing: true });
-  }
-
   const quickPrompts = QUICK_PROMPTS[p.key] || QUICK_PROMPTS.equipment;
 
   return (
@@ -8213,7 +8776,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
       {/* ══ 側欄 ══ */}
       <div style={{ width: 240, borderRight: '1px solid ' + C.border, display: 'flex', flexDirection: 'column', flexShrink: 0, background: C.bgPanel }}>
         <div style={{ padding: '12px 12px 8px', borderBottom: '1px solid ' + C.border }}>
-          <antd.Button type="primary" block onClick={function() { setActiveId(null); if (clearAiDraft) clearAiDraft(); }}>+ 新對話</antd.Button>
+          <antd.Button type="primary" block onClick={function() { selectChat(null); if (clearAiDraft) clearAiDraft(); }}>+ 新對話</antd.Button>
         </div>
         <div style={{ padding: '8px 8px 0' }}>
           <antd.Input
@@ -8243,7 +8806,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
                       onMouseLeave={function() { setHoveredChatId(null); }}
                     >
                       <button
-                        onClick={function() { setActiveId(chat.id); setActionUsed({}); }}
+                        onClick={function() { selectChat(chat.id); }}
                         style={{
                           width: '100%', textAlign: 'left', cursor: 'pointer',
                           padding: '8px 8px', borderRadius: 6,
@@ -8287,7 +8850,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
       </div>
 
       {/* ══ 主區 ══ */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: C.bg, position: 'relative' }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, background: C.bg }}>
 
         {/* 標題列：情境對話的標題就是它要演的目標 */}
         <div style={{ padding: '12px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
@@ -8304,6 +8867,9 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
           {activeChat && activeChat.scenario && activeChat.messages.length > 0 && (
             <antd.Button size="small" onClick={function() { resetScenario(activeChat.id); }}>↺ 重播</antd.Button>
           )}
+          {activeChat && (
+            <antd.Button size="small" type={panelOpen ? 'primary' : 'default'} onClick={togglePanel}>▤ 執行面板</antd.Button>
+          )}
         </div>
 
         {/* 訊息區 */}
@@ -8315,7 +8881,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
               <div style={{ fontSize: fz(13), color: C.textMuted, textAlign: 'center', maxWidth: 480, lineHeight: 1.7 }}>
                 {hasDraft
                   ? ('已帶入「' + aiDraft.label + '」作為參考，直接輸入問題即可')
-                  : '左側「情境展示」有五段可以直接點著走的對話，示範 AI 在不同狀況下能做什麼、不能做什麼'}
+                  : '左側「情境展示」有幾段可以直接點著走的對話，示範 AI 在不同狀況下能做什麼、不能做什麼'}
               </div>
               {!hasDraft && (
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, maxWidth: 480, width: '100%', marginTop: 8 }}>
@@ -8334,12 +8900,20 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
               )}
             </div>
           ) : activeChat && activeChat.messages.length > 0 ? (
-            <MessageList
-              messages={activeChat.messages}
-              onOpenSkill={openSkillDrawer}
-              onAction={handleAction}
-              actionUsed={actionUsed}
-            />
+            <React.Fragment>
+              <MessageList messages={activeChat.messages} stepShown={stepShown} playing={playing} />
+              {pendingSheet && !sheetCollapsed && (
+                <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
+                  <DecisionCard
+                    sheet={pendingSheet}
+                    stepNum={pauseStepNum}
+                    onPick={pickSheetOption}
+                    onOther={deferToInput}
+                    onDefer={deferSheet}
+                  />
+                </div>
+              )}
+            </React.Fragment>
           ) : activeChat && activeChat.scenario ? (
             <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px', textAlign: 'center' }}>
               <div style={{ fontSize: fz(16), fontWeight: 600, color: C.text, marginBottom: 8 }}>{activeChat.title}</div>
@@ -8376,101 +8950,76 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
               />
             )}
 
+            {/* 決策卡收起時，流程沒有消失，chip 一直留在這裡 */}
+            {pendingSheet && sheetCollapsed && (
+              <PendingChip
+                stepNum={pauseStepNum}
+                label={pauseStepLabel}
+                onExpand={function() { setSheetCollapsed(false); }}
+              />
+            )}
+
             {/* 建議接話：腳本的下一句由使用者按了才推進 */}
             {nextTurn && !pendingSheet && (
               <div style={{ marginBottom: 8 }}>
                 <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 4 }}>建議接話</div>
                 <button
-                  onClick={function() { advanceScript(activeChat.id); }}
+                  disabled={playing}
+                  onClick={advanceScript}
                   style={{
-                    width: '100%', textAlign: 'left', cursor: 'pointer',
+                    width: '100%', textAlign: 'left', cursor: playing ? 'default' : 'pointer',
                     padding: '12px 16px', borderRadius: 12,
                     border: '1px solid ' + C.borderStrong, background: C.bgSub,
-                    fontSize: fz(14), color: C.textSub, lineHeight: 1.7,
+                    fontSize: fz(14), color: playing ? C.textMuted : C.textSub, lineHeight: 1.7,
+                    opacity: playing ? 0.6 : 1,
                   }}
                 >{nextTurn.text}</button>
-              </div>
-            )}
-
-            {/* 流程停下等人時，把入口留著 */}
-            {pendingSheet && !sheetOpen && (
-              <div style={{ marginBottom: 8 }}>
-                <antd.Button block type="primary" onClick={function() { setSheetOpen(true); }}>
-                  ⏸ 流程等你決定 — 開啟選單
-                </antd.Button>
               </div>
             )}
 
             {/* 輸入列 */}
             <div style={{ background: C.bg, border: '1px solid ' + C.borderStrong, borderRadius: 12, display: 'flex', alignItems: 'flex-end', gap: 8, padding: '8px 8px 8px 16px' }}>
               <antd.Input.TextArea
+                ref={inputRef}
                 variant="borderless"
                 value={inputVal}
                 autoSize={{ minRows: 1, maxRows: 6 }}
                 onChange={function(e) { setInputVal(e.target.value); }}
-                onPressEnter={function(e) { e.preventDefault(); setInputVal(''); if (clearAiDraft) clearAiDraft(); }}
+                onKeyDown={function(e) {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendFreeText(); }
+                }}
                 aria-label="輸入訊息"
-                placeholder={activeChat && activeChat.scenario ? '這是情境展示，請用上方的建議接話推進…' : '輸入訊息…'}
+                placeholder={
+                  pendingSheet && sheetCollapsed ? '告訴我你想怎麼做（例如：只開 P3、先不要通知）…'
+                    : (activeChat && activeChat.scenario ? '這是情境展示，請用上方的建議接話推進…' : '輸入訊息…')
+                }
                 style={{ flex: 1, padding: 0, fontSize: fz(15), resize: 'none' }}
               />
-              <antd.Button type="primary" shape="circle" disabled={!inputVal.trim()}
-                onClick={function() { setInputVal(''); if (clearAiDraft) clearAiDraft(); }}>↑</antd.Button>
+              <antd.Button type="primary" shape="circle" disabled={!inputVal.trim()} onClick={sendFreeText}>↑</antd.Button>
             </div>
             <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, textAlign: 'center' }}>
               AI 的回答可能有誤，涉及設備動作前請自行確認。
             </div>
           </div>
         </div>
-
-        {/* 由下而上的選單 */}
-        {pendingSheet && sheetOpen && (
-          <HitlSheet sheet={pendingSheet} onPick={pickSheetOption} onDismiss={function() { setSheetOpen(false); }} />
-        )}
       </div>
 
-      {/* ══ Skill 抽屜：點回應下方的來源會開 ══ */}
-      {skillDrawer && (
-        <div style={{ position: 'absolute', inset: 0 }}>
-          <antd.Drawer
-            open onClose={function() { setSkillDrawer(null); }}
-            getContainer={false} width={400}
-            title={
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                {skillDrawer.tier && <SkillTierTag tier={skillDrawer.tier} />}
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{skillDrawer.title}</div>
-                  <div style={{ fontSize: fz(11), color: C.textMuted, fontWeight: 400 }}>
-                    {skillDrawer.missing ? '此內容不在本課的 Skill 清單' : (skillDrawer.stage === 'production' ? '已生效' : '尚未生效')}
-                  </div>
-                </div>
-              </div>
-            }
-            styles={{ body: { padding: 16 } }}
-          >
-            {skillDrawer.missing ? (
-              <div style={{ fontSize: fz(13), color: C.textMuted, lineHeight: 1.8 }}>
-                這次回答引用的內容不在本課的 Skill 清單裡，可能來自知識文件或一般說明。
-              </div>
-            ) : (
-              <React.Fragment>
-                <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.8, marginBottom: 16 }}>{skillDrawer.purpose}</div>
-                <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', marginBottom: 16 }}>
-                  {describeScope(skillDrawer.scope).map(function(row, i) {
-                    return (
-                      <div key={row.label} style={{ display: 'flex', gap: 8, padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none' }}>
-                        <span style={{ fontSize: fz(11), color: C.textMuted, width: 64, flexShrink: 0 }}>{row.label}</span>
-                        <span style={{ fontSize: fz(12), color: C.text, lineHeight: 1.6 }}>{row.value}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-                <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.9, whiteSpace: 'pre-line' }}>
-                  {(skillDrawer.description || '').replace(/\*\*/g, '').replace(/^#+\s/gm, '')}
-                </div>
-              </React.Fragment>
-            )}
-          </antd.Drawer>
-        </div>
+      {/* ══ 右側執行面板 ══ */}
+      {panelOpen && activeChat && (
+        <RunPanel
+          segments={segments}
+          outputs={outputs}
+          used={used}
+          elapsed={elapsed}
+          onClose={closePanel}
+          onGoDecision={function() { setSheetCollapsed(false); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }}
+          onPeekSkill={function(s) { setPeekSkill(s); }}
+        />
+      )}
+
+      {/* ══ Skill／SOP 詳情 popout ══ */}
+      {peekSkill && (
+        <SkillPeekModal skill={peekSkill} sopList={sopList} onClose={function() { setPeekSkill(null); }} />
       )}
     </div>
   );
