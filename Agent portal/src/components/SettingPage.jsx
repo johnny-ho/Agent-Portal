@@ -889,6 +889,19 @@ function KnowledgeTab({ p }) {
 }
 
 /* ═══════════════════════════════════
+   Tab 6：知識管理
+   2026-07-26：知識從 Skill 管理拆出來獨立。
+   它在輔助判斷／SOP 執行前後都會被引用，是底料不是平行路線。
+   ═══════════════════════════════════ */
+function KnowledgeDocTab({ p }) {
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <KnowledgePage p={p} />
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════
    Personal Tab：個人偏好設定
    ═══════════════════════════════════ */
 function PersonalSettingTab({ notifPrefs, onNotifPrefChange }) {
@@ -1586,6 +1599,7 @@ var MGMT_TABS = [
   { key: 'home',         label: '首頁設定' },
   { key: 'kpi-report',   label: 'KPI 報表管理' },
   { key: 'knowledge',    label: 'Skill 管理' },
+  { key: 'knowledge-doc', label: '知識管理' },
   { key: 'qna',          label: 'Q&A 管理' },
 ];
 
@@ -2447,7 +2461,7 @@ function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser,
     if (!isITUser && activeTab === 'app-management') setActiveTab('personal');
   }, [isSeedUser, isITUser]);
 
-  var seedOnlyTabs = ['permissions', 'home', 'kpi-report', 'knowledge', 'qna'];
+  var seedOnlyTabs = ['permissions', 'home', 'kpi-report', 'knowledge', 'knowledge-doc', 'qna'];
   var isSeedOnlyTabs = seedOnlyTabs;
 
   function NavBtn({ tabKey, label, sub }) {
@@ -2533,6 +2547,7 @@ function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser,
         {activeTab === 'kpi-report'     && <KpiReportSettingTab p={p} isSeedUser={isSeedUser} />}
         {activeTab === 'home'           && <HomeLayoutTab p={p} homeLayout={homeLayout} onHomeLayoutChange={onHomeLayoutChange} onNavigateToTab={setActiveTab} jumpSlot={jumpSlot} onJumpSlotConsumed={function() { setJumpSlot(null); }} kpiConfig={kpiConfig} onKpiConfigChange={onKpiConfigChange} jumpWidgetType={jumpWidgetType} onJumpWidgetTypeConsumed={function() { setJumpWidgetType(null); }} />}
         {activeTab === 'knowledge'      && <KnowledgeTab p={p} />}
+        {activeTab === 'knowledge-doc' && <KnowledgeDocTab p={p} />}
         {activeTab === 'qna'            && <WIPSettingTab title="Q&A 管理" />}
         {activeTab === 'app-management' && (
           <AppManagementTab functionTree={functionTree} onFunctionTreeChange={onFunctionTreeChange} />

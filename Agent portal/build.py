@@ -21,6 +21,8 @@ OUTPUT_FILE = os.path.join(os.path.dirname(BASE_DIR), 'index.html')
 # ── JS/JSX 模組載入順序（順序很重要！下層依賴上層）────────────────────────
 JS_MODULES = [
     os.path.join(SRC_DIR, 'data',       'personas.js'),
+    os.path.join(SRC_DIR, 'data',       'knowledge.js'),
+    os.path.join(SRC_DIR, 'data',       'chatScenarios.js'),
     os.path.join(SRC_DIR, 'data',       'tasks.js'),
     os.path.join(SRC_DIR, 'data',       'scheduling.js'),
     os.path.join(SRC_DIR, 'data',       'apps.js'),
@@ -35,6 +37,7 @@ JS_MODULES = [
     os.path.join(SRC_DIR, 'components', 'ChatPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SkillCreateFlow.jsx'),
     os.path.join(SRC_DIR, 'components', 'SkillManagementPage.jsx'),
+    os.path.join(SRC_DIR, 'components', 'SkillDetailPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SettingPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'TaskManagementPage.jsx'),
     os.path.join(SRC_DIR, 'components', 'SchedulingPage.jsx'),
