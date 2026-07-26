@@ -178,7 +178,33 @@ const SKILL_TIER_CFG = {
   },
 };
 
-const SKILL_TIERS = ['knowledge', 'guided', 'sop'];
+/* Skill 管理清單只有這兩種。
+   2026-07-26 PO 決議：知識從 Skill 管理拆出去獨立成一頁，
+   因為它在輔助判斷／SOP 執行前後都會被引用，不是與它們平行的第三條路線。
+   SKILL_TIER_CFG.knowledge 保留，僅供舊資料與知識頁的用語一致性使用。 */
+const SKILL_TIERS = ['guided', 'sop'];
+
+/* ── 步驟的讀寫性質：Graph 節點與工具列都吃這一份 ── */
+const SKILL_IO_CFG = {
+  read:     { label: '讀取',   color: '#22C55E', bg: 'rgba(34,197,94,0.08)',   icon: '↓' },
+  write:    { label: '會異動', color: '#EF4444', bg: 'rgba(239,68,68,0.08)',   icon: '↑' },
+  compute:  { label: '計算',   color: '#6B7280', bg: 'rgba(107,114,128,0.08)', icon: '=' },
+  decision: { label: '判斷',   color: '#F59E0B', bg: 'rgba(245,158,11,0.08)',  icon: '◆' },
+  match:    { label: '比對',   color: '#2563EB', bg: 'rgba(37,99,235,0.08)',   icon: '◆' },
+};
+
+function SkillIoTag({ io }) {
+  var { fz } = useTheme();
+  var cfg = SKILL_IO_CFG[io];
+  if (!cfg) return null;
+  return (
+    <antd.Tag bordered={false} style={{
+      marginInlineEnd: 0, borderRadius: 999, flexShrink: 0,
+      color: cfg.color, background: cfg.bg,
+      fontSize: fz(10), fontWeight: 600, lineHeight: '16px', paddingInline: 8,
+    }}>{cfg.label}</antd.Tag>
+  );
+}
 
 /* 類型徽章（清單欄位、詳情、Chat 都共用同一顆）*/
 function SkillTierTag({ tier, size }) {
