@@ -20,11 +20,18 @@
    決策卡只給「會異動系統且流程卡住」的時刻；其餘一律用對話推進。
    原本的 action 行動按鈕（不用／好）已全數改寫成 user turn。
 
+   ── 2026-07-27 第五輪（PO 指定）──
+   右側面板從「任務→步驟」兩層改成**計畫一層**：步驟明細全部回到對話流，
+   面板只回答「這次要做幾件事、做到第幾件」。因此新增 `plan` —
+   **Orchestrator 在開跑之前就宣告的計畫**，不是邊跑邊長出來的。
+   面板只留最新一份計畫；產出仍累積整段對話。
+
    turn 形狀：
      { role: 'user', text }
      { role: 'ai',
        mode:  'approved' | 'guided' | 'general',   // 三態徽章
        skill: { id, title, tier },                  // 命中的 Skill／SOP
+       plan:  { title, items: [{ key, skillId, title, tier }] },  // 宣告計畫（開跑前）
        knowledge: [{ id, title }],                  // 引用的知識文件
        text,                                        // 主要回應（無氣泡，全寬）
        run:      { title, steps: [...] },           // SOP 執行進度 → 對話流只顯示步驟名
@@ -47,16 +54,25 @@ const CHAT_SCENARIOS = {
     /* ── 情境 1：SOP 執行 · 人工介入 · 順利完成 ── */
     {
       id: 'sc-eq-1',
-      title: '執行 SPC 異常開單 SOP（中途需人工確認）',
-      goal: '呼叫 SOP → 寫入步驟停下 → 確認開單 → 接著跑第二份 SOP（面板出現兩個任務）',
+      title: '一句話要跑兩份 SOP（中途需人工確認）',
+      goal: 'Orchestrator 開跑前宣告 2 項計畫 → 第 1 項寫入步驟停下 → 確認開單 → 自動接第 2 項',
       time: '今天 07:52',
       turns: [
-        { role: 'user', text: '幫我跑一次今天的 SPC 異常日報與開單。' },
+        { role: 'user', text: '幫我跑一次今天的 SPC 異常日報與開單，跑完把當班交接報告也一起整理好。' },
         {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-008', title: 'SPC 異常日報與開單', tier: 'sop' },
-          text: '已比對適用範圍（CMP／ETCH、ETC-2F 與 3F）並綁定這份已核准的 SOP，開始執行。',
+          /* 計畫在第一步開跑之前就宣告 —— 面板的價值來自「不用做帶不確定性的等待」，
+             邊跑邊冒出新項目就沒有這個價值了。文字不重複列計畫（右側已經有）。 */
+          plan: {
+            title: '跑 SPC 異常日報與開單，並整理當班交接報告',
+            items: [
+              { key: 'p1', skillId: 'sm-eq-008', title: 'SPC 異常日報與開單', tier: 'sop' },
+              { key: 'p2', skillId: 'sm-eq-007', title: '整理當班交接報告',   tier: 'sop' },
+            ],
+          },
+          text: '這件事要跑兩份已核准的 SOP，計畫列在右側面板了。已比對適用範圍（CMP／ETCH、ETC-2F 與 3F），先執行第 1 份。',
           run: {
             title: 'SOP 執行中',
             steps: [
@@ -133,15 +149,14 @@ const CHAT_SCENARIOS = {
           },
         },
 
-        /* ── 第二份 SOP：讓右側面板出現兩個任務 ──
+        /* ── 計畫的第 2 項：不需要使用者再開口，決策卡結束後自動接上 ──
            sm-eq-007 是純唯讀、不會停下來的 SOP，正好對比出
-           「任務 1 停過一次要人確認、任務 2 一路跑完」。 */
-        { role: 'user', text: '順便把當班交接報告也整理一下。' },
+           「第 1 項停過一次要人確認、第 2 項一路跑完」。 */
         {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-007', title: '整理當班交接報告', tier: 'sop' },
-          text: '好，這份全程只讀資料、不動任何系統，所以中途不會停下來問你，我直接跑完。',
+          text: '接著跑計畫的第 2 項。這份全程只讀資料、不動任何系統，中途不會停下來問你。',
           run: {
             title: 'SOP 執行中',
             steps: [
@@ -180,6 +195,13 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
+          /* 單一 SOP 的計畫也照樣宣告 —— 面板永遠是同一個位置回答同一個問題 */
+          plan: {
+            title: '跑 FDC 異常快速反應流程',
+            items: [
+              { key: 'p1', skillId: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
+            ],
+          },
           text: 'E-308 屬 CMP、位於 ETC-3F，符合這份 SOP 的適用範圍，開始執行。',
           run: {
             title: 'SOP 執行中',
@@ -398,6 +420,12 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-pr-004', title: '製程異常跨站通報', tier: 'sop' },
+          plan: {
+            title: '跑製程異常跨站通報',
+            items: [
+              { key: 'p1', skillId: 'sm-pr-004', title: '製程異常跨站通報', tier: 'sop' },
+            ],
+          },
           text: 'CMP-03 屬 CMP、位於 ETC-3F、觸發碼 SPC-OOC，符合適用範圍，開始執行。',
           run: {
             title: 'SOP 執行中',
@@ -525,6 +553,12 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-mfg-004', title: '停機跨班通報與記錄', tier: 'sop' },
+          plan: {
+            title: '跑停機跨班通報與記錄',
+            items: [
+              { key: 'p1', skillId: 'sm-mfg-004', title: '停機跨班通報與記錄', tier: 'sop' },
+            ],
+          },
           text: 'LINE-3 停機 1.8 小時，超過 1 小時門檻，符合適用範圍，開始執行。',
           run: {
             title: 'SOP 執行中',

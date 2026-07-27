@@ -26,6 +26,21 @@
      · 「這次的產出」只收真的做出來的東西 —— 失敗不是產出
      · 產物名稱本身就是連結，右側 ↗ 表示會另開分頁；不再另外掛一顆按鈕
      · 展開收合的箭頭原本 10px 藏在左邊，改成跟標題同字級、擺在右側
+
+   2026-07-27 第五輪（PO 指定，本次）：
+     PO：「兩個紅框的資訊完全重疊，這樣做沒有意義。」左側流內步驟與右側面板
+     步驟確實在講同一件事，只有『還沒跑到的那幾步』是右側獨有的。做法是**互換**
+     而不是單純刪除：
+     · 左側流內從「已跑過的紀錄」改成**完整計畫** —— 未跑到的置灰、
+       跑到會停的預先標「需人工確認」、分支沒走的標「本次不走」。
+       前瞻資訊搬到使用者本來就在看的那一欄，比塞在 320px 側欄更看得到。
+     · 右側面板砍掉第二層步驟，只剩**計畫一層**：這次要做幾件事、做到第幾件。
+     · 計畫改由 Orchestrator 在開跑前宣告（chatScenarios 的 `plan`），
+       不是邊跑邊從訊息長出來的 —— 面板的價值來自「不做帶不確定性的等待」。
+     · 面板只留**最新一份計畫**；產出仍累積整段對話（不然第三輪
+       「操作入口永久落在右側」的交換條件會跳票）。
+     · 三個區塊改名：執行任務／這次的產出／這次用到的 → **任務／產出／來源**。
+       「這次的」在只留最新計畫之後會產生歧義（這次計畫還是這段對話）。
    ════════════════════════════════════════ */
 
 /* 步驟播放速度（毫秒）：一步跑完的體感時間 / 兩個 AI 回合之間的停頓 */
@@ -58,7 +73,15 @@ function ChatText({ text }) {
 
 /* ════════════════════════════════════════
    RunBlock — SOP 執行進度（對話流版）
-   只有「狀態圖示 ＋ 步驟 N ＋ 步驟名」。明細一律在右側面板。
+
+   2026-07-27 第五輪：從「已跑過的紀錄」改成**完整計畫**。
+   右側面板不再展開步驟，所以三件只有計畫才知道的事全部回到這裡：
+     · 還沒跑到的步驟 —— 置灰，跑到會停的預先標「需人工確認」
+     · 條件分支沒走的步驟 —— 標「本次不走」，不留白讓人猜
+   計畫來源是那份已核准 SOP 的 plainSteps，不是 AI 邊跑邊生的。
+
+   置灰的尾巴只長在**最後一個 run 區塊**上：往下走之後那些步驟
+   已經有更新的紀錄了，留著舊的「待執行」只會讓人以為它沒跑。
    ════════════════════════════════════════ */
 const CHAT_RUN_STATUS = {
   ok:      { icon: '✓', color: '#22C55E' },
@@ -66,30 +89,107 @@ const CHAT_RUN_STATUS = {
   fail:    { icon: '✗', color: '#EF4444' },
   skip:    { icon: '—', color: '#9E9E9E' },
   running: { icon: '◍', color: '#2563EB' },
+  todo:    { icon: '○', color: '#9E9E9E' },
+  branch:  { icon: '⤳', color: '#9E9E9E' },
 };
 
-function RunBlock({ run, visible, inFlightIndex }) {
+/* 條件分支的名字：從 SOP 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
+function findBranchLabel(graph, byNum) {
+  if (!graph || !graph.edges) return null;
+  var hit = graph.edges.filter(function(e) {
+    return typeof e.from === 'number' && typeof e.to === 'number'
+      && e.to > e.from + 1 && e.label && byNum[e.from] && byNum[e.to];
+  })[0];
+  return hit ? hit.label : null;
+}
+
+/* 把「這則訊息跑了哪幾步」攤回 SOP 的完整步驟位置上 */
+function buildFlowRows(run, sop, visible, inFlightIndex, showTail) {
+  var steps = (run && run.steps) || [];
+  var count = visible == null ? steps.length : Math.min(visible, steps.length);
+  var shown = steps.slice(0, count);
+  var plan  = sop && sop.plainSteps;
+
+  /* 對不上 SOP（歷史對話、或步驟沒編號）就照原樣列 */
+  var nums = shown.map(function(s) { return s.num; }).filter(function(n) { return n != null; });
+  if (!plan || nums.length === 0) {
+    return shown.map(function(s, i) {
+      return {
+        key: 'r' + i, num: s.num, label: s.label,
+        status: i === inFlightIndex ? 'running' : (s.status || 'ok'),
+      };
+    });
+  }
+
+  var byIdx = {};
+  shown.forEach(function(s, i) { if (s.num != null) byIdx[s.num] = { s: s, i: i }; });
+  var minN = Math.min.apply(null, nums);
+  var maxN = Math.max.apply(null, nums);
+  var branchLabel = findBranchLabel(sop.graph, byIdx);
+
+  return plan.filter(function(ps) {
+    if (ps.num < minN) return false;              /* 前面的步驟在上一個區塊裡 */
+    if (ps.num > maxN && !showTail) return false; /* 尾巴只長在最後一個區塊 */
+    return true;
+  }).map(function(ps) {
+    var hit = byIdx[ps.num];
+    var status;
+    if (hit) status = (hit.i === inFlightIndex) ? 'running' : (hit.s.status || 'ok');
+    else if (ps.num < maxN) status = 'branch';
+    else status = 'todo';
+    return {
+      key: 'p' + ps.num, num: ps.num,
+      label: hit ? hit.s.label : ps.label,
+      status: status,
+      needsConfirm: ps.needsConfirm,
+      branchLabel: status === 'branch' ? branchLabel : null,
+      /* 明細一律不顯示，只有失敗要看得見原因 —— 面板已經不放步驟了，
+         技術細節沒有別的地方可去，也不該沒有地方去 */
+      failDetail: status === 'fail' && hit ? hit.s.detail : null,
+      failReason: status === 'fail' && hit ? hit.s.reason : null,
+    };
+  });
+}
+
+function RunBlock({ run, sop, visible, inFlightIndex, showTail }) {
   var { C, fz } = useTheme();
   if (!run) return null;
-  var steps = run.steps || [];
-  var count = visible == null ? steps.length : Math.min(visible, steps.length);
+  var rows = buildFlowRows(run, sop, visible, inFlightIndex, showTail);
+  if (rows.length === 0) return null;
 
   return (
     <div style={{ marginTop: 16, marginBottom: 8, borderLeft: '2px solid ' + C.border, paddingLeft: 16 }}>
       <div style={{ fontSize: fz(11), color: C.textMuted, fontWeight: 600, marginBottom: 8, letterSpacing: '0.04em' }}>{run.title}</div>
-      {steps.slice(0, count).map(function(s, i) {
-        var isInFlight = i === inFlightIndex;
-        var st = isInFlight ? CHAT_RUN_STATUS.running : (CHAT_RUN_STATUS[s.status] || CHAT_RUN_STATUS.ok);
-        var isBad = !isInFlight && s.status === 'fail';
+      {rows.map(function(r) {
+        var st = CHAT_RUN_STATUS[r.status] || CHAT_RUN_STATUS.ok;
+        var isBad  = r.status === 'fail';
+        var isDim  = r.status === 'todo' || r.status === 'branch' || r.status === 'skip';
         return (
-          <div key={i} style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
-            <span
-              className={isInFlight ? 'pulse-dot' : ''}
-              style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0 }}
-            >{st.icon}</span>
-            {s.num != null && <span style={{ fontSize: fz(11), color: C.textMuted, flexShrink: 0 }}>步驟 {s.num}</span>}
-            <span style={{ fontSize: fz(13), color: isBad ? '#EF4444' : C.textSub, fontWeight: 500 }}>{s.label}</span>
-            {isBad && <span style={{ fontSize: fz(12), color: '#EF4444' }}>· 失敗</span>}
+          <div key={r.key} style={{ marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <span
+                className={r.status === 'running' ? 'pulse-dot' : ''}
+                style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0 }}
+              >{st.icon}</span>
+              {r.num != null && <span style={{ fontSize: fz(11), color: C.textMuted, flexShrink: 0 }}>步驟 {r.num}</span>}
+              <span style={{ fontSize: fz(13), color: isBad ? '#EF4444' : (isDim ? C.textMuted : C.textSub), fontWeight: 500 }}>{r.label}</span>
+              {isBad && <span style={{ fontSize: fz(12), color: '#EF4444' }}>· 失敗</span>}
+              {/* 不確定性要在開始前消掉，不是在過程中安撫 */}
+              {r.status === 'todo' && r.needsConfirm && (
+                <span style={{ fontSize: fz(12), color: '#F59E0B' }}>· 跑到這步會停下來等你確認</span>
+              )}
+              {r.status === 'branch' && (
+                <span style={{ fontSize: fz(12), color: C.textMuted }}>
+                  · 本次不走{r.branchLabel ? '（' + r.branchLabel + '）' : ''}
+                </span>
+              )}
+            </div>
+            {(r.failDetail || r.failReason) && (
+              <div style={{ paddingLeft: 20, marginTop: 4 }}>
+                {r.failDetail && <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, fontFamily: 'monospace' }}>{r.failDetail}</div>}
+                {r.failReason && <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7 }}>{r.failReason}</div>}
+              </div>
+            )}
           </div>
         );
       })}
@@ -292,111 +392,108 @@ function PendingChip({ stepNum, label, onExpand }) {
 }
 
 /* ════════════════════════════════════════
-   執行面板的資料推導
+   面板的資料推導 —— 只有「計畫」一層
 
-   計畫來源＝那份已核准 SOP 的 plainSteps（personas.js）。
-   這是我們跟一般 agent 最大的差別：計畫不是 AI 邊跑邊生的，
-   執行前就知道總共幾步、哪幾步需要人確認。
+   2026-07-27 五輪：計畫由 Orchestrator 在開跑前宣告（訊息上的 `plan`），
+   不是從跑過的訊息回推出來的。面板只回答兩件事：
+   **這次要做幾件事、做到第幾件**；步驟明細一律回到對話流。
 
-   2026-07-26 三輪：改成**多段**。同一則對話可能連續呼叫好幾份 SOP，
-   以 skill.id 變化切段，每段是右側面板第一層的一個「任務」。
+   只留最新一份計畫：使用者換了一個要求，就換一份計畫。
+   （產出不受影響，那是整段對話累積的。）
    ════════════════════════════════════════ */
-const CHAT_PLAN_STATUS = {
-  todo:    { icon: '○', color: '#9E9E9E' },
-  running: { icon: '◍', color: '#2563EB' },
-  ok:      { icon: '✓', color: '#22C55E' },
-  pause:   { icon: '⏸', color: '#F59E0B' },
-  fail:    { icon: '✗', color: '#EF4444' },
-  skip:    { icon: '—', color: '#9E9E9E' },
-  branch:  { icon: '⤳', color: '#9E9E9E' },
+/* 2026-07-27 二版：拿掉進度數字、計時與「去決定」按鈕。
+   已完成的項目連狀態字都不留 —— ✓ 已經說完了，再寫一次「已完成 · 4/4」
+   是同一件事講兩遍。只有還沒完成的才需要說它現在怎麼了。 */
+const CHAT_ITEM_STATUS = {
+  todo:    { label: '待執行', color: '#9E9E9E', icon: '○' },
+  running: { label: '執行中', color: '#2563EB', icon: '◍' },
+  pause:   { label: '已暫停', color: '#F59E0B', icon: '⏸' },
+  fail:    { label: '失敗',   color: '#EF4444', icon: '✗' },
+  done:    { label: null,     color: '#22C55E', icon: '✓' },
 };
 
-const CHAT_SEG_STATUS = {
-  running: { label: '執行中',   color: '#2563EB', icon: '◍' },
-  pause:   { label: '等你決定', color: '#F59E0B', icon: '⏸' },
-  fail:    { label: '失敗',     color: '#EF4444', icon: '✗' },
-  done:    { label: '已完成',   color: '#22C55E', icon: '✓' },
-};
-
-/* 條件分支的名字：從 SOP 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
-function findBranchLabel(graph, byNum) {
-  if (!graph || !graph.edges) return null;
-  var hit = graph.edges.filter(function(e) {
-    return typeof e.from === 'number' && typeof e.to === 'number'
-      && e.to > e.from + 1 && e.label && byNum[e.from] && byNum[e.to];
-  })[0];
-  return hit ? hit.label : null;
+/* 沒有宣告 plan 的對話（歷史紀錄、或還沒改寫的腳本）：
+   用最後一份跑過的 SOP 合成一項，面板不會因此空掉 */
+function synthPlan(msgs) {
+  for (var i = msgs.length - 1; i >= 0; i--) {
+    var m = msgs[i];
+    if (m.skill && m.skill.tier === 'sop' && m.run) {
+      return {
+        title: m.skill.title,
+        items: [{ key: m.skill.id, skillId: m.skill.id, title: m.skill.title, tier: 'sop' }],
+      };
+    }
+  }
+  return null;
 }
 
-function buildRunSegments(chat, sopList, stepShown, playing) {
-  if (!chat) return [];
+function buildActivePlan(chat, sopList, stepShown, playing) {
+  if (!chat) return null;
   var msgs = chat.messages || [];
-  var raw = [];
-  var cur = null;
 
+  var planIdx = -1;
+  for (var i = msgs.length - 1; i >= 0; i--) { if (msgs[i].plan) { planIdx = i; break; } }
+  var plan = planIdx >= 0 ? msgs[planIdx].plan : synthPlan(msgs);
+  if (!plan || !plan.items || plan.items.length === 0) return null;
+  var from = planIdx >= 0 ? planIdx : 0;
+
+  /* 這份計畫開始之後，每個 SOP 各自跑到哪 */
+  var exec = {};
   msgs.forEach(function(m, idx) {
-    /* 換了一份 SOP＝開一段新任務 */
-    if (m.skill && m.skill.tier === 'sop') {
-      if (!cur || cur.skillId !== m.skill.id) {
-        var sop = (sopList || []).filter(function(s) { return s.id === m.skill.id; })[0];
-        cur = (sop && sop.plainSteps)
-          ? { skillId: m.skill.id, sop: sop, exec: {}, maxNum: 0, inFlight: null }
-          : null;
-        if (cur) raw.push(cur);
-      }
-    }
-    if (!cur) return;
-
+    if (idx < from) return;
+    if (!(m.skill && m.skill.tier === 'sop')) return;
+    var e = exec[m.skill.id] || (exec[m.skill.id] = { byNum: {}, maxNum: 0, inFlight: null });
     var steps = (m.run && m.run.steps) || [];
     var isLast = idx === msgs.length - 1;
     var limit = (isLast && playing) ? Math.min(stepShown, steps.length) : steps.length;
-    for (var i = 0; i < limit; i++) {
-      var s = steps[i];
+    for (var k = 0; k < limit; k++) {
+      var s = steps[k];
       if (s.num == null) continue;
-      cur.exec[s.num] = s;
-      if (s.num > cur.maxNum) cur.maxNum = s.num;
+      e.byNum[s.num] = s;
+      if (s.num > e.maxNum) e.maxNum = s.num;
     }
-    /* 正在跑的那一步 */
-    if (isLast && playing && stepShown < steps.length && steps[stepShown].num != null) {
-      cur.inFlight = steps[stepShown].num;
-      if (cur.inFlight > cur.maxNum) cur.maxNum = cur.inFlight;
+    if (isLast && playing && stepShown < steps.length && steps[stepShown] && steps[stepShown].num != null) {
+      e.inFlight = steps[stepShown].num;
+      if (e.inFlight > e.maxNum) e.maxNum = e.inFlight;
     }
   });
 
-  return raw.map(function(seg, i) {
-    var branchLabel = findBranchLabel(seg.sop.graph, seg.exec);
-    var steps = seg.sop.plainSteps.map(function(ps) {
-      var hit = seg.exec[ps.num];
-      var status;
-      if (ps.num === seg.inFlight) status = 'running';
-      else if (hit) status = hit.status || 'ok';
-      else if (ps.num < seg.maxNum) status = 'branch';
-      else status = 'todo';
-      return Object.assign({}, ps, {
-        status: status,
-        /* 明細一律不顯示，只有失敗要看得見原因 */
-        failDetail: status === 'fail' && hit ? hit.detail : null,
-        failReason: status === 'fail' && hit ? hit.reason : null,
-        branchLabel: status === 'branch' ? branchLabel : null,
-      });
+  var items = plan.items.map(function(it) {
+    var sop   = (sopList || []).filter(function(s) { return s.id === it.skillId; })[0] || null;
+    var steps = (sop && sop.plainSteps) || [];
+    var e     = exec[it.skillId];
+    if (!e) {
+      return Object.assign({}, it, { total: steps.length, at: 0, status: 'todo', pauseStep: null });
+    }
+
+    var hasFail = false, pauseStep = null, hasTodo = false;
+    steps.forEach(function(ps) {
+      var hit = e.byNum[ps.num];
+      if (hit && hit.status === 'fail')  hasFail = true;
+      if (hit && hit.status === 'pause') pauseStep = ps;
+      if (!hit && ps.num > e.maxNum)     hasTodo = true;
     });
 
-    var segStatus = 'running';
-    if (steps.filter(function(s) { return s.status === 'fail'; })[0]) segStatus = 'fail';
-    else if (steps.filter(function(s) { return s.status === 'pause'; })[0]) segStatus = 'pause';
-    else if (seg.inFlight != null) segStatus = 'running';
-    else if (!steps.filter(function(s) { return s.status === 'todo'; })[0]) segStatus = 'done';
+    var status = hasFail ? 'fail'
+               : pauseStep ? 'pause'
+               : (e.inFlight != null || hasTodo) ? 'running'
+               : 'done';
 
-    return {
-      key: seg.skillId + '#' + i,
-      sop: seg.sop,
-      steps: steps,
-      at: seg.maxNum,
+    return Object.assign({}, it, {
       total: steps.length,
-      status: segStatus,
-      pauseStep: steps.filter(function(s) { return s.status === 'pause'; })[0] || null,
-    };
+      at: Math.min(e.maxNum, steps.length),
+      status: status,
+      pauseStep: pauseStep,
+    });
   });
+
+  return {
+    title: plan.title,
+    items: items,
+    /* 有已核准 SOP、或不只一件事，才值得自動把面板打開 */
+    worthOpening: items.length > 1 || items.filter(function(it) { return it.tier === 'sop'; }).length > 0,
+    pauseItem: items.filter(function(it) { return it.pauseStep; })[0] || null,
+  };
 }
 
 /* 這次的產出
@@ -424,11 +521,6 @@ function collectUsed(messages) {
     if (m.blocked) blocked.push(m.blocked);
   });
   return { skills: skills, knowledge: knowledge, blocked: blocked };
-}
-
-function formatElapsed(sec) {
-  var m = Math.floor(sec / 60), s = sec % 60;
-  return (m < 10 ? '0' : '') + m + ':' + (s < 10 ? '0' : '') + s;
 }
 
 /* ════════════════════════════════════════
@@ -543,20 +635,14 @@ function OutputLink({ label, onOpen }) {
 
 /* ════════════════════════════════════════
    RunPanel — 右側執行面板
-   第一層：這則對話跑過的每一份 SOP（任務）
-   第二層：展開看步驟
-   使用者只在意兩件事 —— 執行了什麼、執行到哪。
-   ════════════════════════════════════════ */
-function RunPanel({ segments, outputs, used, elapsed, onClose, onGoDecision, onPeekSkill }) {
-  var { C, fz } = useTheme();
-  var [expanded, setExpanded] = React.useState({});
-  var hasAnything = segments.length > 0 || outputs.length > 0
-    || used.skills.length > 0 || used.knowledge.length > 0 || used.blocked.length > 0;
 
-  function isOpen(seg, i) {
-    if (expanded[seg.key] !== undefined) return expanded[seg.key];
-    return i === segments.length - 1;   /* 預設只展開最後一段 */
-  }
+   2026-07-27 五輪：只剩三區 **任務／產出／來源**，任務只有一層。
+   步驟明細全部回到對話流（見 RunBlock），這裡不再重複。
+   ════════════════════════════════════════ */
+function RunPanel({ plan, outputs, used, onClose, onPeekSkill }) {
+  var { C, fz } = useTheme();
+  var hasAnything = !!plan || outputs.length > 0
+    || used.skills.length > 0 || used.knowledge.length > 0 || used.blocked.length > 0;
 
   return (
     <div style={{
@@ -571,100 +657,46 @@ function RunPanel({ segments, outputs, used, elapsed, onClose, onGoDecision, onP
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-thin">
         {!hasAnything && (
           <div style={{ padding: 16, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
-            這則對話還沒有執行紀錄。呼叫 SOP 時，這裡會列出完整的執行計畫。
+            這則對話還沒有執行紀錄。呼叫 SOP 時，這裡會列出這次要做的事。
           </div>
         )}
 
-        {/* ── 第一層：任務清單 ── */}
-        {segments.length > 0 && (
-          <PanelGroup title="執行任務">
-            {segments.map(function(seg, i) {
-              var open = isOpen(seg, i);
-              var st = CHAT_SEG_STATUS[seg.status];
-              var live = seg.status === 'running' || seg.status === 'pause';
+        {/* ── 任務：這次要做幾件事、做到第幾件。沒有第二層 ── */}
+        {plan && (
+          <PanelGroup title="任務">
+            {plan.items.map(function(it) {
+              var st = CHAT_ITEM_STATUS[it.status] || CHAT_ITEM_STATUS.todo;
+              var live = it.status === 'running' || it.status === 'pause';
               return (
-                <div key={seg.key} style={{ marginBottom: 8 }}>
-                  <button
-                    onClick={function() {
-                      setExpanded(function(prev) {
-                        var n = Object.assign({}, prev); n[seg.key] = !open; return n;
-                      });
-                    }}
-                    style={{
-                      width: '100%', display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer',
-                      padding: '8px 8px', borderRadius: 6, textAlign: 'left',
-                      background: open ? C.bg : 'transparent',
-                      border: '1px solid ' + (open ? C.border : 'transparent'),
-                    }}
-                  >
-                    <span
-                      className={seg.status === 'running' ? 'pulse-dot' : ''}
-                      style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0, lineHeight: 1.6 }}
-                    >{st.icon}</span>
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ display: 'block', fontSize: fz(12), fontWeight: 600, color: C.text, lineHeight: 1.6 }}>{seg.sop.title}</span>
-                      <span style={{ display: 'block', fontSize: fz(11), color: st.color, marginTop: 2 }}>
-                        {st.label} · {seg.at}/{seg.total}
-                        {live ? ' · ' + formatElapsed(elapsed) : ''}
-                      </span>
-                    </span>
-                    <span style={{ fontSize: fz(12), color: C.textMuted, flexShrink: 0, lineHeight: 1.6 }}>{open ? '⌃' : '⌄'}</span>
-                  </button>
-
-                  {/* ── 第二層：步驟 ── */}
-                  {open && (
-                    <div style={{ paddingLeft: 24, paddingTop: 8 }}>
-                      {seg.steps.map(function(s) {
-                        var ss = CHAT_PLAN_STATUS[s.status] || CHAT_PLAN_STATUS.todo;
-                        var dim = s.status === 'todo' || s.status === 'branch' || s.status === 'skip';
-                        return (
-                          <div key={s.num} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-                            <span
-                              className={s.status === 'running' ? 'pulse-dot' : ''}
-                              style={{ fontSize: fz(12), fontWeight: 700, color: ss.color, width: 12, flexShrink: 0, lineHeight: 1.6 }}
-                            >{ss.icon}</span>
-                            <div style={{ flex: 1, minWidth: 0 }}>
-                              <div style={{ fontSize: fz(12), color: dim ? C.textMuted : C.text, lineHeight: 1.6 }}>
-                                {s.num}. {s.label}
-                              </div>
-
-                              {/* 已經停在這裡等人 */}
-                              {s.status === 'pause' && (
-                                <React.Fragment>
-                                  <div style={{ fontSize: fz(11), color: '#F59E0B', marginTop: 2 }}>等待確認中…</div>
-                                  <antd.Button size="small" type="primary" style={{ marginTop: 8 }} onClick={onGoDecision}>去決定</antd.Button>
-                                </React.Fragment>
-                              )}
-                              {/* 還沒跑到，但跑到時會停 —— 不確定性要在開始前消掉 */}
-                              {s.status === 'todo' && s.needsConfirm && (
-                                <div style={{ fontSize: fz(11), color: '#F59E0B', marginTop: 2 }}>需人工確認</div>
-                              )}
-                              {s.status === 'branch' && (
-                                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
-                                  本次不走{s.branchLabel ? '（' + s.branchLabel + '）' : ''}
-                                </div>
-                              )}
-                              {s.failDetail && (
-                                <div style={{ fontSize: fz(11), color: '#EF4444', lineHeight: 1.7, marginTop: 2 }}>{s.failDetail}</div>
-                              )}
-                              {s.failReason && (
-                                <div style={{ fontSize: fz(11), color: '#EF4444', lineHeight: 1.7, marginTop: 2 }}>{s.failReason}</div>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
+                <div key={it.key} style={{
+                  display: 'flex', alignItems: 'flex-start', gap: 8,
+                  padding: '8px 8px', marginBottom: 4, borderRadius: 6,
+                  background: live ? C.bg : 'transparent',
+                  border: '1px solid ' + (live ? C.border : 'transparent'),
+                }}>
+                  <span
+                    className={it.status === 'running' ? 'pulse-dot' : ''}
+                    style={{ fontSize: fz(12), fontWeight: 700, color: st.color, width: 12, flexShrink: 0, lineHeight: 1.6 }}
+                  >{st.icon}</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: fz(12), fontWeight: 600, color: it.status === 'todo' ? C.textMuted : C.text, lineHeight: 1.6 }}>{it.title}</span>
+                      {/* 已核准 SOP 不標 —— 能執行就表示核准過；非核准的才需要講 */}
+                      {it.tier && it.tier !== 'sop' && <SkillTierTag tier={it.tier} size="small" />}
                     </div>
-                  )}
+                    {st.label && (
+                      <div style={{ fontSize: fz(11), color: st.color, marginTop: 2 }}>{st.label}</div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </PanelGroup>
         )}
 
-        {/* ── 這次的產出：產物名稱本身就是連結，右側 ↗ 表示另開分頁 ── */}
+        {/* ── 產出：只收真的做出來的東西；名稱本身就是連結，↗ 表示另開分頁 ── */}
         {outputs.length > 0 && (
-          <PanelGroup title="這次的產出">
+          <PanelGroup title="產出">
             {outputs.map(function(o, i) {
               var main = o.links[0];
               return (
@@ -687,9 +719,9 @@ function RunPanel({ segments, outputs, used, elapsed, onClose, onGoDecision, onP
           </PanelGroup>
         )}
 
-        {/* ── 這次用到的：只給標題，詳情點進去 ── */}
+        {/* ── 來源：這次依據了什麼。只給標題，詳情點進去 ── */}
         {(used.skills.length > 0 || used.knowledge.length > 0 || used.blocked.length > 0) && (
-          <PanelGroup title="這次用到的" defaultOpen={false}>
+          <PanelGroup title="來源" defaultOpen={false}>
             {used.skills.map(function(s) {
               return (
                 <button
@@ -755,8 +787,14 @@ var QUICK_PROMPTS = {
    AI：全寬純文字、無氣泡無框、無頭像、無徽章
    User：右對齊淡底
    ════════════════════════════════════════ */
-function MessageList({ messages, stepShown, playing }) {
+function MessageList({ messages, sopList, stepShown, playing }) {
   var { C, fz } = useTheme();
+  /* 置灰的「還沒跑到」尾巴只長在最後一個 run 區塊 —— 往下走之後
+     那些步驟已經有更新的紀錄，舊區塊還留著待執行會讓人以為它沒跑 */
+  var lastRunIdx = -1;
+  messages.forEach(function(m, i) {
+    if (m.run && m.run.steps && m.run.steps.length > 0) lastRunIdx = i;
+  });
   return (
     <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
       {messages.map(function(msg, i) {
@@ -774,13 +812,18 @@ function MessageList({ messages, stepShown, playing }) {
         var isLast = i === messages.length - 1;
         var live = isLast && playing;
         var total = (msg.run && msg.run.steps && msg.run.steps.length) || 0;
+        var sop = (msg.skill && msg.skill.tier === 'sop')
+          ? (sopList || []).filter(function(s) { return s.id === msg.skill.id; })[0]
+          : null;
         return (
           <div key={i} style={{ marginTop: i === 0 ? 0 : 24, marginBottom: 8 }}>
             <ChatText text={msg.text} />
             <RunBlock
               run={msg.run}
+              sop={sop}
               visible={live ? Math.min(stepShown + 1, total) : total}
               inFlightIndex={live && stepShown < total ? stepShown : -1}
+              showTail={i === lastRunIdx}
             />
             <BlockedNote blocked={msg.blocked} />
             <ResultCard result={msg.result} />
@@ -839,7 +882,6 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
   const [sheetCollapsed, setSheetCollapsed] = React.useState(false);
   const [panelOpen, setPanelOpen]           = React.useState(false);
   const [panelDismissed, setPanelDismissed] = React.useState({});
-  const [elapsed, setElapsed]               = React.useState(0);
   const [peekSkill, setPeekSkill]           = React.useState(null);
 
   const activeChat = chats.filter(function(c) { return c.id === activeId; })[0];
@@ -855,7 +897,6 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
     setSheetCollapsed(false);
     setPanelOpen(false);
     setPanelDismissed({});
-    setElapsed(0);
     setPeekSkill(null);
   }, [p.key]);
 
@@ -869,13 +910,13 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
 
   /* ── 執行面板資料 ── */
   const sopList  = (p.knowledge && p.knowledge.sopManagement) || [];
-  const segments = activeChat ? buildRunSegments(activeChat, sopList, stepShown, playing) : [];
+  const plan     = activeChat ? buildActivePlan(activeChat, sopList, stepShown, playing) : null;
   const outputs  = collectOutputs((activeChat && activeChat.messages) || []);
   const used     = collectUsed((activeChat && activeChat.messages) || []);
-  const pauseSeg = segments.filter(function(s) { return s.pauseStep; })[0] || null;
-  const pauseStepNum   = pauseSeg ? pauseSeg.pauseStep.num : null;
-  const pauseStepLabel = pauseSeg ? pauseSeg.pauseStep.label : null;
-  const hasPlan = segments.length > 0;
+  const pauseItem      = plan ? plan.pauseItem : null;
+  const pauseStepNum   = pauseItem ? pauseItem.pauseStep.num : null;
+  const pauseStepLabel = pauseItem ? pauseItem.pauseStep.label : null;
+  const hasPlan = !!(plan && plan.worthOpening);
 
   /* 偵測到 SOP 執行就自動把面板打開；使用者關過之後，同一則對話不再自動開 */
   React.useEffect(function() {
@@ -897,14 +938,6 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
       });
     }
   }
-
-  /* 計時：只在真的在跑、或流程停下等人的時候走
-     —— 這兩個時刻才是「分秒必爭」的時刻 */
-  React.useEffect(function() {
-    if (!hasPlan || (!playing && !pendingSheet)) return;
-    var t = setInterval(function() { setElapsed(function(v) { return v + 1; }); }, 1000);
-    return function() { clearInterval(t); };
-  }, [hasPlan, playing, !!pendingSheet]);
 
   /* 捲到底：逐步播放時每一步都要跟上 */
   React.useEffect(function() {
@@ -1019,7 +1052,6 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
     setPlaying(false);
     setStepShown(999);
     setSheetCollapsed(false);
-    setElapsed(0);
     setPanelOpen(false);
     setPanelDismissed(function(prev) { var n = Object.assign({}, prev); delete n[chatId]; return n; });
   }
@@ -1029,7 +1061,6 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
     setPlaying(false);
     setStepShown(999);
     setSheetCollapsed(false);
-    setElapsed(0);
   }
 
   /* 下一句建議接話（播放中不給點，避免連按跳過步驟） */
@@ -1182,7 +1213,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
             </div>
           ) : activeChat && activeChat.messages.length > 0 ? (
             <React.Fragment>
-              <MessageList messages={activeChat.messages} stepShown={stepShown} playing={playing} />
+              <MessageList messages={activeChat.messages} sopList={sopList} stepShown={stepShown} playing={playing} />
               {pendingSheet && !sheetCollapsed && (
                 <div style={{ maxWidth: 720, margin: '0 auto', padding: '0 24px' }}>
                   <DecisionCard
@@ -1288,12 +1319,10 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
       {/* ══ 右側執行面板 ══ */}
       {panelOpen && activeChat && (
         <RunPanel
-          segments={segments}
+          plan={plan}
           outputs={outputs}
           used={used}
-          elapsed={elapsed}
           onClose={closePanel}
-          onGoDecision={function() { setSheetCollapsed(false); if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }}
           onPeekSkill={function(s) { setPeekSkill(s); }}
         />
       )}
