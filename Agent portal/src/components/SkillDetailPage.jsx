@@ -16,21 +16,45 @@
    ════════════════════════════════════════ */
 
 /* ── 送簽的硬條件（回傳擋下的原因，null = 可送）──
-   SOP：試跑第二層「每個數字怎麼算的」至少要展開過一次，避免簽核淪為蓋章
-   輔助判斷：測試題必須全數通過（含系統自動出的負面題）
-   見 brain/concepts/agent-skill-tiering.md 風險 2 與「簽核驗收」 */
+
+   2026-07-28 PO 定案：**兩種類型的驗收方法完全不同，不共用同一套題目。**
+     · SOP＝codify graph，每個節點都是程式碼。它沒有「意圖」可測 ——
+       圖裡沒有的工具它根本呼叫不到，範圍是勾出來的結構化條件。
+       要測的是**結果與例外**：情境試跑。
+     · 輔助判斷＝同一份指引換個問法就走不同路，沒有固定步驟可以試跑。
+       要測的是**意圖**：測試案例（含系統自動出的負面題）。
+
+   見 brain/concepts/agent-skill-tiering.md 決議 12 與「簽核驗收」 */
 function getSignoffGate(skill, calcOpened) {
   if (skill.stage === 'approving' || skill.stage === 'pirun' || skill.stage === 'production') return null;
+
+  if (skill.tier === 'sop') {
+    var scs = buildDataScenarios(skill);
+    if (scs.length === 0) return '還沒有流程步驟，無法試跑也無法送簽';
+    var res = (skill.scenarioRun && skill.scenarioRun.results) || {};
+    /* 沒跑過就沒有結果可言 —— 這是「執行情境試跑」按鈕存在的理由 */
+    var notRun = scs.filter(function(sc) {
+      if (res[sc.id]) return false;
+      return !(sc.kind === 'normal' && skill.dryRun);   /* 正常資料那條原本就跑過 */
+    });
+    if (notRun.length > 0) return '還有 ' + notRun.length + ' 個情境沒跑過，請先按「執行情境試跑」';
+    var bad = scs.filter(function(sc) { return res[sc.id] === 'fail'; });
+    if (bad.length > 0) {
+      return '情境「' + bad[0].label + '」的行為不符合約定，要先修流程才能送簽'
+        + (bad.length > 1 ? '（共 ' + bad.length + ' 個未通過）' : '');
+    }
+    if (skill.dryRun && !calcOpened) {
+      return '請先展開「正常資料」情境裡的「每個數字怎麼算的」，確認過再送簽';
+    }
+    return null;
+  }
+
   var cases   = skill.evalCases || [];
   var passed  = cases.filter(function(c) { return c.result === 'pass'; }).length;
   var pending = cases.filter(function(c) { return c.result === 'pending' || !c.result; }).length;
   if (cases.length === 0) return '尚未建立測試案例，無法送簽';
-  /* 沒跑過就沒有結果可言 —— 這是「執行測試」按鈕存在的理由 */
   if (pending > 0) return '還有 ' + pending + ' 題測試案例沒有執行，請先按「執行測試」';
   if (passed < cases.length) return '測試案例需全數通過才能送簽（目前 ' + passed + ' / ' + cases.length + '）';
-  if (skill.tier === 'sop' && skill.dryRun && !calcOpened) {
-    return '請先展開試跑結果的「每個數字怎麼算的」，確認過再送簽';
-  }
   return null;
 }
 
@@ -236,7 +260,7 @@ function GraphTerminal({ label }) {
   );
 }
 
-function GraphNode({ step }) {
+function GraphNode({ step, onProbe }) {
   var { C, fz } = useTheme();
   var isCustom = step.source === 'custom';
   var io = step.io || 'compute';
@@ -256,6 +280,11 @@ function GraphNode({ step }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>{step.num}</span>
         <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text, flex: 1, minWidth: 0 }}>{step.label}</span>
+        {/* 選節點時人看的是流程圖，不是下拉選單 —— 入口就放在節點上 */}
+        {onProbe && (
+          <antd.Button size="small" type="text" onClick={onProbe}
+            style={{ fontSize: fz(11), color: '#2563EB', flexShrink: 0, padding: '0 4px', height: 20 }}>▷ 試打</antd.Button>
+        )}
         <span style={{ fontSize: fz(11), fontWeight: 700, color: ioCfg.color, flexShrink: 0 }}>{ioCfg.icon}</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: step.note || step.tool ? 8 : 0 }}>
@@ -280,8 +309,209 @@ function GraphNode({ step }) {
   );
 }
 
-function SkillGraph({ skill }) {
+/* ════════════════════════════════════════
+   ProbeModal — 單一節點試打（2026-07-27 PO 指定）
+
+   「讓使用者選擇試打資料訪問的 api / node，這樣就不用猜。」
+   整份跑只告訴你「壞了」，不會告訴你哪一段的介面對不上；
+   單獨打一個節點才看得到它到底吃什麼、吐什麼。
+
+   三種節點三種輸入 —— 對節點來說「輸入」根本不是同一件事：
+     read    → API 參數（可改）
+     compute → **上游那一步的輸出**（可直接編輯，極值問題住在這裡）
+     write   → 參數照給，但**永遠不真的送出**，只算得出會送出什麼
+
+   試打不是簽核條件。它是探索工具，不進 getSignoffGate ——
+   否則使用者會被逼著把每個節點都點一遍，又變成蓋章。
+   ════════════════════════════════════════ */
+function ProbeModal({ skill, step, onClose, onSaveScenario }) {
   var { C, fz } = useTheme();
+  var spec = (step.tool && TOOL_PROBE[step.tool]) || null;
+  var isWrite = step.io === 'write';
+  var isCompute = !step.tool;
+
+  /* 上游那一步的輸出：compute 節點的「輸入」就是它 */
+  var upstream = null;
+  if (isCompute) {
+    var prev = (skill.plainSteps || []).filter(function(s) { return s.num < step.num && s.tool; }).pop();
+    var pspec = prev && TOOL_PROBE[prev.tool];
+    upstream = pspec ? { step: prev, text: pspec.sample || '' } : null;
+  }
+
+  var [params, setParams] = React.useState(function() {
+    var o = {};
+    ((spec && spec.params) || []).forEach(function(p) { o[p.key] = p.value; });
+    return o;
+  });
+  var [feed, setFeed]   = React.useState(upstream ? upstream.text : '');
+  var [busy, setBusy]   = React.useState(false);
+  var [out, setOut]     = React.useState(null);
+  var [expect, setExpect] = React.useState('');
+  var [saved, setSaved]   = React.useState(false);
+
+  function fire() {
+    setBusy(true); setOut(null);
+    setTimeout(function() {
+      setBusy(false);
+      setOut({ at: new Date().toLocaleTimeString('zh-TW', { hour12: false }) });
+    }, 800);
+  }
+
+  /* 算出來的東西：SOP 的試跑資料裡若有這一步的算法就照它講，講得比通則準 */
+  var calc = ((skill.dryRun && skill.dryRun.calculations) || []).filter(function(c) { return c.stepNum === step.num; })[0];
+
+  var fields = (spec && spec.fields) || [];
+
+  return (
+    <antd.Modal
+      open centered width={640} onCancel={onClose} footer={null}
+      title={
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: fz(16), fontWeight: 600 }}>試打 · 步驟 {step.num} {step.label}</span>
+          <SkillIoTag io={step.io || 'compute'} />
+        </span>
+      }
+    >
+      {step.tool && (
+        <div style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', marginBottom: 16 }}>
+          {step.system} · {step.tool}
+        </div>
+      )}
+
+      {isWrite && (
+        <antd.Alert type="warning" showIcon style={{ marginBottom: 16 }}
+          message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>這一步不會真的送出</span>}
+          description={<span style={{ fontSize: fz(12), lineHeight: 1.6 }}>寫入節點的試打只算得出「會送出什麼」。一個「試」的按鈕真的開了工單，整套人工確認就沒有意義了。</span>}
+        />
+      )}
+
+      {/* ── 輸入 ── */}
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>
+        {isCompute ? '上游資料（可直接改成你想試的值）' : '參數（可自己改）'}
+      </div>
+
+      {isCompute ? (
+        <React.Fragment>
+          {upstream && (
+            <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 4 }}>
+              來自步驟 {upstream.step.num}「{upstream.step.label}」
+            </div>
+          )}
+          <antd.Input.TextArea value={feed} onChange={function(e) { setFeed(e.target.value); }}
+            autoSize={{ minRows: 3, maxRows: 6 }} style={{ fontFamily: 'monospace', fontSize: fz(12) }} />
+          <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, lineHeight: 1.7 }}>
+            自動出的情境是通則。真正會出事的那組值只有做過的人知道 —— 把它打進來試。
+          </div>
+        </React.Fragment>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {((spec && spec.params) || []).map(function(p) {
+            return (
+              <div key={p.key} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: fz(12), color: C.textSub, width: 96, flexShrink: 0 }}>{p.label}</span>
+                <antd.Input size="small" value={params[p.key]}
+                  onChange={function(e) { var v = e.target.value; setParams(function(prev) { var n = Object.assign({}, prev); n[p.key] = v; return n; }); }}
+                  style={{ fontFamily: 'monospace', fontSize: fz(12) }} />
+              </div>
+            );
+          })}
+          {(!spec || (spec.params || []).length === 0) && (
+            <div style={{ fontSize: fz(12), color: C.textMuted }}>這個工具不吃參數。</div>
+          )}
+        </div>
+      )}
+
+      <antd.Button type="primary" size="small" loading={busy} onClick={fire} style={{ marginTop: 16 }}>
+        {isWrite ? '看會送出什麼' : '試打這一步'}
+      </antd.Button>
+
+      {/* ── 回傳 ── */}
+      {out && (
+        <div style={{ marginTop: 16, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '8px 16px', background: C.bgSub, fontSize: fz(12), fontWeight: 600, color: C.text }}>
+            {isWrite ? '會送出的欄位' : (isCompute ? '算出來的結果' : '回傳 ' + (spec ? spec.rows : 0) + ' 筆')}
+            <span style={{ fontWeight: 400, color: C.textMuted, marginLeft: 8 }}>{out.at}</span>
+          </div>
+
+          {isCompute ? (
+            <div style={{ padding: '8px 16px' }}>
+              <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.7 }}>
+                算法：{calc ? calc.how : (step.note || '本節點的自訂邏輯')}
+              </div>
+              <div style={{ fontSize: fz(12), color: C.text, lineHeight: 1.7, marginTop: 4, fontFamily: 'monospace' }}>
+                {feed.trim() === '' ? '（輸入是空的 —— 這個節點對空輸入怎麼反應，正是該測的）' : '依上述輸入完成計算'}
+              </div>
+            </div>
+          ) : (
+            <React.Fragment>
+              {fields.map(function(f, i) {
+                return (
+                  <div key={f.name} style={{
+                    padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none',
+                    display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap',
+                  }}>
+                    <span style={{ fontSize: fz(12), fontFamily: 'monospace', color: C.text, fontWeight: 600 }}>{f.name}</span>
+                    <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace' }}>{f.type}</span>
+                    <span style={{ fontSize: fz(12), color: C.textSub, flex: 1, minWidth: 0 }}>{f.note}</span>
+                    {/* 沒有下游用到的欄位壞掉不痛，會痛的是這幾個 */}
+                    {f.usedBy && (
+                      <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: '#2563EB', background: 'rgba(37,99,235,0.08)' }}>
+                        {f.usedBy}
+                      </antd.Tag>
+                    )}
+                  </div>
+                );
+              })}
+              {spec && spec.sample && !isWrite && (
+                <div style={{ padding: '8px 16px', borderTop: '1px solid ' + C.border, fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace' }}>
+                  第 1 筆：{spec.sample}
+                </div>
+              )}
+              {fields.length === 0 && (
+                <div style={{ padding: '8px 16px', fontSize: fz(12), color: C.textMuted }}>這個工具還沒登錄欄位定義。</div>
+              )}
+            </React.Fragment>
+          )}
+        </div>
+      )}
+
+      {/* ── 打出問題就地存成情境 ──
+           我原本反對讓人自己加壞資料情境，因為那要人用文字描述「怎麼壞」，太技術。
+           但如果是**打出來**的，輸入就在手上，只要補一句「這種時候應該怎麼樣」就成一題。 */}
+      {out && !saved && (
+        <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid ' + C.border }}>
+          <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>
+            這種時候應該怎麼樣？（填了就能存成一個情境）
+          </div>
+          <antd.Input.TextArea value={expect} onChange={function(e) { setExpect(e.target.value); }}
+            autoSize={{ minRows: 2, maxRows: 3 }} placeholder="" />
+          <antd.Button size="small" type="dashed" disabled={!expect.trim()} style={{ marginTop: 8 }}
+            onClick={function() {
+              onSaveScenario({
+                id: 'sc-user-' + Date.now(),
+                kind: 'user', origin: 'seed',
+                label: '試打 · 步驟 ' + step.num + ' ' + step.label,
+                inject: { stepNum: step.num, tool: step.tool || null, how: isCompute ? ('上游資料：' + feed) : Object.keys(params).map(function(k) { return k + '=' + params[k]; }).join(' · ') },
+                expect: expect.trim(),
+              });
+              setSaved(true);
+            }}>
+            存成一個情境
+          </antd.Button>
+        </div>
+      )}
+      {saved && (
+        <div style={{ marginTop: 16, fontSize: fz(12), color: '#22C55E', fontWeight: 600 }}>
+          ✓ 已加進情境清單（待執行）。回到下面按一次「執行情境試跑」。
+        </div>
+      )}
+    </antd.Modal>
+  );
+}
+
+function SkillGraph({ skill, onSaveScenario }) {
+  var { C, fz } = useTheme();
+  var [probeStep, setProbeStep] = React.useState(null);
   var steps = skill.plainSteps || [];
   var edges = (skill.graph && skill.graph.edges) || [];
   if (steps.length === 0) {
@@ -327,7 +557,7 @@ function SkillGraph({ skill }) {
             <React.Fragment key={i}>
               <GraphConnector rows={rows} level={built.level} edges={edges} band={i === 0 ? 'start' : i - 1} />
               <div style={{ display: 'flex', gap: 16, alignItems: 'stretch' }}>
-                {row.map(function(s) { return <GraphNode key={s.num} step={s} />; })}
+                {row.map(function(s) { return <GraphNode key={s.num} step={s} onProbe={function() { setProbeStep(s); }} />; })}
               </div>
             </React.Fragment>
           );
@@ -340,6 +570,15 @@ function SkillGraph({ skill }) {
         <div style={{ marginTop: 16, fontSize: fz(12), color: '#F59E0B', fontWeight: 600, lineHeight: 1.6 }}>
           ⚠️ 這 {confirmCnt} 個標了 🔒 的步驟會異動系統，執行到就會停下來等人按確認 —— 手動執行如此，排程執行也一樣。
         </div>
+      )}
+      <div style={{ marginTop: 8, fontSize: fz(12), color: C.textMuted, lineHeight: 1.6 }}>
+        每個節點右上的 <span style={{ color: '#2563EB', fontWeight: 600 }}>▷ 試打</span> 可以單獨打這一步，看它實際吃什麼、吐什麼 —— 不用整份跑完再回推是哪一段的介面對不上。
+      </div>
+
+      {probeStep && (
+        <ProbeModal skill={skill} step={probeStep}
+          onClose={function() { setProbeStep(null); }}
+          onSaveScenario={onSaveScenario || function() {}} />
       )}
     </div>
   );
@@ -514,6 +753,11 @@ function DescriptionBlock({ skill, p }) {
      · 執行測試（逐題播放，跑完才有結果）
      · 重新試跑（僅 SOP）
    新增的案例一律是「待執行」，逼使用者真的按一次。
+
+   2026-07-27：這一區分成兩層不同的東西，別再混為一談 ——
+     · 測試案例＝**意圖層**（使用者這樣問 → AI 該怎麼回）。驗路由、拒絕、適用範圍。
+     · 情境試跑＝**資料層**（資料長這樣 → 每個節點該怎麼反應）。見 ScenarioBlock。
+   SOP 的風險不在「AI 答錯」，在節點吃到爛資料照樣算完、輸出一份看起來正常的東西。
    ════════════════════════════════════════ */
 
 /* 原型的判定：資料裡標了 mockResult 就照它，其餘一律 pass。
@@ -534,15 +778,11 @@ function AddEvalCaseModal({ skill, onCancel, onAdd }) {
   function askAi() {
     setDraft(true);
     setTimeout(function() {
-      var pool = skill.tier === 'sop'
-        ? [
-            { i: '來源系統其中一個查不到資料', e: '應明確標示缺漏並停止產出，不可用預設值補齊後照常輸出' },
-            { i: '同一天重複執行第二次',       e: '應提示已執行過並顯示上次結果，不重複寫入' },
-          ]
-        : [
-            { i: '兩個數據互相矛盾時',   e: '應明說矛盾在哪，不可挑一個順眼的下結論' },
-            { i: '資料不足以判斷時',     e: '應回「資料不足」並說明還缺什麼，不得硬給研判' },
-          ];
+      /* 只有輔助判斷會走到這裡 —— SOP 的題目由系統依節點自動出 */
+      var pool = [
+        { i: '兩個數據互相矛盾時',   e: '應明說矛盾在哪，不可挑一個順眼的下結論' },
+        { i: '資料不足以判斷時',     e: '應回「資料不足」並說明還缺什麼，不得硬給研判' },
+      ];
       var pick = pool[(skill.evalCases || []).length % pool.length];
       setInput(pick.i);
       setExpect(pick.e);
@@ -580,79 +820,13 @@ function AddEvalCaseModal({ skill, onCancel, onAdd }) {
   );
 }
 
-function TestBlock({ skill, p, onSave, onOpenCalc }) {
+/* 正常資料那條情境展開後的內容 —— 原本的三層試跑結果原樣搬過來。
+   這三層是簽核的核心（送簽硬條件綁在第 2 層），不動它。 */
+function DryRunDetail({ skill, onOpenCalc }) {
   var { C, fz } = useTheme();
-  var cases   = skill.evalCases || [];
-  var passCnt = cases.filter(function(c) { return c.result === 'pass'; }).length;
-  var pendCnt = cases.filter(function(c) { return c.result === 'pending' || !c.result; }).length;
-  var allPass = cases.length > 0 && passCnt === cases.length;
   var dr = skill.dryRun;
-
-  var [live, setLive]       = React.useState(null);   /* 執行中的即時結果，跑完就交還給 skill */
-  var [running, setRunning] = React.useState(false);
-  var [dryRunning, setDry]  = React.useState(false);
-  var [addOpen, setAddOpen] = React.useState(false);
-  var [openFail, setOpenFail] = React.useState({});
-
-  /* 逐題播放：瞬間跑完的話，「正在測」這個狀態根本不存在（guideline §6） */
-  function runTests() {
-    if (running || cases.length === 0) return;
-    setRunning(true);
-    setLive({});
-    var acc = {};
-    var timers = [];
-    cases.forEach(function(c, i) {
-      timers.push(setTimeout(function() {
-        setLive(function(prev) { var n = Object.assign({}, prev); n[c.id] = 'running'; return n; });
-      }, i * 620));
-      timers.push(setTimeout(function() {
-        acc[c.id] = evalCaseOutcome(c);
-        setLive(function(prev) { var n = Object.assign({}, prev); n[c.id] = acc[c.id]; return n; });
-      }, i * 620 + 460));
-    });
-    setTimeout(function() {
-      setRunning(false);
-      setLive(null);
-      onSave(Object.assign({}, skill, {
-        evalCases: cases.map(function(c) { return Object.assign({}, c, { result: acc[c.id] || c.result }); }),
-        evalRun: { at: '剛剛', by: p.user.name },
-      }));
-    }, cases.length * 620 + 560);
-  }
-
-  function rerunDry() {
-    setDry(true);
-    setTimeout(function() {
-      setDry(false);
-      onSave(Object.assign({}, skill, { dryRun: Object.assign({}, dr, { ranAt: '剛剛' }) }));
-    }, 1500);
-  }
-
-  function addCase(input, expect) {
-    setAddOpen(false);
-    onSave(Object.assign({}, skill, {
-      evalCases: cases.concat([{
-        id: 'ev-seed-' + Date.now(), input: input, expect: expect,
-        origin: 'seed', locked: false, result: 'pending',
-      }]),
-    }));
-  }
-
-  function removeCase(id) {
-    onSave(Object.assign({}, skill, {
-      evalCases: cases.filter(function(c) { return c.id !== id; }),
-    }));
-  }
-
-  /* 執行紀錄。舊資料沒有 evalRun，就退回建立當時的人與日期 ——
-     重點是畫面上不能出現「沒人跑過卻顯示 PASS」。 */
-  var lastRun = skill.evalRun || (cases.length > 0 && pendCnt === 0
-    ? { at: skill.importedAt, by: skill.importedBy }
-    : null);
-
-  function statusOf(c) { return (live && live[c.id]) || c.result || 'pending'; }
-
-  var dryRunItems = dr ? [
+  if (!dr) return null;
+  var items = [
     {
       key: 'output',
       label: <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>1 · 產出長什麼樣</span>,
@@ -707,11 +881,352 @@ function TestBlock({ skill, p, onSave, onOpenCalc }) {
         />
       ),
     },
-  ] : [];
+  ];
+  return (
+    <div>
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8 }}>試跑時間：{dr.ranAt}</div>
+      {dr.diffNote && (
+        <antd.Alert type="info" showIcon style={{ marginBottom: 16 }}
+          message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>與{dr.comparedWith}比對</span>}
+          description={<span style={{ fontSize: fz(12), lineHeight: 1.6 }}>{dr.diffNote}</span>}
+        />
+      )}
+      <antd.Collapse
+        defaultActiveKey={['output']} items={items} size="small"
+        onChange={function(keys) { if (keys.indexOf('calc') !== -1 && onOpenCalc) onOpenCalc(); }}
+      />
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   情境試跑（2026-07-27 PO 指定）
+
+   PO：「sop 走 codify graph，每個節點都是一段程式碼，就有可能接口 in/out 處理
+   不正確、極值沒考慮清楚、schema 不正確 —— 目前看不出有這些測試案例，
+   也看不出發生時系統如何響應。」
+
+   原本的試跑只有一條路：正常資料跑一次、看產出。這裡把它改成**一組情境**。
+   壞資料情境由系統依這份的工具與節點自動出（跟測試案例的 🔒 系統出題
+   同一個道理，只是從語意層下到資料層），不可刪。
+
+   **通過的定義是「行為符合約定」，不是「有輸出」。**
+   有些情境的正確結果就是拒絕產出 —— 若沿用「全綠才能送簽」，
+   會逼人把約定寫成「照跑」，那就本末倒置了。
+   ════════════════════════════════════════ */
+function buildDataScenarios(skill) {
+  if (skill.tier !== 'sop') return [];
+  var steps = skill.plainSteps || [];
+  if (steps.length === 0) return [];
+  var reads    = steps.filter(function(s) { return s.io === 'read'; });
+  var computes = steps.filter(function(s) { return s.io === 'compute'; });
+  var writes   = steps.filter(function(s) { return s.io === 'write'; });
+  var list = [];
+
+  if (skill.dryRun) {
+    list.push({
+      id: 'sc-normal', kind: 'normal', origin: 'real', label: '正常資料',
+      inject: null,
+      expect: '應完整產出，且每個數字都追得到來源',
+    });
+  }
+  if (reads[0]) {
+    list.push({
+      id: 'sc-empty', kind: 'empty', origin: 'system', label: '來源回空集合',
+      inject: { stepNum: reads[0].num, tool: reads[0].tool, how: '「' + reads[0].label + '」回傳 0 筆' },
+      expect: '應停止產出並標示「來源無資料」，不可把「查無資料」當成「真的 0 筆」照常輸出',
+    });
+    list.push({
+      id: 'sc-schema', kind: 'schema', origin: 'system', label: '來源 schema 變更',
+      inject: { stepNum: reads[0].num, tool: reads[0].tool, how: '回傳欄位改名或型別不符（上游 API 改版）' },
+      expect: '應在該節點停下並指出是哪個欄位對不上，不可略過該欄位繼續算',
+    });
+  }
+  if (computes[0]) {
+    list.push({
+      id: 'sc-extreme', kind: 'extreme', origin: 'system', label: '極值與空值',
+      inject: { stepNum: computes[0].num, tool: null, how: '上游資料含 null 日期、數量 0 與異常大值' },
+      expect: '應明確標示異常值，不可讓 null 參與排序或計算後靜靜輸出',
+    });
+  }
+  if (writes[0]) {
+    list.push({
+      id: 'sc-rerun', kind: 'rerun', origin: 'system', label: '同一天重複執行',
+      inject: { stepNum: writes[0].num, tool: writes[0].tool, how: '同一天第二次執行到寫入節點' },
+      expect: '應提示今天已經執行過並顯示上次結果，不可重複寫入',
+    });
+  }
+  return list.concat(skill.userScenarios || []);
+}
+
+/* 節點軌跡：資料裡沒寫失敗就是「符合約定」——
+   壞資料情境符合約定的長相是**停在注入的那一步並回報**，不是一路跑完。 */
+function buildScenarioTrace(skill, sc, fail) {
+  var steps = skill.plainSteps || [];
+  if (fail && fail.trace) {
+    return fail.trace.map(function(t) {
+      var ps = steps.filter(function(s) { return s.num === t.num; })[0];
+      return { num: t.num, label: ps ? ps.label : '步驟 ' + t.num, status: t.status, note: t.note };
+    });
+  }
+  if (!sc.inject) {
+    return steps.map(function(s) { return { num: s.num, label: s.label, status: 'ok', note: null }; });
+  }
+  var stopAt = sc.inject.stepNum;
+  return steps.map(function(s) {
+    if (s.num < stopAt) return { num: s.num, label: s.label, status: 'ok', note: null };
+    if (s.num === stopAt) return { num: s.num, label: s.label, status: 'stop', note: '依約定中止並回報，不往下算' };
+    return { num: s.num, label: s.label, status: 'skip', note: '未執行' };
+  });
+}
+
+const SCENARIO_TRACE_CFG = {
+  ok:   { icon: '✓', color: '#22C55E' },
+  stop: { icon: '⏹', color: '#2563EB' },
+  fail: { icon: '✗', color: '#EF4444' },
+  skip: { icon: '—', color: '#9E9E9E' },
+};
+
+function ScenarioBlock({ skill, p, onSave, onOpenCalc }) {
+  var { C, fz } = useTheme();
+  var scenarios = buildDataScenarios(skill);
+  var fails = skill.scenarioFails || {};
+  var run   = skill.scenarioRun || null;
+
+  var [live, setLive]     = React.useState(null);
+  var [busy, setBusy]     = React.useState(false);
+  var [open, setOpen]     = React.useState({});
+
+  if (scenarios.length === 0) return null;
+
+  function statusOf(sc) {
+    if (live && live[sc.id]) return live[sc.id];
+    if (run && run.results && run.results[sc.id]) return run.results[sc.id];
+    /* 正常資料那條原本就跑過了（dryRun.ranAt）；壞資料情境從來沒跑過 */
+    if (sc.kind === 'normal' && skill.dryRun) return 'pass';
+    return 'pending';
+  }
+
+  var pendCnt = scenarios.filter(function(s) { return statusOf(s) === 'pending'; }).length;
+  var failCnt = scenarios.filter(function(s) { return statusOf(s) === 'fail'; }).length;
+
+  /* 逐題播放：瞬間跑完的話，「正在測」這個狀態根本不存在 */
+  function runAll() {
+    if (busy) return;
+    setBusy(true); setLive({});
+    var acc = {};
+    scenarios.forEach(function(sc, i) {
+      setTimeout(function() {
+        setLive(function(prev) { var n = Object.assign({}, prev); n[sc.id] = 'running'; return n; });
+      }, i * 620);
+      setTimeout(function() {
+        acc[sc.id] = fails[sc.id] ? 'fail' : 'pass';
+        setLive(function(prev) { var n = Object.assign({}, prev); n[sc.id] = acc[sc.id]; return n; });
+      }, i * 620 + 460);
+    });
+    setTimeout(function() {
+      setBusy(false); setLive(null);
+      onSave(Object.assign({}, skill, { scenarioRun: { at: '剛剛', by: p.user.name, results: acc } }));
+      /* 沒過的那幾題自己展開 —— 要人再點一次才看得到失敗，等於沒給 */
+      var o = {};
+      scenarios.forEach(function(sc) { if (acc[sc.id] === 'fail') o[sc.id] = true; });
+      setOpen(o);
+    }, scenarios.length * 620 + 560);
+  }
+
+  return (
+    <div style={{ marginTop: 32 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>情境試跑</span>
+        {pendCnt > 0
+          ? <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#F97316', background: 'rgba(249,115,22,0.08)' }}>
+              {pendCnt} 個情境沒跑過（共 {scenarios.length} 個）
+            </antd.Tag>
+          : <antd.Tag bordered={false} style={{
+              marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+              color: failCnt > 0 ? '#EF4444' : '#22C55E',
+              background: failCnt > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)',
+            }}>{failCnt > 0 ? failCnt + ' 個不符合約定' : scenarios.length + ' 個全部符合約定'}</antd.Tag>
+        }
+        <div style={{ flex: 1 }} />
+        <antd.Button size="small" type="primary" loading={busy} onClick={runAll}>
+          {busy ? '執行中…' : (run ? '重新試跑' : '執行情境試跑')}
+        </antd.Button>
+      </div>
+
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8, lineHeight: 1.7 }}>
+        輸出看起來對，不代表來源對。標了 🔒 的壞資料情境是系統依這份的工具與節點自動出的，不可刪 ——
+        危險的不是跑爆（跑爆看得見），是節點吃到爛資料照樣算完、輸出一份長得很正常的東西。
+      </div>
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16, lineHeight: 1.7 }}>
+        <span style={{ fontWeight: 600, color: C.textSub }}>通過的定義是「行為符合約定」，不是「有輸出」。</span>
+        有些情境的正確結果就是拒絕產出。
+        {run ? '　上次試跑：' + run.at + ' · ' + run.by : ''}
+      </div>
+
+      <antd.List
+        bordered size="small" dataSource={scenarios}
+        renderItem={function(sc) {
+          var st  = statusOf(sc);
+          var cfg = st === 'pass'    ? { label: 'PASS',  color: '#22C55E', bg: 'rgba(34,197,94,0.08)' }
+                  : st === 'fail'    ? { label: 'FAIL',  color: '#EF4444', bg: 'rgba(239,68,68,0.08)' }
+                  : st === 'running' ? { label: '執行中', color: '#2563EB', bg: 'rgba(37,99,235,0.08)' }
+                  :                    { label: '待執行', color: '#6B7280', bg: 'rgba(107,114,128,0.08)' };
+          var fail    = fails[sc.id];
+          var isOpen  = !!open[sc.id];
+          var trace   = buildScenarioTrace(skill, sc, st === 'fail' ? fail : null);
+          var isNormal = sc.kind === 'normal';
+
+          return (
+            <antd.List.Item style={{ alignItems: 'flex-start', gap: 8, background: st === 'fail' ? 'rgba(239,68,68,0.04)' : 'transparent' }}>
+              <antd.Tag bordered={false} style={{
+                marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, width: 56, textAlign: 'center',
+                fontSize: fz(11), fontWeight: 700, color: cfg.color, background: cfg.bg,
+              }}>{cfg.label}</antd.Tag>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, marginBottom: 4 }}>{sc.label}</div>
+                {sc.inject && (
+                  <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.6 }}>
+                    注入：步驟 {sc.inject.stepNum} · {sc.inject.how}
+                  </div>
+                )}
+                <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.6 }}>約定：{sc.expect}</div>
+
+                {st !== 'pending' && st !== 'running' && (
+                  <div style={{ marginTop: 4 }}>
+                    <span
+                      onClick={function() { setOpen(function(prev) { var n = Object.assign({}, prev); n[sc.id] = !prev[sc.id]; return n; }); }}
+                      style={{ fontSize: fz(12), color: st === 'fail' ? '#EF4444' : '#2563EB', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                      {isOpen ? '收合 ⌃' : (isNormal ? '看這次跑出什麼 ⌄' : '看每個節點怎麼反應 ⌄')}
+                    </span>
+                  </div>
+                )}
+
+                {isOpen && isNormal && (
+                  <div style={{ marginTop: 8 }}>
+                    <DryRunDetail skill={skill} onOpenCalc={onOpenCalc} />
+                  </div>
+                )}
+
+                {isOpen && !isNormal && (
+                  <div style={{ marginTop: 8, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+                    {trace.map(function(t, i) {
+                      var tc = SCENARIO_TRACE_CFG[t.status] || SCENARIO_TRACE_CFG.ok;
+                      return (
+                        <div key={t.num} style={{
+                          padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none',
+                          display: 'flex', alignItems: 'baseline', gap: 8,
+                        }}>
+                          <span style={{ fontSize: fz(12), fontWeight: 700, color: tc.color, width: 12, flexShrink: 0 }}>{tc.icon}</span>
+                          <span style={{ fontSize: fz(12), color: C.textMuted, flexShrink: 0 }}>步驟 {t.num}</span>
+                          <span style={{ fontSize: fz(12), color: t.status === 'fail' ? '#EF4444' : C.textSub, fontWeight: 500 }}>{t.label}</span>
+                          {t.note && <span style={{ fontSize: fz(12), color: t.status === 'fail' ? '#EF4444' : C.textMuted, flex: 1, minWidth: 0 }}>· {t.note}</span>}
+                        </div>
+                      );
+                    })}
+                    {st === 'fail' && fail && (
+                      <React.Fragment>
+                        <div style={{ padding: '8px 16px', borderTop: '1px solid ' + C.border, fontSize: fz(12), color: C.textSub, lineHeight: 1.7 }}>
+                          <span style={{ color: C.textMuted, marginRight: 8 }}>實際</span>{fail.actual}
+                        </div>
+                        <div style={{ padding: '8px 16px', borderTop: '1px solid rgba(239,68,68,0.2)', fontSize: fz(12), color: '#EF4444', lineHeight: 1.7 }}>
+                          <span style={{ marginRight: 8 }}>該修</span>{fail.fix}
+                        </div>
+                      </React.Fragment>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {sc.origin === 'system'
+                ? <antd.Tooltip title="系統依這份的工具與節點自動出題，不可刪除">
+                    <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>🔒 系統出題</antd.Tag>
+                  </antd.Tooltip>
+                : <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, flexShrink: 0, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>
+                    {sc.origin === 'real' ? '真實資料' : '課內出題'}
+                  </antd.Tag>
+              }
+            </antd.List.Item>
+          );
+        }}
+      />
+    </div>
+  );
+}
+
+function TestBlock({ skill, p, onSave, onOpenCalc }) {
+  var { C, fz } = useTheme();
+  var cases   = skill.evalCases || [];
+  var passCnt = cases.filter(function(c) { return c.result === 'pass'; }).length;
+  var pendCnt = cases.filter(function(c) { return c.result === 'pending' || !c.result; }).length;
+  var allPass = cases.length > 0 && passCnt === cases.length;
+
+  var [live, setLive]       = React.useState(null);   /* 執行中的即時結果，跑完就交還給 skill */
+  var [running, setRunning] = React.useState(false);
+  var [addOpen, setAddOpen] = React.useState(false);
+  var [openFail, setOpenFail] = React.useState({});
+
+  /* 逐題播放：瞬間跑完的話，「正在測」這個狀態根本不存在（guideline §6） */
+  function runTests() {
+    if (running || cases.length === 0) return;
+    setRunning(true);
+    setLive({});
+    var acc = {};
+    var timers = [];
+    cases.forEach(function(c, i) {
+      timers.push(setTimeout(function() {
+        setLive(function(prev) { var n = Object.assign({}, prev); n[c.id] = 'running'; return n; });
+      }, i * 620));
+      timers.push(setTimeout(function() {
+        acc[c.id] = evalCaseOutcome(c);
+        setLive(function(prev) { var n = Object.assign({}, prev); n[c.id] = acc[c.id]; return n; });
+      }, i * 620 + 460));
+    });
+    setTimeout(function() {
+      setRunning(false);
+      setLive(null);
+      onSave(Object.assign({}, skill, {
+        evalCases: cases.map(function(c) { return Object.assign({}, c, { result: acc[c.id] || c.result }); }),
+        evalRun: { at: '剛剛', by: p.user.name },
+      }));
+    }, cases.length * 620 + 560);
+  }
+
+  function addCase(input, expect) {
+    setAddOpen(false);
+    onSave(Object.assign({}, skill, {
+      evalCases: cases.concat([{
+        id: 'ev-seed-' + Date.now(), input: input, expect: expect,
+        origin: 'seed', locked: false, result: 'pending',
+      }]),
+    }));
+  }
+
+  function removeCase(id) {
+    onSave(Object.assign({}, skill, {
+      evalCases: cases.filter(function(c) { return c.id !== id; }),
+    }));
+  }
+
+  /* 執行紀錄。舊資料沒有 evalRun，就退回建立當時的人與日期 ——
+     重點是畫面上不能出現「沒人跑過卻顯示 PASS」。 */
+  var lastRun = skill.evalRun || (cases.length > 0 && pendCnt === 0
+    ? { at: skill.importedAt, by: skill.importedBy }
+    : null);
+
+  function statusOf(c) { return (live && live[c.id]) || c.result || 'pending'; }
+
+  /* SOP 沒有「意圖」可測 —— 圖裡沒有的工具它根本呼叫不到，
+     範圍是勾出來的結構化條件。它只有情境試跑。 */
+  if (skill.tier === 'sop') {
+    return <ScenarioBlock skill={skill} p={p} onSave={onSave} onOpenCalc={onOpenCalc} />;
+  }
 
   return (
     <div>
-      {/* 測試案例 */}
+      {/* 測試案例（僅輔助判斷）*/}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>測試案例</span>
         {pendCnt > 0
@@ -797,37 +1312,8 @@ function TestBlock({ skill, p, onSave, onOpenCalc }) {
         <AddEvalCaseModal skill={skill} onCancel={function() { setAddOpen(false); }} onAdd={addCase} />
       )}
 
-      {/* Dry run（僅 SOP 有） */}
-      {dr && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>試跑結果</span>
-            <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), background: C.bgPanel, color: C.textMuted }}>{dryRunning ? '執行中…' : dr.ranAt}</antd.Tag>
-            <div style={{ flex: 1 }} />
-            <antd.Button size="small" loading={dryRunning} onClick={rerunDry}>重新試跑</antd.Button>
-          </div>
-          <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16, lineHeight: 1.6 }}>
-            輸出看起來對，不代表來源對。第 2、3 層不能只是擺著 —— 送簽前至少要展開過第 2 層一次。
-          </div>
-          {dr.diffNote && (
-            <antd.Alert type="info" showIcon style={{ marginBottom: 16 }}
-              message={<span style={{ fontSize: fz(12), fontWeight: 600 }}>與{dr.comparedWith}比對</span>}
-              description={<span style={{ fontSize: fz(12), lineHeight: 1.6 }}>{dr.diffNote}</span>}
-            />
-          )}
-          <antd.Collapse
-            defaultActiveKey={['output']}
-            items={dryRunItems}
-            size="small"
-            onChange={function(keys) {
-              if (keys.indexOf('calc') !== -1 && onOpenCalc) onOpenCalc();
-            }}
-          />
-        </div>
-      )}
-
       {/* 輔助判斷：一次實際互動的紀錄（治理要看得見） */}
-      {skill.tier === 'guided' && skill.traceSample && (
+      {skill.traceSample && (
         <div style={{ marginTop: 32 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
             <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>最近一次實際互動</span>
@@ -1013,10 +1499,10 @@ function buildAiSuggestions(skill) {
     },
   });
 
-  /* 3. 測試案例 */
+  /* 3. 測試案例 —— 只有輔助判斷有。SOP 的驗收是情境試跑，題目由系統依節點自動出，不用人想 */
   var cases = skill.evalCases || [];
   var seedCnt = cases.filter(function(c) { return c.origin === 'seed'; }).length;
-  if (seedCnt < 3) {
+  if (skill.tier !== 'sop' && seedCnt < 3) {
     list.push({
       key: 'eval',
       prompt: '幫我想幾題該補的測試案例',
@@ -1027,9 +1513,7 @@ function buildAiSuggestions(skill) {
         runSteps: ['讀取判斷順序與注意事項', '找出容易踩到的邊界狀況', '寫成 2 題可驗收的案例'],
         resultText: '兩題都推自這份的內容，加進去之後是「待執行」，要按一次「執行測試」才有結果。預期行為你可以再編輯。',
         before: null,
-        after: skill.tier === 'sop'
-          ? '· 「來源資料有缺漏時」 → 預期：明確標示缺漏，不可用預設值補齊後照常產出\n· 「同一天重複執行」 → 預期：應提示已執行過並顯示上次結果，不重複寫入'
-          : '· 「數據互相矛盾時」 → 預期：應明說矛盾在哪，不可挑一個順眼的下結論\n· 「數據不足以判斷時」 → 預期：應回「資料不足」，不得硬給研判',
+        after: '· 「數據互相矛盾時」 → 預期：應明說矛盾在哪，不可挑一個順眼的下結論\n· 「數據不足以判斷時」 → 預期：應回「資料不足」，不得硬給研判',
         appliedNote: '測試案例已更新',
       },
     });
@@ -1435,8 +1919,11 @@ function buildIntakeReview(skill, p) {
     });
   }
 
-  /* 4. 測試 —— 不給 action，因為它要的是使用者去按「執行測試」 */
-  findings.push('**測試案例**　目前只有系統自動出的 ' + caseCnt + ' 題負面題，全部還沒執行。整理完內容之後，記得回左邊按一次「執行測試」。');
+  /* 4. 驗收 —— 不給 action，因為它要的是使用者自己去按那顆執行鈕。
+     兩種類型驗收方法不同，講的話也不一樣。 */
+  findings.push(isSop
+    ? '**驗收**　SOP 不測「使用者會怎麼問」——圖裡沒有的工具它呼叫不到，範圍也是勾出來的。要驗的是資料壞掉時每個節點怎麼反應，題目系統會依你的節點自動出。拆完步驟之後，記得回左邊按一次「執行情境試跑」。'
+    : '**測試案例**　目前只有系統自動出的 ' + caseCnt + ' 題負面題，全部還沒執行。整理完內容之後，記得回左邊按一次「執行測試」。');
 
   return {
     runSteps: ['讀取你填的名稱與流程', '比對課上已有的 Skill 與 SOP', '檢查適用範圍圈到的機台', '判斷類型是否合適'],
@@ -1487,8 +1974,9 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
     } else if (act.target === 'tier') {
       next.tier = act.tier;
-      /* 類型換了，系統出的負面題也要跟著換 —— 不同類型該擋的事不一樣 */
-      next.evalCases = (skill.evalCases || [])
+      /* 類型換了，驗收方法整個換掉 —— SOP 走情境試跑（系統依節點自動出，
+         不需要 evalCases），輔助判斷走測試案例。 */
+      next.evalCases = act.tier === 'sop' ? [] : (skill.evalCases || [])
         .filter(function(c) { return c.origin !== 'system'; })
         .concat(buildAutoEvalCases(p, skill.scope, act.tier));
       if (act.tier === 'guided') {
@@ -1636,14 +2124,16 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
               <SdSection id="sd-graph" title="Graph" {...sectionProps('graph')}
                 badge={(skill.plainSteps || []).length + ' 個步驟'}
                 desc="執行時實際會跑的流程。節點上直接標出讀取／異動／需人工確認，不另開「會碰到哪些系統」的清單。">
-                <SkillGraph skill={skill} />
+                <SkillGraph skill={skill} onSaveScenario={function(sc) {
+                  onSave(Object.assign({}, skill, { userScenarios: (skill.userScenarios || []).concat([sc]) }));
+                }} />
               </SdSection>
             )}
 
-            <SdSection id="sd-test" title="Test case & Dry-run"
+            <SdSection id="sd-test" title={skill.tier === 'sop' ? 'Dry-run' : 'Test case'}
               desc={skill.tier === 'sop'
-                ? '測試案例確認流程對不對，試跑結果確認算出來的數字對不對。兩者都過才能送簽。'
-                : '同一份指引換個問法就會走不同路，所以不做試跑，改用固定測試案例驗收。全數通過才能送簽。'}>
+                ? 'SOP 是 codify graph，每個節點都是一段程式碼，沒有「意圖」可測 —— 圖裡沒有的工具它呼叫不到，範圍也是勾出來的結構化條件。要驗的是結果與例外：資料壞掉時每個節點怎麼反應。全部符合約定才能送簽。'
+                : '同一份指引換個問法就會走不同路，沒有固定步驟可以試跑，所以驗的是意圖 —— 使用者這樣問，它該怎麼回。全數通過才能送簽。'}>
               <TestBlock skill={skill} p={p} onSave={onSave} onOpenCalc={function() { setCalcOpened(true); }} />
             </SdSection>
 
