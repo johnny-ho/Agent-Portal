@@ -801,7 +801,23 @@ function DescriptionBlock({ skill, p }) {
   var { C, fz } = useTheme();
   var refs = (skill.knowledgeRefs || []).map(function(id) { return findKnowledgeDoc(p.key, id); }).filter(Boolean);
 
-  /* 極輕量 markdown：# 標題、**粗體**、其餘為段落。不引外部套件。 */
+  /* 極輕量 markdown：# 標題、**粗體**、`工具名`、- 條列。不引外部套件。
+
+     行內 `code` 是 2026-07-29 補的：指引裡會直接寫出要呼叫哪一支工具、
+     帶什麼參數，那些字串必須看起來就是工具名而不是句子的一部分 ——
+     Scope 區的工具表已經用 monospace 呈現 tool name，這裡沿用同一套視覺。 */
+  function renderInline(line) {
+    return line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map(function(seg, j) {
+      if (/^\*\*[^*]+\*\*$/.test(seg)) {
+        return <span key={j} style={{ fontWeight: 700, color: C.text }}>{seg.slice(2, -2)}</span>;
+      }
+      if (/^`[^`]+`$/.test(seg)) {
+        return <span key={j} style={{ fontFamily: 'monospace', fontSize: fz(13), color: '#2563EB' }}>{seg.slice(1, -1)}</span>;
+      }
+      return <React.Fragment key={j}>{seg}</React.Fragment>;
+    });
+  }
+
   function renderLine(line, i) {
     if (/^#{1,3}\s/.test(line)) {
       var lv = line.match(/^#+/)[0].length;
@@ -813,16 +829,14 @@ function DescriptionBlock({ skill, p }) {
       );
     }
     if (line.trim() === '') return <div key={i} style={{ height: 8 }} />;
-    var parts = line.split(/(\*\*[^*]+\*\*)/g);
+    /* 條列縮排：巢狀那層是分支條件（「壓差 > 0.05 → 判阻塞」），
+       跟它上面那一步不同層，平排會看不出從屬關係 */
+    var indent = /^ {2,}[-·]\s/.test(line) ? 32 : /^[-·]\s/.test(line) ? 16 : 0;
     return (
-      <div key={i} style={{ fontSize: fz(14), color: C.textSub, lineHeight: 1.9, marginBottom: 4 }}>
-        {parts.map(function(seg, j) {
-          if (/^\*\*[^*]+\*\*$/.test(seg)) {
-            return <span key={j} style={{ fontWeight: 700, color: C.text }}>{seg.slice(2, -2)}</span>;
-          }
-          return <React.Fragment key={j}>{seg}</React.Fragment>;
-        })}
-      </div>
+      <div key={i} style={{
+        fontSize: fz(14), color: C.textSub, lineHeight: 1.9, marginBottom: 4,
+        paddingLeft: indent,
+      }}>{renderInline(line.trim())}</div>
     );
   }
 
@@ -1678,7 +1692,12 @@ function AcceptanceBlock({ skill, p, onSave }) {
                       <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>已拒絕</antd.Tag>
                     )}
                   </div>
-                  <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, paddingLeft: 20, marginTop: 4 }}>{s.text || s.result}</div>
+                  {/* 回覆那一步會照 Description 的「回答一定要包含」帶出依據、
+                      排除過程與責任聲明，所以有換行與粗體 —— 交給 AiText 解析。
+                      這一段就是「AI 到底做了什麼」可以被檢查的地方。 */}
+                  <div style={{ paddingLeft: 20, marginTop: 4 }}>
+                    <AiText text={s.text || s.result} />
+                  </div>
                   {s.reason && (
                     <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, paddingLeft: 20, marginTop: 4 }}>原因：{s.reason}</div>
                   )}
@@ -2168,11 +2187,26 @@ function buildFormalDescription(skill) {
       + '\n\n## 會碰到哪些系統\n目前全程只讀取資料、不異動任何系統。若之後加入會異動系統的步驟，執行到那幾步一律會停下來等人確認 —— 手動執行如此，排程執行也一樣。'
       + '\n\n## 什麼時候不用這份\n（AI 依適用範圍草擬，請補上課上實際的排除條件）';
   }
+  /* 輔助判斷的正式格式不是「一篇說明文件」，是**agent 照著跑的操作手冊**：
+     要寫出呼叫哪一支工具、分支的門檻在哪、什麼時候要停下來，
+     以及回答一定要帶出哪些東西 —— 最後那一段是讓研判結果可以被別人檢查的關鍵，
+     沒有它，agent 產出的就只是一句看不出憑據的結論。 */
+  var toolLines = (skill.tools || []).map(function(t) {
+    return '- `' + t.name + '` — ' + t.label + '（' + t.system + '）';
+  }).join('\n') || '- （尚未授權工具，請在上方 Scope 區的「可用工具」加入）';
+
   return '# ' + skill.title
     + '\n\n## 什麼時候用這份\n' + raw
     + '\n\n## 什麼時候不用這份\n（AI 依適用範圍草擬，請補上課上實際的排除條件）'
-    + '\n\n## 判斷順序\n1. **先看現場數據的走勢**：持續性的偏移與突發跳動要分開看，兩者的處置方向完全不同。\n2. **比對同類設備**：多台同時出現通常不是單機問題。\n3. **對照上次保養時間**：距離上次保養越久，磨耗解釋的合理性越高。'
-    + '\n\n## 要一併確認的數據\n- 異常發生前 2 小時的趨勢\n- 同機台近 7 天的同類事件次數\n- 上次保養日期'
+    + '\n\n## 可以動用的工具\n' + toolLines
+    + '\n\n全部唯讀。要異動系統的動作都要人自己執行 —— 這份沒有寫入工具，也不會有。'
+    + '\n\n## 研判步驟\n每一步都要把取到的數值寫進回答，不要只寫結論。'
+    + '\n\n1. **先看現場數據的走勢**\n  - 持續性的偏移與突發跳動要分開看，兩者的處置方向完全不同\n  - 取不到數據就停下來說缺哪一項，不要拿別的代替'
+    + '\n2. **比對同類設備**\n  - 多台同時出現 → 多半不是單機問題，方向要改\n  - 只有這一台 → 才繼續往單機方向查'
+    + '\n3. **對照上次保養時間**\n   距離上次保養越久，磨耗解釋的合理性越高。'
+    + '\n\n（以上是依類型草擬的骨架，請把課上實際的門檻數字與分支條件填進去 —— 門檻寫得多明確，研判就有多穩。）'
+    + '\n\n## 回答一定要包含\n1. **結論與把握程度** —— 判成什麼、有幾項數據支持\n2. **每個數字的來源** —— 哪一支工具、什麼時間取的，讓看的人可以自己回查\n3. **排除了什麼** —— 哪些假設被排除、憑哪一項數據排除\n4. **建議動作與執行位置** —— 要做什麼、在哪個系統做、該由誰執行\n5. **責任聲明** —— 這是研判建議，不是核准流程'
+    + '\n\n## 停下來不要硬判的情況\n- 資料不足 → 回「資料不足以判斷」並列出還缺什麼\n- 數據互相矛盾 → 明說矛盾在哪，不要挑一個順眼的下結論'
     + '\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。本類型只有唯讀工具，不會異動任何系統。';
 }
 
@@ -2217,11 +2251,11 @@ function buildIntakeReview(skill, p) {
   }
 
   /* 2. Description —— 使用者填的是白話，還不是可執行／可研判的格式 */
-  findings.push('**內容**　你填的是給人看的白話，還不是' + (isSop ? '簽核看得懂的流程敘述' : 'AI 研判時能照著走的指引') + '。我可以幫你整理成正式格式。');
+  findings.push('**內容**　你填的是給人看的白話，還不是' + (isSop ? '簽核看得懂的流程敘述' : 'AI 拿去操作工具的指引 —— 它要照著這段決定呼叫哪支工具、什麼門檻下走哪一條分支') + '。我可以幫你整理成正式格式。');
   suggestions.push({
     key: 'intake-desc',
     prompt: '幫我把內容整理成正式格式',
-    reply: '我會保留你寫的意思，只補上結構與缺掉的段落 —— ' + (isSop ? '流程大意、會碰到的系統、異動步驟的處理方式。' : '什麼時候用 → 判斷順序 → 要一併確認的數據 → 注意事項。'),
+    reply: '我會保留你寫的意思，只補上結構與缺掉的段落 —— ' + (isSop ? '流程大意、會碰到的系統、異動步驟的處理方式。' : '什麼時候用 → 可以動用哪些工具 → 研判步驟與分支門檻 → 回答一定要包含什麼 → 什麼時候該停下來。\n\n最後那兩段是重點：AI 是照這份去操作工具的，回答要帶出數據來源與排除過程，別人才檢查得了它做了什麼。'),
     action: {
       target: 'description',
       mode: 'replace',
@@ -2229,7 +2263,7 @@ function buildIntakeReview(skill, p) {
       runSteps: ['讀取你填的流程描述', '比對這個類型的標準格式', '補上缺少的段落', '產生正式的 Description'],
       resultText: '整理好了。你原本寫的意思都在，只是補上了結構與缺掉的段落 —— 套用後可以再編輯。',
       before: (raw || '（未填）').slice(0, 60) + (raw.length > 60 ? '…' : ''),
-      after: isSop ? '（正式 SOP 流程敘述：流程大意 / 會碰到的系統 / 異動步驟的處理）' : '（正式判斷指引：什麼時候用 / 判斷順序 / 要確認的數據 / 注意事項）',
+      after: isSop ? '（正式 SOP 流程敘述：流程大意 / 會碰到的系統 / 異動步驟的處理）' : '（正式判斷指引：什麼時候用 / 可以動用的工具 / 研判步驟與門檻 / 回答一定要包含 / 停下來不要硬判的情況）',
       appliedNote: 'Description 已更新',
     },
   });
@@ -2460,7 +2494,7 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
             <SdSection id="sd-desc" title="Description" {...sectionProps('description')}
               desc={skill.tier === 'sop'
                 ? '這份 SOP 在做什麼、流程大意。簽核簽的是這段白話說明，不是底下的 code。'
-                : '這份輔助判斷的完整指引。AI 研判時就是照這段內容走，所以它寫得多清楚，研判就有多穩。'}>
+                : '這份輔助判斷的完整指引，也是 AI 的操作手冊 —— 呼叫哪支工具、什麼門檻下走哪條分支、回答要帶出哪些依據，都寫在這裡。它寫得多明確，研判就有多穩，也才檢查得出 AI 到底做了什麼。'}>
               <DescriptionBlock skill={skill} p={p} />
             </SdSection>
 
