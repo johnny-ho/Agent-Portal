@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Agent Skill 三層模型（知識／輔助判斷／SOP）
-description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-27~28 第三輪：dry run 改成情境試跑 + 節點試打，SOP 不再有測試案例（兩類型驗收方法分開）
+description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-29 第四輪：輔助判斷的測試案例改為驗收（AC × 提問情境、同一提問跑 5 次、人判、不滿分要寫原因才放行）
 tags: [concept, ai, architecture, skill, governance]
-updated: 2026-07-28
-sources: [PO×AI 討論 2026-07-25 / 07-26 / 07-27 / 07-28, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
+updated: 2026-07-29
+sources: [PO×AI 討論 2026-07-25 / 07-26 / 07-27 / 07-28 / 07-29, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
 status: current
 ---
 
@@ -672,6 +672,89 @@ write 節點只 dry 不真打：一個「試」的按鈕真的開了工單，整
 | `components/SkillCreateFlow.jsx` | 建 SOP 時 `evalCases: []`；`buildAutoEvalCases` 移除 SOP 分支 |
 
 新資料欄位：`TOOL_PROBE[tool]`、`skill.scenarioFails`、`skill.scenarioRun: { at, by, results }`、`skill.userScenarios[]`。`evalCases`／`evalRun` 自此只屬於輔助判斷。
+
+## 2026-07-29 第四輪：測試案例 → 驗收（同一提問跑 5 次，人判 AC）
+
+**PO：「test case 會跟 codify graph 的 test 模式混淆。想法是改為 test report ——使用者填他的 AC，run test 的時候 agent 會 run 5 次，把結果展示給 user，user 根據內容判斷 AC 是否符合，符合就打勾，全數通過才能送簽。」**
+
+### 命名只是表層，真正的問題在下面
+
+混淆確實存在（決議 12 才剛把兩層分開，卻共用「測試」這個詞），但改名不是最重要的收穫。**更根本的是：輔助判斷每次結果都不一樣，「跑一次得到 PASS」在邏輯上本來就不成立。** 原本 `evalCases[].result` 是資料裡寫死的 mock，真實系統也沒有東西能自動判斷 LLM 的回答對不對——要嘛上 LLM-as-judge（把判斷權從一個模型移到另一個模型，稽核上更說不清），要嘛就是人。
+
+**判定權移到人身上是更誠實的設計。** 代價是「簽核變蓋章」（風險 2）升高：原本擋人的是系統，現在使用者把勾點完就能送簽。所以摩擦要一併補回來（見下）。
+
+### 決議 13：驗收＝驗收條件（AC）× 提問情境，跑 5 次
+
+| | 舊：測試案例 | 新：驗收 |
+|---|---|---|
+| 使用者寫什麼 | 一題＝輸入＋預期行為 | **AC**（每次回答都要成立的條件）與**提問情境**分開 |
+| 跑幾次 | 1 次 | **每個情境 5 次** |
+| 誰判 PASS | 系統（假的） | **人**，看實際回答內容 |
+| 送簽條件 | 全數通過 | **全數確認**（含「記為已知限制」） |
+
+**5 次測的是穩定性，不是覆蓋率**（PO 定案：同一個提問跑 5 次，不是 5 個不同提問）。覆蓋率靠情境數量撐。
+
+**畫面上要展示的不是 5 段回答，是 5 次之間的差異。** 平鋪 5 段長文，使用者讀到第三段就放棄然後全部打勾。實作上每條 AC 有一句 `says`，成立時那句話出現在回答裡、不成立就整句不見——**弱掉的回答本來就長這樣**，使用者是靠「少了那一行」看出問題，不是靠系統跟他說 FAIL。`3 / 5` 這個數字直接指出「指引那一段寫得不夠緊」，這是跑一次永遠看不到的東西。
+
+### AC 整份共用（全域），但可以有前提
+
+PO 定案「先全域就好」：AC 不掛在單一情境下。掛在情境下會讓同樣的條件在每個情境重抄一遍，改一條要改好幾個地方，而且一定會漏抄。
+
+**但全域帶出一個必須解的問題**：「應提到過濾器壓差 0.05 MPa 門檻」如果拿去驗「範圍外機台」那個情境，答案是「不適用」才對，硬算就變成 miss——比例會說謊。所以 AC 可帶 `whenKind`（`inscope` / `outscope` / `writereq`），**前提不成立的那幾次畫成灰點，不計入分母**。UI 上使用者只看到「5 次裡成立 3 次」，不必理解這層。
+
+這也是為什麼系統自動補的兩條分屬不同層次：「範圍外要回不適用」只有拿範圍外機台問才驗得到（情境相依），「不得代為執行」只有被要求執行時才驗得到——而「要標明責任在執行者」是真正每一次都該成立的全域條件。
+
+### 防蓋章的四道摩擦（判定權交給人的交換條件）
+
+1. **不是滿分的 AC 不給直接打勾**——checkbox disabled，只能走「記為已知限制」
+2. **放行要寫原因**（≥10 字），且**那句原因會進簽核資料給簽核人看**
+3. **改了 Description 就作廢**先前的驗收結果與所有確認（`descRev` 比對）。指引是契約，改了之後 AI 的行為就跟上次驗的不是同一件事——跟 SOP 那邊「code 改了白話說明沒改＝契約失效」是同一個邏輯。這一條堵掉「勾完再改指引」
+4. **重跑清空所有確認**；上次執行後才加的 AC 標為沒跑過，gate 擋下
+
+### ⚠️ 這一輪新增的責任告知線索
+
+系統自動補的第三條 AC 是「每次回答都要標明這是 AI 研判、不是核准流程，責任在執行者」。這正好接上 [ai-chat](../entities/modules/ai-chat.md) 三輪砍掉三態徽章之後轉移給 F-AI-01 的驗收條件——**UI 已經不會替模型講這句話了，那就在 Skill 的驗收上把它變成可量測的東西**。mock 刻意讓它在 15 次裡漏講 2–3 次，因為真實 LLM 本來就不保證每次都講。
+
+### 實作落點（2026-07-29）
+
+| 檔案 | 內容 |
+|---|---|
+| `data/personas.js` | 7 個 guided 的 `evalCases` 全數改為 `acceptance: { criteria[], probes[] }`；加 `acceptRun`／`acceptChecks`／`descRev` |
+| `components/SkillDetailPage.jsx` | 新增 `AcceptanceBlock`／`AcceptDots`／`AddAcceptanceModal`／`WaiveModal`／`buildAcceptResult`／`buildRunAnswer`／`acceptStale`／`acceptUnrunCrits`；刪 `evalCaseOutcome`／`AddEvalCaseModal`；`getSignoffGate` 的 guided 分支重寫；區塊標題 `Test case` → `驗收` |
+| `components/SkillCreateFlow.jsx` | `buildAutoEvalCases` → `buildAutoAcceptance`（同時產 AC 與情境，帶 `whenKind`） |
+
+新資料欄位：`acceptance.criteria[].{text, whenKind, says, mockMiss, missNote}`、`acceptance.probes[].{input, kind, lead}`、`acceptRun.{at, by, descRev, critIds}`、`acceptChecks[critId].{state:'ok'|'waived', by, at, reason}`、`skill.descRev`。`evalCases`／`evalRun` 自此消失。
+
+三份 mock 分別演三種狀態：`sm-eq-009`（放行後可送簽）、`sm-pr-006`（3/5 與 12/15，送不出簽）、`sm-pr-008`（沒跑過）。⚠️ `sm-mfg-*` 的資料同步改了，但**製造課不是 Seed，UI 上到不了那頁**（既有限制，非本輪造成）。
+
+### 同輪補強：Description 從「說明文件」改成 agent 的操作手冊
+
+PO 看完驗收之後指出 Description 範例太精簡、**沒有 skill.md 的精髓——應該展示 agent 可以利用 skill.md 進行操作，且操作結果可以被檢視，而不是單一問答**。
+
+原本的骨架（什麼時候用／判斷順序／要一併確認的數據／注意事項）讀起來像一篇給人看的文件，看不出 agent 拿它去做什麼。改成七段，關鍵是多出來的兩段：
+
+| 段落 | 為什麼要有 |
+|---|---|
+| 什麼時候用／不用這份 | （原有） |
+| **可以動用的工具** | 寫出 `fdc.get_alarm_detail(alarm_id)` 這種帶參數的呼叫。指引要能被執行，就必須指名工具，而不是說「查一下警報」 |
+| **研判步驟**（含分支門檻） | 每一步標明呼叫哪支工具、什麼條件走哪條分支（壓差 > 0.05 MPa → 直接判阻塞）、哪一項可以推翻哪一項 |
+| **回答一定要包含** ⭐ | 輸出契約：結論與把握程度／每個數字的來源與取數時間／排除了什麼／建議動作與執行位置／責任聲明 |
+| **停下來不要硬判的情況** | 取不到 X 不要用 Y 代替；數據矛盾要明說；資料不足要回資料不足 |
+| 注意事項 | （原有） |
+
+**「回答一定要包含」是讓結果可被檢視的那一段**，也是這次補強的重點。沒有依據與排除過程，研判就只是一句看不出憑據的結論，出事時無從回溯——這正是[風險 1 權責漂移](#)與[風險 4 稽核與再現性斷裂](#)的日常版本。它同時也讓驗收條件有東西可對：AC 檢查的就是這五點有沒有出現。
+
+一致性連帶修了兩處：
+- `buildFormalDescription()`（Ask AI 的「整理成正式格式」）改用同一套七段骨架，並**依 `skill.tools` 自動列出工具清單**，否則 AI 整理出來的還是舊的薄版本
+- `traceSample` 的回覆步驟原本只有一句結論，**違反了它自己那份指引的輸出契約**。改成完整帶出依據（每個數字的來源與取數時間）、排除過程、建議動作與責任聲明——旗艦範例不能自打嘴巴
+
+渲染面補了行內 `` `code` ``（monospace，沿用 Scope 工具表的視覺）與條列縮排，讓分支條件跟它上面那一步分得出層次。
+
+### 留下的缺口
+
+- **成本**：真實系統一次驗收＝情境數 × 5 次 LLM run × 每次數個 tool call。要在 F-AI-01 的成本估算裡記一筆。
+- **AC 是自由文字**，無法像結構化適用範圍那樣自動推導出更多負面條件；系統補的三條仍是從 tier + scope 推的。
+- 決議 12 的路由層缺口未動。
 
 ## 關聯
 
