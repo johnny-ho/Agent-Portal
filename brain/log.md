@@ -281,3 +281,29 @@ PO 問「上方原本的『測試案例』保留的意義是？」。回查 `sm-
 實作：`getSignoffGate` 依 tier 分兩條完全不同路徑；`TestBlock` 對 SOP 直接回傳 `ScenarioBlock`；Ask AI 的「幫我想幾題測試案例」與首次體檢的驗收段落依 tier 分流；`buildAutoEvalCases` 移除 SOP 分支、`SkillCreateFlow` 建 SOP 給空陣列；`personas.js` 九個 SOP 的 `evalCases` 死資料刪除（剩下 7 筆全部是 guided，已驗）。build 921,493 bytes，實測 SOP 頁只剩 Dry-run 一區、gate 顯示「還有 3 個情境沒跑過」；輔助判斷頁只剩 Test case，無情境試跑。console 零 React error。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 12）、index.md。
+
+## [2026-07-29] decision | 測試案例 → 驗收：同一提問跑 5 次，AC 由人判
+
+PO 帶團隊結論回來：「test case 會跟 codify graph 的 test 模式混淆，想改成 test report——使用者填 AC，run test 時 agent 跑 5 次，user 看內容判斷 AC 是否符合，全數通過才能送簽。」
+
+我同意方向但先指出兩件事。**混淆是真的，但改名不是最大的收穫**——更根本的是輔助判斷每次結果都不一樣，「跑一次得到 PASS」在邏輯上就不成立，原本 `result: 'pass'` 也只是資料裡寫死的。**判定權移到人身上是更誠實的設計**，因為真實系統本來也沒有東西能自動判斷 LLM 的回答對不對。代價是風險 2「簽核變蓋章」升高：擋人的從系統變成使用者自己。
+
+命名上建議用「驗收」而不是「測試報告」——使用者在這頁做的是驗收，不是讀報告；且與 SOP 的 `Dry-run` 完全分得開。PO 未反對，採用。
+
+三題定案：(1) 同一提問跑 5 次（測穩定性，覆蓋率靠情境數）；(2) AC **先全域就好**；(3) 不滿分**可以**放行。
+
+全域帶出一個必須解的問題：「應提到過濾器壓差門檻」拿去驗「範圍外機台」那個情境，正確答案是「不適用」，硬算就變成 miss，比例會說謊。解法是 AC 可帶 `whenKind`，**前提不成立的次數畫成灰點、不計入分母**，使用者只看到「5 次裡成立 3 次」。這是全域方案唯一被迫加回來的東西，已回報 PO。
+
+另一個實作決定：**畫面上展示的不是 5 段回答，是 5 次之間的差異**。每條 AC 帶一句 `says`，成立時那句出現在回答裡、不成立就整句不見——弱掉的回答本來就長這樣。平鋪 5 段長文只會讓人讀到第三段就全部打勾。
+
+防蓋章四道摩擦：不滿分不給直接勾（只能寫原因放行，原因進簽核資料）、改 Description 即作廢全部確認（`descRev`，堵掉「勾完再改指引」）、重跑清空確認、上次執行後才加的 AC 標為沒跑過。
+
+順帶接上一個舊缺口：系統自動補的第三條 AC 是「每次回答要標明這是 AI 研判、責任在執行者」——正是 ai-chat 三輪砍掉三態徽章後轉給 F-AI-01 的那條告知責任。mock 刻意讓它 15 次裡漏 2–3 次，因為真實 LLM 本來就不保證每次都講。
+
+實作：`personas.js` 7 個 guided 的 `evalCases` 全改為 `acceptance`；`SkillDetailPage.jsx` 新增 `AcceptanceBlock`／`AcceptDots`／`WaiveModal`／`buildAcceptResult`／`buildRunAnswer`，`getSignoffGate` 的 guided 分支重寫，區塊標題 `Test case` → `驗收`；`SkillCreateFlow.jsx` 的 `buildAutoEvalCases` → `buildAutoAcceptance`。`evalCases`／`evalRun` 自此消失。build 958,581 bytes。
+
+驗證（本機 headless Chromium，CDN 被網路政策擋掉，改用 npm 同版套件本地起 http server）：console 零 error；`sm-eq-009` 一條 waived 其餘已確認 → 送簽鈕 enabled；按 Ask AI 改 Description → 驗收作廢、送簽鈕 disabled、頁尾寫明原因；`sm-pr-006` 3/5 與 12/15 → 送不出簽；展開情境可見第 2 次少了責任聲明那行、第 3 次少了配方／原料那行；重跑清空全部確認；SOP 頁不受影響（仍只有 Dry-run／情境試跑）；新建 Skill → 系統自動補 3 條 AC + 2 個情境、gate 擋在「還沒有執行過驗收」。
+
+⚠️ `sm-mfg-*` 的資料同步改了但**製造課不是 Seed，UI 上到不了那頁**（既有限制），所以把「放行後可送簽」的示範移到設備課的 `sm-eq-009`。
+
+受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 13）、index.md。
