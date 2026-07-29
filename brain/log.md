@@ -352,3 +352,15 @@ PO 另外定案兩件我提議的東西都不要：**不加「勾之前要先展
 7 份輔助判斷的驗收資料全部重寫。build 989,906 bytes。實測：console 零 error；圓點與比例已不存在、「最近一次實際互動」已不存在；`sm-eq-009` 一條 waived 其餘已確認 → 送簽鈕 enabled；重跑清空全部確認；改 Description → 紀錄作廢橫幅 + 送簽被擋；新建 Skill → 系統補 3 條 AC + 2 情境，執行後有 10 次紀錄（未授權內容以原型佔位文字呈現）；SOP 頁不受影響。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 14，並修正決議 13 中被推翻的段落）、index.md。
+
+## [2026-07-29] refine | 「記為已知限制」拿掉
+
+PO：「記為已知限制是幹嘛的？拿掉。」
+
+它是決議 13 的產物：當時「不滿分的條件不給直接打勾」，所以需要一個逃生口讓使用者在判斷落差可接受時仍能放行，並用「原因會進簽核資料」當交換條件。**決議 14 把分數整個拿掉之後，第 1 條沒了，這顆按鈕就只是「勾」旁邊一個意義不明的選項** —— 使用者看完紀錄後只有兩種狀態：這條做到了（勾）、還沒（不勾）。
+
+移除 `WaiveModal`、按鈕與 `state: 'waived'` 分支；`acceptChecks[critId]` 從 `{ state, by, at, reason }` 簡化成 `{ by, at }`；mock 裡原本三筆 waived 改為一般確認，附帶的原因文字刪除。gate 訊息改成「看過下面那幾次的紀錄再決定要不要勾」。
+
+build 984,648 bytes。實測：畫面上已無「已知限制」字樣；`sm-eq-009` 五條全確認 → 可送簽；取消任一勾 → 立刻擋下並指名是哪一條；勾回去 → 恢復可送簽；console 零 error。
+
+受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（決議 13 的摩擦清單、決議 14 的對照表與移除清單）。

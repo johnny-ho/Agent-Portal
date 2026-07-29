@@ -30,10 +30,10 @@
      (2) 更根本的：輔助判斷每次結果都不一樣，「跑一次 PASS」在邏輯上就不成立。
    改成每個提問情境跑 5 次、由人看內容確認驗收條件是否成立。
    判定權因此從系統移到人身上（誠實 —— 本來也沒有東西能自動判斷 LLM 的回答對不對），
-   代價是「簽核變蓋章」的風險升高，所以摩擦要補回來：
-     · 不是滿分的條件不給直接打勾，要走「記為已知限制」並寫下原因
-     · 原因會進簽核附件給簽核人看 —— 這是允許放行的交換條件
-     · 改了 Description 就作廢先前的驗收結果（契約失效，同 SOP 的白話說明）
+   代價是「簽核變蓋章」的風險升高。2026-07-29 PO 再定案：
+   **系統與 AI 都不介入判斷**，連初判都不要 —— 那等於把責任壓在 AI 身上。
+   這一區只做一件事：把每一次實際做了什麼、最後回了什麼攤開，人自己看完再勾。
+   唯一保留的硬約束是「改了 Description 就作廢先前的紀錄」（契約失效，同 SOP 的白話說明）。
 
    見 brain/concepts/agent-skill-tiering.md 決議 12、13 與「簽核驗收」 */
 function getSignoffGate(skill, calcOpened) {
@@ -75,7 +75,7 @@ function getSignoffGate(skill, calcOpened) {
   var unknown = crits.filter(function(c) { return !checks[c.id]; });
   if (unknown.length > 0) {
     return '還有 ' + unknown.length + ' 條驗收條件沒有確認（例如「' + unknown[0].text + '」）'
-      + ' —— 看過那幾次的回答再決定要打勾還是記為已知限制';
+      + ' —— 看過下面那幾次的紀錄再決定要不要勾';
   }
   return null;
 }
@@ -935,39 +935,6 @@ function AddAcceptanceModal({ skill, kind, onCancel, onAdd }) {
   );
 }
 
-/* 看完紀錄後判斷「沒有每次都做到，但我接受」：一定要寫原因，
-   而且那句原因會進簽核資料。系統不會替他判斷有沒有做到，
-   所以這裡也不顯示任何分數 —— 他是看完紀錄自己決定要用哪一種確認。 */
-function WaiveModal({ crit, onCancel, onConfirm }) {
-  var { C, fz } = useTheme();
-  var [reason, setReason] = React.useState('');
-
-  return (
-    <antd.Modal
-      open centered width={560}
-      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>記為已知限制</span>}
-      onCancel={onCancel}
-      okText="確認放行" cancelText="取消"
-      okButtonProps={{ disabled: reason.trim().length < 10, danger: true }}
-      onOk={function() { onConfirm(reason.trim()); }}
-    >
-      <div style={{ fontSize: fz(13), color: C.text, lineHeight: 1.8, marginBottom: 8, fontWeight: 500 }}>
-        「{crit.text}」
-      </div>
-      <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
-        用在「這條沒有每次都做到，但我看過了、可以接受」的時候。
-        比較好的做法是回去把指引那一段寫緊一點再重跑；如果你判斷這個落差可以接受，
-        寫下原因就能放行 —— <span style={{ color: C.textSub, fontWeight: 600 }}>這句原因會附在簽核資料裡給簽核人看</span>。
-      </div>
-      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>是哪幾次沒做到、為什麼可以接受</div>
-      <antd.Input.TextArea value={reason} onChange={function(e) { setReason(e.target.value); }}
-        autoSize={{ minRows: 3, maxRows: 6 }} />
-      {reason.trim().length > 0 && reason.trim().length < 10 && (
-        <div style={{ fontSize: fz(11), color: '#F97316', marginTop: 8 }}>再寫詳細一點 —— 簽核人要看得懂你為什麼放行。</div>
-      )}
-    </antd.Modal>
-  );
-}
 
 /* 正常資料那條情境展開後的內容 —— 原本的三層試跑結果原樣搬過來。
    這三層是簽核的核心（送簽硬條件綁在第 2 層），不動它。 */
@@ -1330,7 +1297,6 @@ function AcceptanceBlock({ skill, p, onSave }) {
   var [running, setRunning]     = React.useState(false);
   var [doneCnt, setDoneCnt]     = React.useState(0);
   var [addKind, setAddKind]     = React.useState(null);
-  var [waiveOf, setWaiveOf]     = React.useState(null);
   var [openProbe, setOpenProbe] = React.useState({});
   var [openRun, setOpenRun]     = React.useState({});
 
@@ -1364,10 +1330,10 @@ function AcceptanceBlock({ skill, p, onSave }) {
     }, totalRuns * 170 + 400);
   }
 
-  function setCheck(crit, state, reason) {
+  function setCheck(crit, on) {
     var next = Object.assign({}, checks);
-    if (!state) delete next[crit.id];
-    else next[crit.id] = { state: state, by: p.user.name, at: '剛剛', reason: reason };
+    if (on) next[crit.id] = { by: p.user.name, at: '剛剛' };
+    else delete next[crit.id];
     onSave(Object.assign({}, skill, { acceptChecks: next }));
   }
 
@@ -1469,31 +1435,23 @@ function AcceptanceBlock({ skill, p, onSave }) {
           return (
             <div key={c.id} style={{
               padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none',
-              background: chk && chk.state === 'waived' ? 'rgba(245,158,11,0.04)' : 'transparent',
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ paddingTop: 2, flexShrink: 0 }}>
                   <antd.Checkbox
                     checked={!!chk}
                     disabled={running || !hasRuns || isNew}
-                    onChange={function(e) { setCheck(c, e.target.checked ? 'ok' : null); }} />
+                    onChange={function(e) { setCheck(c, e.target.checked); }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, lineHeight: 1.6 }}>{c.text}</div>
                   {chk && (
-                    <div style={{ fontSize: fz(12), color: chk.state === 'waived' ? '#F59E0B' : '#22C55E', marginTop: 4, lineHeight: 1.6 }}>
-                      {chk.state === 'waived' ? '⚠ 記為已知限制' : '✓ 已確認'} · {chk.by} · {chk.at}
-                      {chk.state === 'waived' && chk.reason && (
-                        <div style={{ color: C.textSub, marginTop: 2 }}>{chk.reason}</div>
-                      )}
+                    <div style={{ fontSize: fz(12), color: '#22C55E', marginTop: 4, lineHeight: 1.6 }}>
+                      ✓ 已確認 · {chk.by} · {chk.at}
                     </div>
                   )}
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, paddingTop: 2 }}>
-                  {hasRuns && !isNew && !chk && (
-                    <antd.Button size="small" onClick={function() { setWaiveOf(c); }}
-                      style={{ color: '#F59E0B', borderColor: 'rgba(245,158,11,0.4)' }}>記為已知限制</antd.Button>
-                  )}
                   {c.origin === 'system'
                     ? <antd.Tooltip title="系統依適用範圍與類型自動補的，不可刪除">
                         <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>🔒 系統</antd.Tag>
@@ -1624,11 +1582,6 @@ function AcceptanceBlock({ skill, p, onSave }) {
         <AddAcceptanceModal skill={skill} kind={addKind}
           onCancel={function() { setAddKind(null); }}
           onAdd={addKind === 'criterion' ? addCriterion : addProbe} />
-      )}
-      {waiveOf && (
-        <WaiveModal crit={waiveOf}
-          onCancel={function() { setWaiveOf(null); }}
-          onConfirm={function(reason) { setCheck(waiveOf, 'waived', reason); setWaiveOf(null); }} />
       )}
     </div>
   );
