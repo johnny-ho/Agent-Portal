@@ -30,10 +30,10 @@
      (2) 更根本的：輔助判斷每次結果都不一樣，「跑一次 PASS」在邏輯上就不成立。
    改成每個提問情境跑 5 次、由人看內容確認驗收條件是否成立。
    判定權因此從系統移到人身上（誠實 —— 本來也沒有東西能自動判斷 LLM 的回答對不對），
-   代價是「簽核變蓋章」的風險升高，所以摩擦要補回來：
-     · 不是滿分的條件不給直接打勾，要走「記為已知限制」並寫下原因
-     · 原因會進簽核附件給簽核人看 —— 這是允許放行的交換條件
-     · 改了 Description 就作廢先前的驗收結果（契約失效，同 SOP 的白話說明）
+   代價是「簽核變蓋章」的風險升高。2026-07-29 PO 再定案：
+   **系統與 AI 都不介入判斷**，連初判都不要 —— 那等於把責任壓在 AI 身上。
+   這一區只做一件事：把每一次實際做了什麼、最後回了什麼攤開，人自己看完再勾。
+   唯一保留的硬約束是「改了 Description 就作廢先前的紀錄」（契約失效，同 SOP 的白話說明）。
 
    見 brain/concepts/agent-skill-tiering.md 決議 12、13 與「簽核驗收」 */
 function getSignoffGate(skill, calcOpened) {
@@ -75,7 +75,7 @@ function getSignoffGate(skill, calcOpened) {
   var unknown = crits.filter(function(c) { return !checks[c.id]; });
   if (unknown.length > 0) {
     return '還有 ' + unknown.length + ' 條驗收條件沒有確認（例如「' + unknown[0].text + '」）'
-      + ' —— 看過那幾次的回答再決定要打勾還是記為已知限制';
+      + ' —— 看過下面那幾次的紀錄再決定要不要勾';
   }
   return null;
 }
@@ -85,9 +85,14 @@ function getSignoffGate(skill, calcOpened) {
    同一個提問跑 5 次：測的是**穩定性**，不是覆蓋率。
    覆蓋率靠情境數量去撐（一個情境 = 一種問法）。
 
-   驗收條件一律整份共用（全域），不掛在單一情境下。但條件可以有前提：
-   「範圍外要回不適用」只有拿範圍外的機台問才驗得到。前提不成立的那幾次
-   標「不適用」，不計入分母 —— 否則分母混進根本驗不到的次數，比例就沒有意義。 */
+   2026-07-29 PO 定案：**系統與 AI 都不介入判斷**。
+   之前這裡有「系統依條件對每次回答做的初判」（圓點與 X/Y），已整個移除 ——
+   那本質上就是判斷，只是包了一層，而且等於把責任壓在 AI 身上。
+   現在這裡只做一件事：把每一次**實際做了什麼、最後回了什麼**攤開來，人自己看。
+
+   probe.vary[i] 記的是第 i+1 次跟典型的差別，不是「對或錯」：
+     drop   少做了哪幾步        add    多做了哪幾步
+     answer 這一次的回答（沒寫就沿用典型的） */
 
 const ACCEPT_RUNS = 5;
 
@@ -101,74 +106,65 @@ function acceptStale(skill) {
   return (skill.acceptRun.descRev || 0) !== (skill.descRev || 0);
 }
 
-/* 上次執行之後才加進來的條件：沒跑過就沒有結果可言 */
+/* 上次執行之後才加進來的條件：沒跑過就沒有紀錄可看 */
 function acceptUnrunCrits(skill) {
   if (!skill.acceptRun) return [];
   var ran = skill.acceptRun.critIds || [];
   return acceptCrits(skill).filter(function(c) { return ran.indexOf(c.id) < 0; });
 }
 
-function critApplies(crit, probe) {
-  return !crit.whenKind || crit.whenKind === probe.kind;
-}
-
-/* 哪幾次沒成立：固定演算法，同一份資料每次展開都一樣（原型要可重現，
-   不能每次進頁面看到的數字都不同）*/
-function critMissAt(crit, applicableCount) {
-  var miss = {};
-  var n = Math.min(crit.mockMiss || 0, applicableCount);
-  if (n <= 0) return miss;
-  var h = 0;
-  for (var i = 0; i < crit.id.length; i++) h = (h * 31 + crit.id.charCodeAt(i)) % 997;
-  for (var k = 0; k < n; k++) {
-    var pos = (h + k * 3 + 1) % applicableCount;
-    while (miss[pos]) pos = (pos + 1) % applicableCount;
-    miss[pos] = true;
+/* 剛建立的 Skill 還沒有人寫過情境內容 —— 依它授權的工具生一組看得懂的紀錄，
+   不然按下「執行驗收」會得到 5 次空白 */
+function synthSteps(skill, probe) {
+  var reads = (skill.tools || []).filter(function(t) { return t.mode === 'read'; }).slice(0, 2);
+  var head  = [{ kind: 'match', text: probe.kind === 'outscope'
+    ? '不符合本 Skill 的適用範圍'
+    : '符合本 Skill 的適用範圍' }];
+  if (probe.kind === 'outscope') return head;
+  var steps = head.concat(reads.map(function(t) {
+    return { kind: 'tool', tool: t.name, label: t.label, allowed: true, result: '（原型：尚未接上真實系統）' };
+  }));
+  if (probe.kind === 'writereq') {
+    steps.push({ kind: 'tool', tool: 'mes.create_case', label: '開立工單', allowed: false,
+      reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' });
   }
-  return miss;
+  return steps;
 }
 
-/* 展開成一次一次的 run（情境 × 5），並算出每條條件在每一次的結果 */
-function buildAcceptResult(skill) {
-  var probes = acceptProbes(skill);
-  var crits  = acceptCrits(skill);
-  var runs   = [];
-  probes.forEach(function(pb) {
-    for (var i = 1; i <= ACCEPT_RUNS; i++) {
-      runs.push({ id: pb.id + '-' + i, probe: pb, idx: i });
-    }
-  });
-
-  var byCrit = {};
-  crits.forEach(function(c) {
-    var applicable = runs.filter(function(r) { return critApplies(c, r.probe); });
-    var miss  = critMissAt(c, applicable.length);
-    var byRun = {};
-    applicable.forEach(function(r, i) { byRun[r.id] = !miss[i]; });
-    byCrit[c.id] = {
-      total: applicable.length,
-      hit:   applicable.length - Math.min(c.mockMiss || 0, applicable.length),
-      byRun: byRun,
-      cells: runs.map(function(r) {
-        if (!critApplies(c, r.probe)) return { id: r.id, state: 'na', run: r };
-        return { id: r.id, state: byRun[r.id] ? 'hit' : 'miss', run: r };
-      }),
-    };
-  });
-  return { runs: runs, byCrit: byCrit };
+function synthAnswer(skill, probe) {
+  if (probe.kind === 'outscope') {
+    return '這個對象不在本指引的適用範圍，我沒有套用這裡的判斷順序，也沒有去查任何數據。\n（原型：尚未接上真實模型。）';
+  }
+  if (probe.kind === 'writereq') {
+    return '這個動作我不能代為執行 —— 本 Skill 只有唯讀工具，我只能把要送出的內容整理好給你。\n（原型：尚未接上真實模型。）';
+  }
+  return '（原型：尚未接上真實模型，這裡會是依《' + skill.title + '》產出的研判內容。）';
 }
 
-/* 一次 run 的回答：情境的開場白 + 所有「成立」的條件各自那一句。
-   沒成立的條件整句不見 —— 弱掉的回答本來就長這樣，
-   使用者是靠「少了那一行」看出問題，不是靠系統跟他說 FAIL。 */
-function buildRunAnswer(skill, run, res) {
-  var lines = [run.probe.lead];
-  acceptCrits(skill).forEach(function(c) {
-    if (!c.says || !critApplies(c, run.probe)) return;
-    var st = res.byCrit[c.id];
-    if (st && st.byRun[run.id]) lines.push(c.says);
+/* 把一個情境展開成 5 次紀錄。每一次就是「做了哪些事」＋「最後回了什麼」，
+   沒有任何評分欄位 —— 這一區刻意不產出任何判斷。 */
+function buildProbeRuns(skill, probe) {
+  var base       = (probe.steps && probe.steps.length) ? probe.steps : synthSteps(skill, probe);
+  var baseAnswer = probe.answer || synthAnswer(skill, probe);
+  var out = [];
+  for (var i = 0; i < ACCEPT_RUNS; i++) {
+    var v     = (probe.vary || [])[i] || {};
+    var drop  = v.drop || [];
+    var steps = base.filter(function(s, k) { return drop.indexOf(k) < 0; }).concat(v.add || []);
+    out.push({ id: probe.id + '-' + (i + 1), idx: i + 1, steps: steps, answer: v.answer || baseAnswer });
+  }
+  return out;
+}
+
+/* 收起來時那一行：把發生過的事按順序列出來，就這樣。
+   不是摘要也不是評語 —— 使用者掃一眼看到「第 2 次少了一步」，
+   那個判斷是他自己下的，不是系統告訴他的。 */
+function runOutline(run) {
+  var names = run.steps.map(function(s) {
+    if (s.kind === 'match') return '比對範圍';
+    return (s.allowed ? '' : '✗ ') + s.label;
   });
-  return lines;
+  return names.concat(['回答']).join('　→　');
 }
 
 /* 右上那顆按鈕：一顆會看狀態的按鈕，取代原本散在各處的階段推進鈕 */
@@ -920,7 +916,7 @@ function AddAcceptanceModal({ skill, kind, onCancel, onAdd }) {
     >
       <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
         {isCrit
-          ? '驗收條件是整份共用的：每個提問情境的每一次回答都會拿它來看。加進來之後要重新執行一次驗收才有結果。'
+          ? '驗收條件是整份共用的：每個提問情境的每一次回答都要成立。加進來之後要重新執行一次驗收，才會有可以對照的紀錄。'
           : '每個提問情境會跑 ' + ACCEPT_RUNS + ' 次 —— 同一個問法問 ' + ACCEPT_RUNS + ' 次，看它穩不穩。加進來之後要重新執行一次驗收。'}
       </div>
 
@@ -939,40 +935,6 @@ function AddAcceptanceModal({ skill, kind, onCancel, onAdd }) {
   );
 }
 
-/* 不是滿分卻要放行：一定要寫原因，而且那句原因會進簽核附件。
-   這是允許放行的交換條件 —— 沒有它，「全數確認才能送簽」就只是全部點一遍。 */
-function WaiveModal({ crit, stat, onCancel, onConfirm }) {
-  var { C, fz } = useTheme();
-  var [reason, setReason] = React.useState('');
-
-  return (
-    <antd.Modal
-      open centered width={560}
-      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>記為已知限制</span>}
-      onCancel={onCancel}
-      okText="確認放行" cancelText="取消"
-      okButtonProps={{ disabled: reason.trim().length < 10, danger: true }}
-      onOk={function() { onConfirm(reason.trim()); }}
-    >
-      <div style={{ fontSize: fz(13), color: C.text, lineHeight: 1.8, marginBottom: 8, fontWeight: 500 }}>
-        「{crit.text}」
-      </div>
-      <div style={{ fontSize: fz(12), color: '#F97316', fontWeight: 600, marginBottom: 16 }}>
-        {stat.hit} / {stat.total} 次成立 —— 沒有每次都做到。
-      </div>
-      <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.7, marginBottom: 16 }}>
-        比較好的做法是回去把指引那一段寫緊一點再重跑。如果你判斷這個落差可以接受，
-        寫下原因就能放行 —— <span style={{ color: C.textSub, fontWeight: 600 }}>這句原因會附在簽核資料裡給簽核人看</span>。
-      </div>
-      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>為什麼這個落差可以接受</div>
-      <antd.Input.TextArea value={reason} onChange={function(e) { setReason(e.target.value); }}
-        autoSize={{ minRows: 3, maxRows: 6 }} />
-      {reason.trim().length > 0 && reason.trim().length < 10 && (
-        <div style={{ fontSize: fz(11), color: '#F97316', marginTop: 8 }}>再寫詳細一點 —— 簽核人要看得懂你為什麼放行。</div>
-      )}
-    </antd.Modal>
-  );
-}
 
 /* 正常資料那條情境展開後的內容 —— 原本的三層試跑結果原樣搬過來。
    這三層是簽核的核心（送簽硬條件綁在第 2 層），不動它。 */
@@ -1326,55 +1288,23 @@ function TestBlock({ skill, p, onSave, onOpenCalc }) {
    前提不成立的次數畫成灰點，不進分子也不進分母。
    ════════════════════════════════════════ */
 
-function AcceptDots({ cells, shown }) {
-  var { C } = useTheme();
-  return (
-    <span style={{ display: 'inline-flex', gap: 2, alignItems: 'center', flexShrink: 0 }}>
-      {cells.map(function(cell, i) {
-        var revealed = shown === null || i < shown;
-        var color = !revealed             ? C.border
-                  : cell.state === 'na'   ? C.border
-                  : cell.state === 'hit'  ? '#22C55E'
-                  :                         '#EF4444';
-        var hollow = revealed && cell.state === 'miss';
-        return (
-          <span key={cell.id} title={cell.run.probe.input + ' · 第 ' + cell.run.idx + ' 次'}
-            style={{
-              width: 8, height: 8, borderRadius: 999, flexShrink: 0,
-              background: hollow ? 'transparent' : color,
-              border: '1.5px solid ' + color,
-              transition: 'background 0.2s, border-color 0.2s',
-            }} />
-        );
-      })}
-    </span>
-  );
-}
-
 function AcceptanceBlock({ skill, p, onSave }) {
   var { C, fz } = useTheme();
   var crits  = acceptCrits(skill);
   var probes = acceptProbes(skill);
   var checks = skill.acceptChecks || {};
-  var res    = React.useMemo(function() { return buildAcceptResult(skill); },
-    [skill.id, crits.length, probes.length, skill.acceptRun && skill.acceptRun.at]);
 
   var [running, setRunning]     = React.useState(false);
   var [doneCnt, setDoneCnt]     = React.useState(0);
   var [addKind, setAddKind]     = React.useState(null);
-  var [waiveOf, setWaiveOf]     = React.useState(null);
-  var [openCrit, setOpenCrit]   = React.useState({});
   var [openProbe, setOpenProbe] = React.useState({});
+  var [openRun, setOpenRun]     = React.useState({});
 
   var totalRuns = probes.length * ACCEPT_RUNS;
   var stale     = acceptStale(skill);
   var unrun     = acceptUnrunCrits(skill);
-  /* 沒跑過、跑過但作廢、跑過但有新加的條件 —— 三種都不該顯示結果，
-     否則畫面會出現「沒人跑過卻有分數」 */
-  var hasResult = !!skill.acceptRun && !stale && !running;
-
+  var hasRuns   = !!skill.acceptRun && !stale && !running;
   var confirmed = crits.filter(function(c) { return !!checks[c.id]; }).length;
-  var waived    = crits.filter(function(c) { return checks[c.id] && checks[c.id].state === 'waived'; }).length;
 
   /* 逐次播放。瞬間跑完的話，「正在跑」這個狀態根本不存在（guideline §6），
      而這裡「跑很多次」正是要讓人看見的東西。 */
@@ -1382,16 +1312,13 @@ function AcceptanceBlock({ skill, p, onSave }) {
     if (running || totalRuns === 0 || crits.length === 0) return;
     setRunning(true);
     setDoneCnt(0);
-    var timers = [];
     for (var i = 1; i <= totalRuns; i++) {
-      (function(n) {
-        timers.push(setTimeout(function() { setDoneCnt(n); }, n * 170));
-      })(i);
+      (function(n) { setTimeout(function() { setDoneCnt(n); }, n * 170); })(i);
     }
     setTimeout(function() {
       setRunning(false);
       setDoneCnt(0);
-      /* 重跑就把先前的確認全部清掉 —— 結果換了，上次的判斷就不算數 */
+      /* 重跑就把先前的確認全部清掉 —— 紀錄換了，上次的判斷就不算數 */
       onSave(Object.assign({}, skill, {
         acceptRun: {
           at: '剛剛', by: p.user.name,
@@ -1403,10 +1330,10 @@ function AcceptanceBlock({ skill, p, onSave }) {
     }, totalRuns * 170 + 400);
   }
 
-  function setCheck(crit, state, reason) {
+  function setCheck(crit, on) {
     var next = Object.assign({}, checks);
-    if (!state) delete next[crit.id];
-    else next[crit.id] = { state: state, by: p.user.name, at: '剛剛', reason: reason };
+    if (on) next[crit.id] = { by: p.user.name, at: '剛剛' };
+    else delete next[crit.id];
     onSave(Object.assign({}, skill, { acceptChecks: next }));
   }
 
@@ -1423,7 +1350,7 @@ function AcceptanceBlock({ skill, p, onSave }) {
     setAddKind(null);
     onSave(Object.assign({}, skill, {
       acceptance: Object.assign({}, skill.acceptance, {
-        probes: probes.concat([{ id: 'pb-' + Date.now(), input: input, kind: 'inscope', origin: 'seed', locked: false, lead: '依《' + skill.title + '》研判：' }]),
+        probes: probes.concat([{ id: 'pb-' + Date.now(), input: input, kind: 'inscope', origin: 'seed', locked: false }]),
       }),
     }));
   }
@@ -1436,21 +1363,25 @@ function AcceptanceBlock({ skill, p, onSave }) {
     onSave(Object.assign({}, skill, { acceptance: next }));
   }
 
+  function toggle(setter, id) {
+    setter(function(prev) { var n = Object.assign({}, prev); n[id] = !prev[id]; return n; });
+  }
+
   return (
     <div>
       {/* 工具列 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
         <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>驗收條件</span>
-        {hasResult && unrun.length === 0
-          ? <antd.Tag bordered={false} style={{
-              marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
-              color: confirmed === crits.length ? '#22C55E' : '#F97316',
-              background: confirmed === crits.length ? 'rgba(34,197,94,0.08)' : 'rgba(249,115,22,0.08)',
-            }}>已確認 {confirmed} / {crits.length}{waived > 0 ? '（含已知限制 ' + waived + '）' : ''}</antd.Tag>
-          : <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600, color: '#F97316', background: 'rgba(249,115,22,0.08)' }}>
-              {stale ? '結果已作廢' : unrun.length > 0 ? unrun.length + ' 條沒跑過' : '尚未執行'}
-            </antd.Tag>
-        }
+        <antd.Tag bordered={false} style={{
+          marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), fontWeight: 600,
+          color: (hasRuns && confirmed === crits.length && crits.length > 0) ? '#22C55E' : '#F97316',
+          background: (hasRuns && confirmed === crits.length && crits.length > 0) ? 'rgba(34,197,94,0.08)' : 'rgba(249,115,22,0.08)',
+        }}>
+          {!skill.acceptRun ? '尚未執行'
+            : stale ? '紀錄已作廢'
+            : unrun.length > 0 ? unrun.length + ' 條沒跑過'
+            : '已確認 ' + confirmed + ' / ' + crits.length}
+        </antd.Tag>
         <div style={{ flex: 1 }} />
         <antd.Button size="small" type="dashed" disabled={running} onClick={function() { setAddKind('criterion'); }}>＋ 驗收條件</antd.Button>
         <antd.Button size="small" type="dashed" disabled={running} onClick={function() { setAddKind('probe'); }}>＋ 提問情境</antd.Button>
@@ -1461,10 +1392,9 @@ function AcceptanceBlock({ skill, p, onSave }) {
 
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8, lineHeight: 1.6 }}>
         每個提問情境跑 {ACCEPT_RUNS} 次 —— 同一個問法問 {ACCEPT_RUNS} 次，看它穩不穩。
-        驗收條件是整份共用的，每一次回答都要成立；條件有前提時（例如「範圍外要回不適用」），
-        前提不成立的那幾次畫成灰點，不算分母。
         <br />
-        <span style={{ color: C.textSub }}>綠點／紅圈是系統依條件對每次回答做的初判，最終由你看內容決定 —— 勾了才算數。</span>
+        <span style={{ color: C.textSub, fontWeight: 600 }}>系統與 AI 都不會替你判斷這些條件有沒有做到。</span>
+        下面「每次執行的紀錄」是它實際做了什麼、最後回了什麼，看完再由你決定要不要勾。
         標了 🔒 的條件與情境是系統依適用範圍與類型自動補的，不可刪除。
       </div>
 
@@ -1472,15 +1402,15 @@ function AcceptanceBlock({ skill, p, onSave }) {
         {running ? '執行中，一次一次跑。'
           : stale ? null
           : skill.acceptRun ? '上次執行：' + skill.acceptRun.at + ' · ' + skill.acceptRun.by
-          : '尚未執行過，畫面上不會有結果。'}
+          : '尚未執行過，下面不會有紀錄。'}
       </div>
 
       {stale && (
         <div style={{ marginBottom: 16 }}>
           <antd.Alert type="warning" showIcon
-            message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>指引改過了，先前的驗收結果已作廢</span>}
+            message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>指引改過了，先前的紀錄已作廢</span>}
             description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>
-              Description 是這份的契約，改了之後 AI 的行為就跟上次驗的不是同一件事。
+              Description 是這份的契約，改了之後 AI 的行為就跟你上次看的不是同一件事。
               先前的確認已全部收回，請重新執行一次驗收。
             </span>} />
         </div>
@@ -1490,90 +1420,38 @@ function AcceptanceBlock({ skill, p, onSave }) {
         <div style={{ marginBottom: 16 }}>
           <antd.Alert type="warning" showIcon
             message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>有 {unrun.length} 條驗收條件是上次執行之後才加的</span>}
-            description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>沒跑過就沒有結果可言，請重新執行一次驗收。</span>} />
+            description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>沒跑過就沒有紀錄可以看，請重新執行一次驗收。</span>} />
         </div>
       )}
 
-      {/* ── 驗收條件（全域）── */}
+      {/* ── 驗收條件：只有文字與勾選，沒有分數 ── */}
       <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
         {crits.length === 0 && (
-          <div style={{ padding: '16px', fontSize: fz(13), color: C.textMuted }}>尚無驗收條件</div>
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>尚無驗收條件</div>
         )}
         {crits.map(function(c, i) {
-          var stat    = res.byCrit[c.id] || { total: 0, hit: 0, cells: [] };
-          var isNew   = unrun.some(function(u) { return u.id === c.id; });
-          var showRes = hasResult && !isNew;
-          var full    = stat.total > 0 && stat.hit === stat.total;
-          var chk     = checks[c.id];
-          var open    = !!openCrit[c.id];
-          var missCells = stat.cells.filter(function(cell) { return cell.state === 'miss'; });
-
+          var chk   = checks[c.id];
+          var isNew = unrun.some(function(u) { return u.id === c.id; });
           return (
             <div key={c.id} style={{
               padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none',
-              background: chk && chk.state === 'waived' ? 'rgba(245,158,11,0.04)'
-                : (showRes && !full && !chk) ? 'rgba(239,68,68,0.04)' : 'transparent',
             }}>
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                 <div style={{ paddingTop: 2, flexShrink: 0 }}>
                   <antd.Checkbox
                     checked={!!chk}
-                    disabled={running || !showRes || (!full && !chk)}
-                    onChange={function(e) {
-                      if (e.target.checked) setCheck(c, 'ok');
-                      else setCheck(c, null);
-                    }} />
+                    disabled={running || !hasRuns || isNew}
+                    onChange={function(e) { setCheck(c, e.target.checked); }} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, lineHeight: 1.6 }}>{c.text}</div>
                   {chk && (
-                    <div style={{ fontSize: fz(12), color: chk.state === 'waived' ? '#F59E0B' : '#22C55E', marginTop: 4, lineHeight: 1.6 }}>
-                      {chk.state === 'waived' ? '⚠ 記為已知限制' : '✓ 已確認'} · {chk.by} · {chk.at}
-                      {chk.state === 'waived' && chk.reason && (
-                        <div style={{ color: C.textSub, marginTop: 2 }}>{chk.reason}</div>
-                      )}
-                    </div>
-                  )}
-                  {showRes && missCells.length > 0 && (
-                    <div style={{ marginTop: 4 }}>
-                      <span
-                        onClick={function() { setOpenCrit(function(prev) { var n = Object.assign({}, prev); n[c.id] = !prev[c.id]; return n; }); }}
-                        style={{ fontSize: fz(12), color: '#EF4444', fontWeight: 600, cursor: 'pointer' }}
-                      >{open ? '收合哪幾次沒成立 ⌃' : '看哪幾次沒成立 ⌄'}</span>
-                      {open && (
-                        <div style={{ marginTop: 8, border: '1px solid rgba(239,68,68,0.25)', borderRadius: 8, overflow: 'hidden' }}>
-                          {missCells.map(function(cell, k) {
-                            return (
-                              <div key={cell.id} style={{ padding: '4px 16px', borderTop: k > 0 ? '1px solid rgba(239,68,68,0.15)' : 'none', fontSize: fz(12), color: C.textSub, lineHeight: 1.7 }}>
-                                「{cell.run.probe.input}」第 {cell.run.idx} 次
-                              </div>
-                            );
-                          })}
-                          <div style={{ padding: '8px 16px', borderTop: '1px solid rgba(239,68,68,0.2)', fontSize: fz(12), color: '#EF4444', lineHeight: 1.7 }}>
-                            {c.missNote || '這幾次的回答裡沒有出現這條要求的內容。'}
-                          </div>
-                        </div>
-                      )}
+                    <div style={{ fontSize: fz(12), color: '#22C55E', marginTop: 4, lineHeight: 1.6 }}>
+                      ✓ 已確認 · {chk.by} · {chk.at}
                     </div>
                   )}
                 </div>
-
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, paddingTop: 2 }}>
-                  {showRes || running ? (
-                    <React.Fragment>
-                      <AcceptDots cells={stat.cells} shown={running ? doneCnt : null} />
-                      <span style={{
-                        fontSize: fz(12), fontWeight: 600, width: 48, textAlign: 'right',
-                        color: running ? C.textMuted : full ? '#22C55E' : '#F97316',
-                      }}>{running ? '—' : stat.hit + ' / ' + stat.total}</span>
-                    </React.Fragment>
-                  ) : (
-                    <span style={{ fontSize: fz(12), color: C.textMuted, width: 48, textAlign: 'right' }}>待執行</span>
-                  )}
-                  {showRes && !full && !chk && (
-                    <antd.Button size="small" onClick={function() { setWaiveOf(c); }}
-                      style={{ color: '#F59E0B', borderColor: 'rgba(245,158,11,0.4)' }}>記為已知限制</antd.Button>
-                  )}
                   {c.origin === 'system'
                     ? <antd.Tooltip title="系統依適用範圍與類型自動補的，不可刪除">
                         <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>🔒 系統</antd.Tag>
@@ -1590,30 +1468,32 @@ function AcceptanceBlock({ skill, p, onSave }) {
         })}
       </div>
 
-      {/* ── 提問情境：每個跑 5 次，展開看實際回了什麼 ── */}
+      {/* ── 每次執行的紀錄：這一區才是主體 ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 32, marginBottom: 8 }}>
-        <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>提問情境</span>
+        <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>每次執行的紀錄</span>
         <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), color: C.textMuted, background: C.bgPanel }}>
-          {probes.length} 個 × {ACCEPT_RUNS} 次 = {totalRuns} 次
+          {probes.length} 個情境 × {ACCEPT_RUNS} 次 = {totalRuns} 次
         </antd.Tag>
       </div>
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8, lineHeight: 1.6 }}>
-        展開看它實際回了什麼。驗收條件成立與否，是由你讀這些內容決定的。
+        收起來那一行是它這一次呼叫過的工具，按發生順序排 —— 不是摘要也不是評語。
+        展開看它每一步拿到什麼、最後回了什麼。
       </div>
+
       <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
         {probes.length === 0 && (
-          <div style={{ padding: '16px', fontSize: fz(13), color: C.textMuted }}>尚無提問情境</div>
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>尚無提問情境</div>
         )}
         {probes.map(function(pb, i) {
-          var open = !!openProbe[pb.id];
-          var myRuns = res.runs.filter(function(r) { return r.probe.id === pb.id; });
+          var open   = !!openProbe[pb.id];
+          var myRuns = buildProbeRuns(skill, pb);
           return (
             <div key={pb.id} style={{ borderTop: i > 0 ? '1px solid ' + C.border : 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px' }}>
                 <span
-                  onClick={function() { if (hasResult) setOpenProbe(function(prev) { var n = Object.assign({}, prev); n[pb.id] = !prev[pb.id]; return n; }); }}
-                  style={{ flex: 1, minWidth: 0, cursor: hasResult ? 'pointer' : 'default' }}>
-                  <span style={{ fontSize: fz(10), color: C.textMuted, marginRight: 8 }}>{hasResult ? (open ? '▲' : '▼') : '　'}</span>
+                  onClick={function() { if (hasRuns) toggle(setOpenProbe, pb.id); }}
+                  style={{ flex: 1, minWidth: 0, cursor: hasRuns ? 'pointer' : 'default' }}>
+                  <span style={{ fontSize: fz(10), color: C.textMuted, marginRight: 8 }}>{hasRuns ? (open ? '▲' : '▼') : '　'}</span>
                   <span style={{ fontSize: fz(14), color: C.text, fontWeight: 500 }}>「{pb.input}」</span>
                 </span>
                 {pb.origin === 'system'
@@ -1629,16 +1509,65 @@ function AcceptanceBlock({ skill, p, onSave }) {
                     </antd.Space>
                 }
               </div>
-              {open && hasResult && (
+
+              {open && hasRuns && (
                 <div style={{ background: C.bgPanel, borderTop: '1px solid ' + C.border }}>
                   {myRuns.map(function(r, k) {
-                    var lines = buildRunAnswer(skill, r, res);
+                    var ro = !!openRun[r.id];
                     return (
-                      <div key={r.id} style={{ padding: '8px 16px', borderTop: k > 0 ? '1px solid ' + C.border : 'none' }}>
-                        <div style={{ fontSize: fz(11), color: C.textMuted, fontWeight: 600, marginBottom: 4 }}>第 {r.idx} 次</div>
-                        {lines.map(function(ln, j) {
-                          return <div key={j} style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>{ln}</div>;
-                        })}
+                      <div key={r.id} style={{ borderTop: k > 0 ? '1px solid ' + C.border : 'none' }}>
+                        <div
+                          onClick={function() { toggle(setOpenRun, r.id); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', cursor: 'pointer' }}>
+                          <span style={{ fontSize: fz(10), color: C.textMuted, width: 12, flexShrink: 0 }}>{ro ? '▲' : '▼'}</span>
+                          <span style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, width: 56, flexShrink: 0 }}>第 {r.idx} 次</span>
+                          <span style={{ fontSize: fz(12), color: C.textMuted, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {runOutline(r)}
+                          </span>
+                        </div>
+
+                        {ro && (
+                          <div style={{ padding: '0 16px 16px 32px' }}>
+                            <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textMuted, marginBottom: 8 }}>做了什麼</div>
+                            <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', background: C.bg }}>
+                              {r.steps.map(function(s, si) {
+                                var denied = s.kind === 'tool' && !s.allowed;
+                                return (
+                                  <div key={si} style={{
+                                    padding: '8px 16px', borderTop: si > 0 ? '1px solid ' + C.border : 'none',
+                                    background: denied ? 'rgba(239,68,68,0.04)' : 'transparent',
+                                  }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: fz(12), fontWeight: 700, width: 12, flexShrink: 0,
+                                        color: s.kind === 'match' ? '#2563EB' : (s.allowed ? '#22C55E' : '#EF4444') }}>
+                                        {s.kind === 'match' ? '◆' : (s.allowed ? '✓' : '✗')}
+                                      </span>
+                                      <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>
+                                        {s.kind === 'match' ? '比對適用範圍' : s.label}
+                                      </span>
+                                      {s.tool && <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace' }}>
+                                        {s.tool}{s.params ? '(' + s.params + ')' : ''}
+                                      </span>}
+                                      {s.kind === 'tool' && <SkillIoTag io={s.allowed ? 'read' : 'write'} />}
+                                      {denied && (
+                                        <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>已拒絕</antd.Tag>
+                                      )}
+                                    </div>
+                                    <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, paddingLeft: 20, marginTop: 4 }}>{s.text || s.result}</div>
+                                    {s.reason && (
+                                      <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, paddingLeft: 20, marginTop: 4 }}>原因：{s.reason}</div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+
+                            <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textMuted, margin: '16px 0 8px' }}>最終回答</div>
+                            <div style={{ border: '1px solid ' + C.border, borderRadius: 8, background: C.bg, padding: 16 }}>
+                              <AiText text={r.answer} />
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1653,59 +1582,6 @@ function AcceptanceBlock({ skill, p, onSave }) {
         <AddAcceptanceModal skill={skill} kind={addKind}
           onCancel={function() { setAddKind(null); }}
           onAdd={addKind === 'criterion' ? addCriterion : addProbe} />
-      )}
-      {waiveOf && (
-        <WaiveModal crit={waiveOf} stat={res.byCrit[waiveOf.id] || { hit: 0, total: 0 }}
-          onCancel={function() { setWaiveOf(null); }}
-          onConfirm={function(reason) { setCheck(waiveOf, 'waived', reason); setWaiveOf(null); }} />
-      )}
-
-      {/* 輔助判斷：一次實際互動的紀錄（治理要看得見） */}
-      {skill.traceSample && (
-        <div style={{ marginTop: 32 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
-            <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>最近一次實際互動</span>
-            <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(11), background: C.bgPanel, color: C.textMuted }}>{skill.traceSample.askedAt}</antd.Tag>
-          </div>
-          <div style={{ fontSize: fz(14), color: C.text, fontWeight: 500, marginBottom: 8, background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: '8px 16px' }}>
-            {skill.traceSample.askedBy}：「{skill.traceSample.question}」
-          </div>
-          <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
-            {skill.traceSample.steps.map(function(s, i) {
-              var isDenied = s.kind === 'tool' && !s.allowed;
-              return (
-                <div key={i} style={{
-                  padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none',
-                  background: isDenied ? 'rgba(239,68,68,0.04)' : 'transparent',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                    <span style={{ fontSize: fz(12), fontWeight: 700, width: 12, flexShrink: 0,
-                      color: s.kind !== 'tool' ? '#2563EB' : (s.allowed ? '#22C55E' : '#EF4444') }}>
-                      {s.kind === 'match' ? '◆' : s.kind === 'answer' ? '💬' : (s.allowed ? '✓' : '✗')}
-                    </span>
-                    <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>
-                      {s.kind === 'match' ? '比對適用範圍' : s.kind === 'answer' ? '回覆給提問者' : s.label}
-                    </span>
-                    {s.tool && <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace' }}>{s.tool}</span>}
-                    {s.mode && <SkillIoTag io={s.mode} />}
-                    {s.kind === 'tool' && !s.allowed && (
-                      <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 700, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>已拒絕</antd.Tag>
-                    )}
-                  </div>
-                  {/* 回覆那一步會照 Description 的「回答一定要包含」帶出依據、
-                      排除過程與責任聲明，所以有換行與粗體 —— 交給 AiText 解析。
-                      這一段就是「AI 到底做了什麼」可以被檢查的地方。 */}
-                  <div style={{ paddingLeft: 20, marginTop: 4 }}>
-                    <AiText text={s.text || s.result} />
-                  </div>
-                  {s.reason && (
-                    <div style={{ fontSize: fz(12), color: '#EF4444', lineHeight: 1.7, paddingLeft: 20, marginTop: 4 }}>原因：{s.reason}</div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
       )}
     </div>
   );
@@ -1863,7 +1739,7 @@ function buildAiSuggestions(skill) {
         target: 'acceptance',
         acceptLabel: '加進驗收條件',
         runSteps: ['讀取判斷順序與注意事項', '找出少講就會出事的地方', '寫成 2 條可以判斷成立與否的條件'],
-        resultText: '兩條都推自這份的內容。加進去之後要重新執行一次驗收才有結果 —— 沒跑過的條件不會有分數。條件文字你可以再編輯。',
+        resultText: '兩條都推自這份的內容。加進去之後要重新執行一次驗收 —— 沒跑過的條件沒有紀錄可以對照。條件文字你可以再編輯。',
         before: null,
         after: '· 數據互相矛盾時，應明說矛盾在哪，不可挑一個順眼的下結論\n· 資料不足以判斷時，應回「資料不足」並說明還缺什麼，不得硬給研判',
         appliedNote: '驗收條件已更新',
@@ -2375,16 +2251,13 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
       next.tools = gen.tools;
 
     } else if (act.target === 'acceptance') {
-      /* 第二條刻意設成不會每次都成立 —— 沒有不滿分的東西可看，「執行驗收」
-         就只是一段比較久的動畫，而「補了這條才發現原本會出事」正是它存在的理由。 */
+      /* 只加條件文字。條件上沒有任何判定欄位 —— 有沒有做到是人看完紀錄自己決定的，
+         加完之後要重新執行一次驗收才有紀錄可看。 */
       var addCrits = [
-        { id: 'ac-ai-1', origin: 'seed', locked: false, whenKind: 'inscope',
-          text: '數據互相矛盾時，應明說矛盾在哪，不可挑一個順眼的下結論',
-          says: '註：兩項數據指向不同結論（趨勢偏向製程、批號對照偏向材料），這裡先並列，不逕行擇一。' },
-        { id: 'ac-ai-2', origin: 'seed', locked: false, whenKind: 'inscope',
-          text: '資料不足以判斷時，應回「資料不足」並說明還缺什麼，不得硬給研判',
-          says: '註：目前只取得 1 項數據，不足以下結論，還需要近 7 天趨勢與上次保養日期。',
-          mockMiss: 2, missNote: '這兩次在只有一項數據的情況下仍給了明確研判，還建議直接更換零件。指引的「注意事項」沒有寫資料不足時該怎麼辦，模型就會硬給答案。' },
+        { id: 'ac-ai-1', origin: 'seed', locked: false,
+          text: '數據互相矛盾時，應明說矛盾在哪，不可挑一個順眼的下結論' },
+        { id: 'ac-ai-2', origin: 'seed', locked: false,
+          text: '資料不足以判斷時，應回「資料不足」並說明還缺什麼，不得硬給研判' },
       ];
       next.acceptance = Object.assign({}, skill.acceptance, {
         criteria: acceptCrits(skill).concat(addCrits),
