@@ -1024,8 +1024,8 @@ function LotHoldWidget({ p}) {
   );
 }
 
-/* ── SOP 產出的交接報告 → 佈告欄置頂公告 ──
-   交班不是一個模組，是一個唯讀 SOP 的排程產出。Schedule 是檔案櫃（可回溯），
+/* ── Flow 產出的交接報告 → 佈告欄置頂公告 ──
+   交班不是一個模組，是一個唯讀 Flow 的排程產出。Schedule 是檔案櫃（可回溯），
    這裡是「今天這份」——接班第一眼會看到的地方。
    見 brain/entities/modules/handover.md */
 function buildReportBulletin(p, report) {
@@ -1049,7 +1049,7 @@ function buildReportBulletin(p, report) {
 function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
   var { C, fz } = useTheme();
   const baseBulletins = BULLETINS[p.key] || [];
-  /* 人送出交班後，那份取代 SOP 產出的自動公告（同一件事的最終版本）*/
+  /* 人送出交班後，那份取代 Flow 產出的自動公告（同一件事的最終版本）*/
   const reportBulletin = handoverRecord ? null : buildReportBulletin(p, getLatestHandoverReport(p.key));
   const bulletins = handoverRecord
     ? [handoverRecord].concat(baseBulletins)
@@ -1107,7 +1107,7 @@ function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
       {bulletins.map((b, i) => {
         const isRead = b.isRead || readIds.has(b.id);
         const rt = b.fromSOP
-          ? { label: 'SOP 產出', bg: '#EFF6FF', color: '#2563EB' }
+          ? { label: 'Flow 產出', bg: '#EFF6FF', color: '#2563EB' }
           : b.type === 'handover'
             ? { label: '交班記錄', bg: '#FEF3C7', color: '#92400E' }
             : (ROLE_TAG_CFG[b.role] || ROLE_TAG_CFG.all);
@@ -1137,14 +1137,14 @@ function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
               </div>
               <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>{b.title}</div>
               <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.4, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{b.content}</div>
-              {/* 數字機器算，判斷人給：SOP 產出後由人補交代事項再送出 */}
+              {/* 數字機器算，判斷人給：Flow 產出後由人補交代事項再送出 */}
               {b.fromSOP && onOpenHandover && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <button onClick={function(e) { e.stopPropagation(); onOpenHandover(); }}
                     style={{ fontSize: fz(11), fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer' }}>
                     補充交代事項並送出交班
                   </button>
-                  <span style={{ fontSize: fz(11), color: C.textMuted }}>數字已由 SOP 算好，你只需要補上判斷</span>
+                  <span style={{ fontSize: fz(11), color: C.textMuted }}>數字已由 Flow 算好，你只需要補上判斷</span>
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1883,7 +1883,7 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
   const [pending, setPending]       = React.useState('');   // 區塊二：遺留待追蹤
   const [notes, setNotes]           = React.useState('');   // 區塊三：下一班注意事項
 
-  /* SOP 已經算好的那份（Schedule 產出＝佈告欄那則）；有的話直接預填，
+  /* Flow 已經算好的那份（Schedule 產出＝佈告欄那則）；有的話直接預填，
      人只要補判斷與交代事項 —— 數字機器算，判斷人給。 */
   const sopReport = getLatestHandoverReport(p.key);
 
@@ -1896,7 +1896,7 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
         return;
       }
 
-      // ── 區塊一：本班課況（KPI warn + Must-be-zero）── 沒有 SOP 產出時的退路
+      // ── 區塊一：本班課況（KPI warn + Must-be-zero）── 沒有 Flow 產出時的退路
       const warnKpis  = (p.kpis || []).filter(k => k.status === 'warn');
       const alertMbz  = (p.mustBeZero || []).filter(m => !m.ok);
       let sitLines = [];
@@ -1947,10 +1947,10 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
             <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>班對班交班摘要</div>
             <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
               {currentShift} → {nextShift} · {p.name}
-              {sopReport && <span style={{ color: '#2563EB' }}>　·　已由 SOP「{sopReport.scheduleName}」預填（{sopReport.dateLabel}）</span>}
+              {sopReport && <span style={{ color: '#2563EB' }}>　·　已由 Flow「{sopReport.scheduleName}」預填（{sopReport.dateLabel}）</span>}
             </div>
           </div>
-          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{sopReport ? '正在載入 SOP 產出…' : 'AI 正在彙整本班課況…'}</span>}
+          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{sopReport ? '正在載入 Flow 產出…' : 'AI 正在彙整本班課況…'}</span>}
           <button onClick={onClose}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: fz(18), color: C.textMuted, padding: '0 4px', lineHeight: 1 }}>×</button>
         </div>
@@ -1960,20 +1960,20 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: 16 }}>
               <div className="spin" style={{ width: 32, height: 32, border: '3px solid ' + C.border, borderTopColor: '#2563EB', borderRadius: '50%' }} />
-              <span style={{ fontSize: fz(13), color: C.textMuted }}>{sopReport ? "正在載入 SOP 已產出的 " + currentShift + " 課況…" : "AI 正在彙整 " + currentShift + " 課況…"}</span>
+              <span style={{ fontSize: fz(13), color: C.textMuted }}>{sopReport ? "正在載入 Flow 已產出的 " + currentShift + " 課況…" : "AI 正在彙整 " + currentShift + " 課況…"}</span>
             </div>
           ) : (
             <>
               {/* 區塊一：本班課況 */}
               <div>
-                <SectionLabel badge={sopReport ? "SOP 已算好 · 可編輯" : "AI 生成 · 可編輯"}>本班課況</SectionLabel>
+                <SectionLabel badge={sopReport ? "Flow 已算好 · 可編輯" : "AI 生成 · 可編輯"}>本班課況</SectionLabel>
                 <textarea value={situation} onChange={e => setSituation(e.target.value)}
                   style={{ width: '100%', minHeight: 88, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
 
               {/* 區塊二：遺留待追蹤事項 */}
               <div>
-                <SectionLabel badge={sopReport ? "SOP 已算好 · 可編輯" : "AI 生成 · 可編輯"}>遺留待追蹤事項</SectionLabel>
+                <SectionLabel badge={sopReport ? "Flow 已算好 · 可編輯" : "AI 生成 · 可編輯"}>遺留待追蹤事項</SectionLabel>
                 <textarea value={pending} onChange={e => setPending(e.target.value)}
                   style={{ width: '100%', minHeight: 104, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
@@ -2194,7 +2194,7 @@ function DashboardPage({ p, onAskAI, handoverRecord, onHandoverSubmit, pinnedApp
   var rp = {
     p, handoverRecord, kpiConfig,
     onOpenBulletinSetting, onOpenKpiSetting, onOpenAppSetting, onOpenLinkWidgetSetting,
-    /* 佈告欄那則 SOP 產出上的「補充交代事項」＝交班 Modal 的入口 */
+    /* 佈告欄那則 Flow 產出上的「補充交代事項」＝交班 Modal 的入口 */
     onOpenHandover: function() { if (setShowHandoverModal) setShowHandoverModal(true); },
   };
   const [rightOpen, setRightOpen] = React.useState(true);

@@ -10,7 +10,7 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-001',
       name: 'SPC 異常日報',
       skill: 'spc-daily-report',
-      skillId: 'sm-eq-008',      /* 對應 personas.js 的 SOP（含寫入）*/
+      skillId: 'sm-eq-008',      /* 對應 personas.js 的 Flow（含寫入）*/
       hasWrite: true,
       confirmSteps: 2,           /* 執行到這幾步會暫停等人確認 */
       cronLabel: '每日 07:50',
@@ -101,7 +101,7 @@ const SCHEDULING_DATA = {
         },
       ],
     },
-    /* ── 交接報告：交班已不是一個模組，而是這個唯讀 SOP 的排程產出 ──
+    /* ── 交接報告：交班已不是一個模組，而是這個唯讀 Flow 的排程產出 ──
        執行紀錄要看得到「產出物本身」，不能只有步驟；
        同一份產出同時送到 Home 課佈告欄（今天這份）與這裡（檔案櫃）。
        見 brain/entities/modules/handover.md */

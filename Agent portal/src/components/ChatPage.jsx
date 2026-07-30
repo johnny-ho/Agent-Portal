@@ -15,9 +15,9 @@
      · 決策卡選完會留下「✓ 已選擇：…」，回顧得到當時做了什麼決定
      · 操作按鈕只留在最後一則；對話往下走就收起，改由右側「這次的產出」承接
        （避免「按了會從哪裡執行、要不要帶後面的 context」的歧義）
-     · 執行面板改兩層：任務清單 → 展開看步驟，**支援同一則對話跑多份 SOP**
+     · 執行面板改兩層：任務清單 → 展開看步驟，**支援同一則對話跑多份 Flow**
      · 砍掉讀取／判斷／計算／會異動四顆 tag 與工具識別碼
-     · 砍掉每則的三態徽章 —— PO：「能執行就表示系統中有核准的 SOP」。
+     · 砍掉每則的三態徽章 —— PO：「能執行就表示系統中有核准的 Flow」。
        ⚠️ 代價：「這不是核准流程、責任在你」的告知責任，從 UI 轉移到
        回應文字本身。接真實 LLM 時這是 system prompt 的硬要求，
        見 brain/entities/modules/ai-chat.md 的 F-AI-01 驗收條件。
@@ -72,13 +72,13 @@ function ChatText({ text }) {
 }
 
 /* ════════════════════════════════════════
-   RunBlock — SOP 執行進度（對話流版）
+   RunBlock — Flow 執行進度（對話流版）
 
    2026-07-27 第五輪：從「已跑過的紀錄」改成**完整計畫**。
    右側面板不再展開步驟，所以三件只有計畫才知道的事全部回到這裡：
      · 還沒跑到的步驟 —— 置灰，跑到會停的預先標「需人工確認」
      · 條件分支沒走的步驟 —— 標「本次不走」，不留白讓人猜
-   計畫來源是那份已核准 SOP 的 plainSteps，不是 AI 邊跑邊生的。
+   計畫來源是那份已核准 Flow 的 plainSteps，不是 AI 邊跑邊生的。
 
    置灰的尾巴只長在**最後一個 run 區塊**上：往下走之後那些步驟
    已經有更新的紀錄了，留著舊的「待執行」只會讓人以為它沒跑。
@@ -93,7 +93,7 @@ const CHAT_RUN_STATUS = {
   branch:  { icon: '⤳', color: '#9E9E9E' },
 };
 
-/* 條件分支的名字：從 SOP 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
+/* 條件分支的名字：從 Flow 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
 function findBranchLabel(graph, byNum) {
   if (!graph || !graph.edges) return null;
   var hit = graph.edges.filter(function(e) {
@@ -103,14 +103,14 @@ function findBranchLabel(graph, byNum) {
   return hit ? hit.label : null;
 }
 
-/* 把「這則訊息跑了哪幾步」攤回 SOP 的完整步驟位置上 */
+/* 把「這則訊息跑了哪幾步」攤回 Flow 的完整步驟位置上 */
 function buildFlowRows(run, sop, visible, inFlightIndex, showTail) {
   var steps = (run && run.steps) || [];
   var count = visible == null ? steps.length : Math.min(visible, steps.length);
   var shown = steps.slice(0, count);
   var plan  = sop && sop.plainSteps;
 
-  /* 對不上 SOP（歷史對話、或步驟沒編號）就照原樣列 */
+  /* 對不上 Flow（歷史對話、或步驟沒編號）就照原樣列 */
   var nums = shown.map(function(s) { return s.num; }).filter(function(n) { return n != null; });
   if (!plan || nums.length === 0) {
     return shown.map(function(s, i) {
@@ -413,7 +413,7 @@ const CHAT_ITEM_STATUS = {
 };
 
 /* 沒有宣告 plan 的對話（歷史紀錄、或還沒改寫的腳本）：
-   用最後一份跑過的 SOP 合成一項，面板不會因此空掉 */
+   用最後一份跑過的 Flow 合成一項，面板不會因此空掉 */
 function synthPlan(msgs) {
   for (var i = msgs.length - 1; i >= 0; i--) {
     var m = msgs[i];
@@ -437,7 +437,7 @@ function buildActivePlan(chat, sopList, stepShown, playing) {
   if (!plan || !plan.items || plan.items.length === 0) return null;
   var from = planIdx >= 0 ? planIdx : 0;
 
-  /* 這份計畫開始之後，每個 SOP 各自跑到哪 */
+  /* 這份計畫開始之後，每個 Flow 各自跑到哪 */
   var exec = {};
   msgs.forEach(function(m, idx) {
     if (idx < from) return;
@@ -490,7 +490,7 @@ function buildActivePlan(chat, sopList, stepShown, playing) {
   return {
     title: plan.title,
     items: items,
-    /* 有已核准 SOP、或不只一件事，才值得自動把面板打開 */
+    /* 有已核准 Flow、或不只一件事，才值得自動把面板打開 */
     worthOpening: items.length > 1 || items.filter(function(it) { return it.tier === 'sop'; }).length > 0,
     pauseItem: items.filter(function(it) { return it.pauseStep; })[0] || null,
   };
@@ -510,7 +510,7 @@ function collectOutputs(messages) {
   return items;
 }
 
-/* 這次用到的：只給 Skill／SOP 標題與知識文件，詳情點進去看 */
+/* 這次用到的：只給 Skill／Flow 標題與知識文件，詳情點進去看 */
 function collectUsed(messages) {
   var skills = [], knowledge = [], blocked = [];
   messages.forEach(function(m) {
@@ -524,7 +524,7 @@ function collectUsed(messages) {
 }
 
 /* ════════════════════════════════════════
-   SkillPeekModal — 從面板點 Skill／SOP 進來看詳情
+   SkillPeekModal — 從面板點 Skill／Flow 進來看詳情
    只給「有人想看」的場景，不做 Graph / Signoff / Ask AI，
    那些在 Setting 的 Skill 管理全頁裡。
    ════════════════════════════════════════ */
@@ -657,7 +657,7 @@ function RunPanel({ plan, outputs, used, onClose, onPeekSkill }) {
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-thin">
         {!hasAnything && (
           <div style={{ padding: 16, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
-            這則對話還沒有執行紀錄。呼叫 SOP 時，這裡會列出這次要做的事。
+            這則對話還沒有執行紀錄。呼叫 Flow 時，這裡會列出這次要做的事。
           </div>
         )}
 
@@ -681,7 +681,7 @@ function RunPanel({ plan, outputs, used, onClose, onPeekSkill }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: fz(12), fontWeight: 600, color: it.status === 'todo' ? C.textMuted : C.text, lineHeight: 1.6 }}>{it.title}</span>
-                      {/* 已核准 SOP 不標 —— 能執行就表示核准過；非核准的才需要講 */}
+                      {/* 已核准 Flow 不標 —— 能執行就表示核准過；非核准的才需要講 */}
                       {it.tier && it.tier !== 'sop' && <SkillTierTag tier={it.tier} size="small" />}
                     </div>
                     {st.label && (
@@ -918,7 +918,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
   const pauseStepLabel = pauseItem ? pauseItem.pauseStep.label : null;
   const hasPlan = !!(plan && plan.worthOpening);
 
-  /* 偵測到 SOP 執行就自動把面板打開；使用者關過之後，同一則對話不再自動開 */
+  /* 偵測到 Flow 執行就自動把面板打開；使用者關過之後，同一則對話不再自動開 */
   React.useEffect(function() {
     if (hasPlan && activeId && !panelDismissed[activeId]) setPanelOpen(true);
   }, [hasPlan, activeId]);
@@ -1327,7 +1327,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
         />
       )}
 
-      {/* ══ Skill／SOP 詳情 popout ══ */}
+      {/* ══ Skill／Flow 詳情 popout ══ */}
       {peekSkill && (
         <SkillPeekModal skill={peekSkill} sopList={sopList} onClose={function() { setPeekSkill(null); }} />
       )}

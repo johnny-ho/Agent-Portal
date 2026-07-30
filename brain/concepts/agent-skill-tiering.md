@@ -1,16 +1,18 @@
 ---
 type: concept
-title: Agent Skill 三層模型（知識／輔助判斷／SOP）
-description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-29 第四輪：輔助判斷的測試案例改為驗收（AC × 提問情境、同一提問跑 5 次、人判、不滿分要寫原因才放行）
-tags: [concept, ai, architecture, skill, governance]
-updated: 2026-07-29
-sources: [PO×AI 討論 2026-07-25 / 07-26 / 07-27 / 07-28 / 07-29, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
+title: Agent Skill 三層模型（知識／Guide／Flow）
+description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-30 第五輪：類型改名 SOP → Flow、輔助判斷 → Guide（「SOP」在廠內與知識庫都另有所指，撞名）
+tags: [concept, ai, architecture, skill, governance, naming]
+updated: 2026-07-30
+sources: [PO×AI 討論 2026-07-25 / 07-26 / 07-27 / 07-28 / 07-29 / 07-30, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
 status: current
 ---
 
 # Agent Skill 三層模型
 
-> **PO 定案詞彙（UI 用字）：知識 / 輔助判斷 / SOP。** 不使用 codify graph、skill.md、tier 等實作語言面對使用者。
+> **PO 定案詞彙（UI 用字）：知識 / Guide / Flow。** 不使用 codify graph、skill.md、tier 等實作語言面對使用者。
+>
+> ⚠️ **2026-07-30 改名**（決議 15，見文末）：`輔助判斷 → Guide`、`SOP → Flow`。**本頁 2026-07-30 之前的段落一律沿用當時的舊用字**（輔助判斷／SOP），以保留決議脈絡可讀；code key `guided` / `sop` 未變。閱讀舊段落時請自行代換。
 >
 > **背景**：現有 Skill 管理本質是 SOP（codify graph）——Seed 描述需求、agent 生成流程與 code node、簽核後供調用。PO 提出 SOP 無法覆蓋異常長尾，值班人員需要 LLM 彈性路徑。本頁是該討論的結論與實作依據。
 
@@ -786,6 +788,58 @@ PO 看完驗收之後指出 Description 範例太精簡、**沒有 skill.md 的�
 - **成本**：真實系統一次驗收＝情境數 × 5 次 LLM run × 每次數個 tool call。要在 F-AI-01 的成本估算裡記一筆。
 - **AC 是自由文字**，無法像結構化適用範圍那樣自動推導出更多負面條件；系統補的三條仍是從 tier + scope 推的。
 - 決議 12 的路由層缺口未動。
+
+## 2026-07-30 第五輪：類型改名（決議 15）
+
+**PO：「目前 SOP 背後代表的是 codify graph，也就是 run 程式碼，但輔助判斷比較像是 skill.md 給 agent 應用的概念。目前 SOP 在公司內也是很泛用的名詞，我認為目前叫做 SOP 也可能造成混淆。」**
+
+### 為什麼「SOP」必須換掉
+
+不只是「廠內泛用」，是**在本產品內部就已經撞名**。知識管理裡放的正是廠內慣稱的 SOP 文件，而且它們與 Skill 管理裡的同名項目互相引用：
+
+| 知識文件（人讀的程序書） | `usedBy` 的 Skill（機器跑的圖） |
+|---|---|
+| 生產日報彙整指引 v2.3 | 生產日報彙整 · `tier: 'sop'` |
+| 停機跨班通報及記錄指引 | 停機跨班通報與記錄 · `tier: 'sop'` |
+
+同一個詞既指那份文件、也指那張圖。這與決議 13 把「測試案例」改名的理由同類（PO 當時：「test case 會跟 codify graph 的 test 模式混淆」），但**這次撞的是使用者自己每天在用的詞，所以更嚴重**。
+
+### 篩選標準：撞名面
+
+`data/knowledge.js` 15 篇文件的尾字統計，是這輪的硬約束：**程序 ×5、指引 ×5、規範 ×1、流程 ×1**。
+
+這張表淘汰了看起來最漂亮的答案。依 PO 的描述，最對稱的一組是「**流程**」對「**指引**」（codify graph 就是流程，skill.md 就是指引，本頁「兩種類型的建立體驗」表格內部本來就這樣寫）——但知識庫有 5 篇「XX指引」，把 `guided` 叫「指引」等於**把正在修的病複製到另一邊**。「標準流程」「作業程序」撞得比 SOP 更兇，同樣出局。
+
+### 第二個標準：類型名不能內含階段
+
+曾考慮「**核准流程**」，好處是能與 Chat 那條硬分界（`依核准流程` ↔ `AI 研判`）共用同一組詞。但它自我矛盾：**Draft 階段那一份還沒核准，卻已經屬於這個類型**。同理排除「已驗證流程」。
+
+「自動流程／自動化流程」也排除：**含寫入的 Flow 會停下等人，名字會說謊**（見上文「排程：含寫入的 SOP 無法真正無人執行」）。
+
+### 決議 15：`SOP → Flow`、`輔助判斷 → Guide`
+
+| | 舊 | 新 | 為什麼 |
+|---|---|---|---|
+| 容器 | Skill 管理 | **不改** | 中文找不到能蓋住兩者的詞，而最接近的「技能管理」在廠內是**員工技能矩陣／技能認證**，撞得比 SOP 更兇。且 Flow 與 Guide 本來就都是 skill，父層沒有錯 |
+| `sop` | SOP | **Flow** | 不撞任何廠內文件類別；是名詞，句子測試全通（「本 Flow 含 2 個需確認步驟」）|
+| `guided` | 輔助判斷 | **Guide** | 與 Flow 對稱（都是名詞、都是拉丁字）；「輔助判斷」本身沒問題，換掉純粹是為了配對 |
+| `knowledge` | 知識 | **不改**（本次） | 知識已是獨立頁，暫留中文。⚠️ 留下中英混搭：「Skill 管理」裡裝 `Flow`／`Guide`，隔壁 tab 叫「知識管理」。若要整齊，方向是把知識也改英文（`Knowledge`），不是把 Flow/Guide 改回中文 |
+| code key | `guided` / `sop` | **不改** | `SKILL_TIER_CFG` 就是為換用字而存在的單一改點；改 key 會讓本頁 14 條決議的技術代號全數失效 |
+
+英文層級：`Skills`（容器）→ `Flow`（程式跑、可排程）／`Guide`（agent 讀著研判、不可排程）。a Flow and a Guide are both skills，讀起來是通的。
+
+**這一輪只改顯示字，沒有任何行為改動。** 三層分界、把關機制、驗收方法、送簽硬條件全部不變。
+
+### 實作落點（2026-07-30）
+
+| 檔案 | 內容 |
+|---|---|
+| `components/shared.jsx` | `SKILL_TIER_CFG.sop.label`／`short` → `Flow`；`guided` → `Guide`（`short` 原為 `'判'`，一併改）|
+| 全站文案（9 個元件 + 4 份 data） | 使用者看得到的「SOP」約 159 處、「輔助判斷」約 62 處全數換字，含 Chat 五情境腳本、佈告欄「Flow 產出」徽章、交班 Modal「Flow 已算好」、排程「本 Flow 含 N 個需確認步驟」、Guide 詳情的「🔒 不能異動系統」說明 |
+| `components/SchedulingPage.jsx` | `blockReason()` 的字串串接補空白 —— 拉丁字類型名接中文句要有空白 |
+| `components/SkillDetailPage.jsx` | `tierWord()` 註解更新：兩個類型名現在都是拉丁字，判斷邏輯（看第一個字元）本來就通用，不寫死 |
+
+**識別字刻意不動**（避免無謂的擴散）：`sopManagement`、`SOPManagementPage`、`fromSOP`、`sourceSOP`、`sopReport`、`tier: 'sop'`。
 
 ## 關聯
 

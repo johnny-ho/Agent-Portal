@@ -147,7 +147,7 @@ const STATUS_CFG = {
 
 /* ════════════════════════════════════════
    Skill 三層模型 — 全站共用詞彙
-   知識 / 輔助判斷 / SOP。分界是「能不能設成排程」，
+   知識 / Guide / Flow。分界是「能不能設成排程」，
    使用者一秒就懂，比講副作用範圍好解釋。
    見 brain/concepts/agent-skill-tiering.md
    ════════════════════════════════════════ */
@@ -161,16 +161,16 @@ const SKILL_TIER_CFG = {
     schedulable: false,
   },
   guided: {
-    label: '輔助判斷',
-    short: '判',
+    label: 'Guide',
+    short: 'Guide',
     color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
     oneLiner: '每次狀況不同，AI 依課上的指引研判並給建議',
     detail: '可以查現場數據當證據，但不能異動任何系統；每次結果不一樣，所以不能設成排程。',
     schedulable: false,
   },
   sop: {
-    label: 'SOP',
-    short: 'SOP',
+    label: 'Flow',
+    short: 'Flow',
     color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
     oneLiner: '每次步驟都一樣、結果可重現的固定流程',
     detail: '執行時完全照核准過的步驟跑，可以設成排程自動執行；會異動系統的步驟一律停下來等人確認。',
@@ -180,7 +180,7 @@ const SKILL_TIER_CFG = {
 
 /* Skill 管理清單只有這兩種。
    2026-07-26 PO 決議：知識從 Skill 管理拆出去獨立成一頁，
-   因為它在輔助判斷／SOP 執行前後都會被引用，不是與它們平行的第三條路線。
+   因為它在 Guide／Flow 執行前後都會被引用，不是與它們平行的第三條路線。
    SKILL_TIER_CFG.knowledge 保留，僅供舊資料與知識頁的用語一致性使用。 */
 const SKILL_TIERS = ['guided', 'sop'];
 

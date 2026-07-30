@@ -4,9 +4,9 @@
    2026-07-26 重寫。原本這頁是未掛載的死碼（Skill／Prompt／Q&A 三個 tab），
    現改為「知識管理」，承接從 Skill 管理拆出來的知識層。
 
-   為什麼要拆：知識在輔助判斷／SOP 執行的前後都會被引用，
+   為什麼要拆：知識在 Guide／Flow 執行的前後都會被引用，
    它是底料不是第三條路線。拆開之後，Skill 管理頁只剩
-   「輔助判斷」與「SOP」兩種真的會執行的東西。
+   「Guide」與「Flow」兩種真的會執行的東西。
 
    後續方向（本版不實作，頁面上有標註）：
    Vector 索引 → RAG 檢索 → 使用者自建知識圖譜。
@@ -117,7 +117,7 @@ function KnowledgeDocModal({ doc, p, onClose, onDelete }) {
         (doc.usedBy || []).length === 0
           ? <div style={{ fontSize: fz(13), color: C.textMuted, padding: 16, background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, lineHeight: 1.7 }}>
               目前沒有 Skill 引用這份文件。<br />
-              它仍然會被 AI 檢索到並用於一般問答，只是沒有被綁進任何輔助判斷或 SOP。
+              它仍然會被 AI 檢索到並用於一般問答，只是沒有被綁進任何 Guide 或 Flow。
             </div>
           : <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
               {doc.usedBy.map(function(u, i) {
