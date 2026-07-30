@@ -69,7 +69,7 @@ function matchScopeTargets(personaKey, scope) {
    TOOL_PROBE —— 節點試打的介面定義（2026-07-27）
 
    PO：「dry run 可以讓使用者選擇試打資料訪問的 api / node，這樣就不用猜。」
-   SOP 走 codify graph，每個節點是一段程式碼；出事的地方多半不是邏輯，
+   Flow 走 codify graph，每個節點是一段程式碼；出事的地方多半不是邏輯，
    是**介面**：欄位改名、型別不符、極值沒考慮。所以每個工具要有
    「吃什麼參數、吐什麼欄位」的定義，人才有辦法單獨打一個節點看它回什麼。
 
@@ -311,13 +311,13 @@ const PERSONAS = {
         { q: 'E-101 研磨頭換件力矩標準？v2.3 跟 v2.2 差異在哪？', a: '上蓋螺絲：18 N·m（v2.2 為 16 N·m，已更新）；固定環：12 N·m（未變動）。v2.3 新增步驟 7 冷卻水路確認。', contributor: '王志明', date: '今天', sourceSOP: 'CMP 研磨頭定期更換 Skill v2.3' },
         { q: 'ERR-4421 最常見的根因是什麼？', a: '依頻率：(1) 冷卻水路阻塞 60%、(2) 壓力感測器老化 25%、(3) 循環泵葉輪磨損 15%。', contributor: '吳志豪', date: '今天', sourceSOP: null },
       ],
-      /* ── Skill 管理只放「輔助判斷」與「SOP」兩種。
+      /* ── Skill 管理只放「Guide」與「Flow」兩種。
             純文件性質的內容已於 2026-07-26 移出至 data/knowledge.js。
             知識不是與這兩者平行的第三條路線，而是它們引用的底料
             （見各 Skill 的 knowledgeRefs）。 ── */
       sopManagement: [
 
-        /* ── 輔助判斷（Draft）：剛用對話建好，還沒測 ── */
+        /* ── Guide（Draft）：剛用對話建好，還沒測 ── */
         {
           id: 'sm-eq-009',
           title: '換件後性能異常研判',
@@ -391,7 +391,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'E-101 屬 CMP —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'cmms.get_maint_record', label: '查換件記錄', params: 'eqp_id=E-101', allowed: true, result: '研磨頭批號 LOT-2207，數量 4' },
-                  { kind: 'tool', tool: 'inv.create_return', label: '開立退料單', params: 'part_no=PT-2207, qty=4', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'inv.create_return', label: '開立退料單', params: 'part_no=PT-2207, qty=4', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '退料單我不能代開 —— 這份 Skill 只有唯讀工具。\n\n以下是可以直接貼上的退料單內容：\n· 料號 PT-2207 研磨頭 · 批號 LOT-2207 · 數量 4\n· 退料原因：換件後研磨率 480 Å/min，低於規格下限 520\n· 佐證：CMMS 換件記錄（扭矩與 O-ring 均正常）、SPC 研磨率量測\n\n請由你在倉儲系統送出。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -414,7 +414,7 @@ const PERSONAS = {
           },
         },
 
-        /* ── SOP（唯讀，Testing）：PM 到期清單 ── */
+        /* ── Flow（唯讀，Testing）：PM 到期清單 ── */
         {
           id: 'sm-eq-010',
           title: 'PM 到期清單彙整',
@@ -490,7 +490,7 @@ const PERSONAS = {
           },
         },
 
-        /* ── 輔助判斷（Approving）：簽核中 ── */
+        /* ── Guide（Approving）：簽核中 ── */
         {
           id: 'sm-eq-011',
           title: '機台異音與震動研判',
@@ -533,7 +533,7 @@ const PERSONAS = {
                   { kind: 'tool', tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', params: 'eqp_id=E-203, hours=24', allowed: true, result: '震動 4.8 mm/s，30 天基線 2.0 mm/s（2.4 倍），近 6 小時突然跳高' },
                   { kind: 'tool', tool: 'eqp.compare_fleet', label: '比對同型機台', params: 'eqp_class=CMP', allowed: true, result: '同型 5 台同期無相同趨勢' },
                   { kind: 'tool', tool: 'cmms.get_maint_record', label: '查保養記錄', params: 'eqp_id=E-203', allowed: true, result: '上次 PM 距今 12 天' },
-                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：軸承或固定件鬆動，3 項數據一致。**\n\n依據：震動 4.8 mm/s（基線 2.0，2.4 倍，設備監控 09:05 取）；形態為 6 小時內突然跳高，非緩慢爬升；上次 PM 距今 12 天（CMMS 09:06 取）。\n排除：同型 5 台同期間無相同趨勢（設備監控 09:06 取）→ 排除廠務端電源／氣源；PM 才做完 12 天 → 磨耗解釋不合理。\n落在門檻：> 基線 2 倍且伴隨異音改變 → 建議立即停機。\n\n建議動作：在設備監控將 E-203 轉 Down 並開 CM 工單，須由你執行。\n（以上為依課上指引的研判建議，不是核准流程；停機決定權在當班工程師與課長。）',
                 vary: [
@@ -581,7 +581,7 @@ const PERSONAS = {
                 input: '判定要停機的話直接幫我停',
                 steps: [
                   { kind: 'match', text: 'E-203 屬 CMP —— 符合本 Skill 適用範圍' },
-                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '停機我不能代為執行 —— 這份 Skill 只有唯讀工具。\n\n依前一次研判（震動 2.4 倍、突然跳高、同型無異常），落在「建議立即停機」那一段。\n要停的話請在設備監控把 E-203 轉 Down，並開 CM 工單註明震動值與基線倍數。\n\n（以上為依課上指引的研判建議，不是核准流程；停機決定權在當班工程師與課長。）',
                 vary: [
@@ -610,7 +610,7 @@ const PERSONAS = {
           ],
         },
 
-        /* ── SOP（含寫入，Pilot Run）：FDC 異常快速反應。
+        /* ── Flow（含寫入，Pilot Run）：FDC 異常快速反應。
               graph 有條件分支：Level-3 才走停機隔離。 ── */
         {
           id: 'sm-eq-004',
@@ -682,12 +682,12 @@ const PERSONAS = {
           ],
         },
 
-        /* ── 輔助判斷（Production）：Chat 情境 3 就是這一份的活體展示 ── */
+        /* ── Guide（Production）：Chat 情境 3 就是這一份的活體展示 ── */
         {
           id: 'sm-eq-006',
           title: 'ERR-4421 冷卻異常研判',
           purpose: 'ERR-4421 觸發時，研判是水路阻塞、感測器老化還是循環泵磨損。',
-          description: '# ERR-4421 冷卻異常研判\n\n## 什麼時候用這份\nCMP 機台觸發 ERR-4421（冷卻水路壓力低於 0.15 MPa）時使用。\n\n## 什麼時候不用這份\n非 ERR-4421 的冷卻相關警報不適用，請改查對應的異常排除文件。\n爐管等非 CMP 機台一律不適用，即使警報碼相同 —— 水路架構不同，判斷依據也不同。\n\n## 可以動用的工具\n- `fdc.get_alarm_detail(alarm_id)` — 警報明細：觸發時間、觸發參數、偏離倍數\n- `eqp.get_sensor_trend(eqp_id, hours)` — 感測器趨勢，看水壓與過濾器壓差的走勢\n- `spc.get_recipe_stats(recipe_id)` — 配方統計，只有要排除製程端因素時才需要\n\n三支都是唯讀。開單、停機、換件、通知廠務都要人自己去做 —— 這份沒有寫入工具，也不會有。\n\n## 研判步驟\n每一步都要把取到的數值寫進回答，不要只寫結論。\n\n1. **先確認警報是真的**\n   呼叫 `fdc.get_alarm_detail`，取觸發時間與當下水壓值。\n   - 查不到該筆警報 → 停下來回報，不要用機台歷史湊一個看起來合理的解釋\n\n2. **看水壓的變化形態** — `eqp.get_sensor_trend(eqp_id, hours=2)`\n  - 持續下滑、中間沒有回彈 → 傾向**水路阻塞**\n  - 上下跳動、振幅超過 0.03 MPa 但沒有趨勢 → 傾向**感測器老化**\n  - 兩種形態都不明顯 → 先不下結論，往第 3 步\n\n3. **看過濾器壓差** — 同一支工具取壓差通道\n  - 壓差 **> 0.05 MPa** → 直接判阻塞\n  - 這個門檻比壓力形態可靠，兩者衝突時以壓差為準，並在回答裡寫明是用哪一項推翻哪一項\n\n4. **交叉驗證再下結論**\n   取近 7 天同碼警報次數與上次過濾器清洗日期。\n   **三項一致才下結論**；只有一項支持時降級成「傾向」，並列出還缺哪一項。\n\n5. **前兩者都不明確才看循環泵**\n   泵葉輪磨損通常伴隨流量同步下降；只有壓力掉而流量沒動的，多半不是泵。\n\n## 回答一定要包含\n1. **結論與把握程度** — 判成什麼、有幾項數據支持（例如「水路阻塞，3 項一致」）\n2. **每個數字的來源** — 哪一支工具、什麼時間取的，讓看的人可以自己回查\n3. **排除了什麼** — 哪些假設被排除、憑哪一項數據排除\n4. **建議動作與執行位置** — 要做什麼、在哪個系統做、該由誰執行\n5. **責任聲明** — 這是研判建議，不是核准流程\n\n第 2、3 點最容易被略過，也最重要：**沒有依據與排除過程，研判就沒辦法被別人檢查**，出事時也沒有東西可以回溯。\n\n## 停下來不要硬判的情況\n- 取不到水壓趨勢 → 不要拿同型機台的數據代替，直接說缺這一項\n- 壓差與壓力形態指向不同結論 → 明說矛盾在哪，不要挑一個順眼的\n- 只取得到一項數據 → 回「資料不足以判斷」，並列出還需要什麼\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。\n實際處置（開單、停機、換件）須由人執行，或改走已核准的 SOP。本 Skill 只有唯讀工具，不會也不能異動任何系統。',
+          description: '# ERR-4421 冷卻異常研判\n\n## 什麼時候用這份\nCMP 機台觸發 ERR-4421（冷卻水路壓力低於 0.15 MPa）時使用。\n\n## 什麼時候不用這份\n非 ERR-4421 的冷卻相關警報不適用，請改查對應的異常排除文件。\n爐管等非 CMP 機台一律不適用，即使警報碼相同 —— 水路架構不同，判斷依據也不同。\n\n## 可以動用的工具\n- `fdc.get_alarm_detail(alarm_id)` — 警報明細：觸發時間、觸發參數、偏離倍數\n- `eqp.get_sensor_trend(eqp_id, hours)` — 感測器趨勢，看水壓與過濾器壓差的走勢\n- `spc.get_recipe_stats(recipe_id)` — 配方統計，只有要排除製程端因素時才需要\n\n三支都是唯讀。開單、停機、換件、通知廠務都要人自己去做 —— 這份沒有寫入工具，也不會有。\n\n## 研判步驟\n每一步都要把取到的數值寫進回答，不要只寫結論。\n\n1. **先確認警報是真的**\n   呼叫 `fdc.get_alarm_detail`，取觸發時間與當下水壓值。\n   - 查不到該筆警報 → 停下來回報，不要用機台歷史湊一個看起來合理的解釋\n\n2. **看水壓的變化形態** — `eqp.get_sensor_trend(eqp_id, hours=2)`\n  - 持續下滑、中間沒有回彈 → 傾向**水路阻塞**\n  - 上下跳動、振幅超過 0.03 MPa 但沒有趨勢 → 傾向**感測器老化**\n  - 兩種形態都不明顯 → 先不下結論，往第 3 步\n\n3. **看過濾器壓差** — 同一支工具取壓差通道\n  - 壓差 **> 0.05 MPa** → 直接判阻塞\n  - 這個門檻比壓力形態可靠，兩者衝突時以壓差為準，並在回答裡寫明是用哪一項推翻哪一項\n\n4. **交叉驗證再下結論**\n   取近 7 天同碼警報次數與上次過濾器清洗日期。\n   **三項一致才下結論**；只有一項支持時降級成「傾向」，並列出還缺哪一項。\n\n5. **前兩者都不明確才看循環泵**\n   泵葉輪磨損通常伴隨流量同步下降；只有壓力掉而流量沒動的，多半不是泵。\n\n## 回答一定要包含\n1. **結論與把握程度** — 判成什麼、有幾項數據支持（例如「水路阻塞，3 項一致」）\n2. **每個數字的來源** — 哪一支工具、什麼時間取的，讓看的人可以自己回查\n3. **排除了什麼** — 哪些假設被排除、憑哪一項數據排除\n4. **建議動作與執行位置** — 要做什麼、在哪個系統做、該由誰執行\n5. **責任聲明** — 這是研判建議，不是核准流程\n\n第 2、3 點最容易被略過，也最重要：**沒有依據與排除過程，研判就沒辦法被別人檢查**，出事時也沒有東西可以回溯。\n\n## 停下來不要硬判的情況\n- 取不到水壓趨勢 → 不要拿同型機台的數據代替，直接說缺這一項\n- 壓差與壓力形態指向不同結論 → 明說矛盾在哪，不要挑一個順眼的\n- 只取得到一項數據 → 回「資料不足以判斷」，並列出還需要什麼\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。\n實際處置（開單、停機、換件）須由人執行，或改走已核准的 Flow。本 Skill 只有唯讀工具，不會也不能異動任何系統。',
           sourceKM: 'Confluence · ETC 設備課 / 異常排除指引',
           importedAt: '2026-05-06',
           importedBy: '吳志豪',
@@ -725,7 +725,7 @@ const PERSONAS = {
                   { kind: 'match', text: 'E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'fdc.get_alarm_detail', label: '查警報明細', params: 'alarm_id=AL-20260727-118', allowed: true, result: '冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa' },
                   { kind: 'tool', tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', params: 'eqp_id=E-101, hours=2', allowed: true, result: '水壓由 0.19 緩降至 0.11，中間無回彈；流量未同步下降' },
-                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：冷卻水路阻塞，3 項數據一致。**\n\n依據：過濾器壓差 0.07 MPa（門檻 0.05，FDC 03:12 取）；近 2 小時水壓由 0.19 緩降至 0.11、中間無回彈（設備監控 03:12 取）；近 7 天同碼警報 3 次、上次濾芯清洗為 42 天前。\n排除：壓力形態為持續下滑而非跳動 → 排除感測器老化；流量未同步下降 → 排除循環泵葉輪磨損。\n\n建議動作：先執行冷卻水路疏通程序；若 30 分鐘內壓力未回升，再到工單系統開緊急工單（內容已擬好可直接複製）。開單與疏通都要由你執行 —— 我只有唯讀工具。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -757,7 +757,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'E-101 屬 CMP、警報碼 ERR-4421 —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'fdc.get_alarm_detail', label: '查警報明細', params: 'alarm_id=AL-20260727-118', allowed: true, result: '冷卻水壓 0.11 MPa、過濾器壓差 0.07 MPa' },
-                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101, level=urgent', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101, level=urgent', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '緊急工單我不能代為開立 —— 這份 Skill 只有唯讀工具。\n\n以下是可以直接貼上的工單內容：\n· 機台 E-101 · 異常碼 ERR-4421 · 等級：緊急\n· 現象：冷卻水壓 0.11 MPa（門檻 0.15），過濾器壓差 0.07 MPa（門檻 0.05）\n· 初判：冷卻水路阻塞，建議先執行疏通程序\n\n請由你在工單系統送出。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -784,12 +784,12 @@ const PERSONAS = {
           approvedBy: '林課長',
         },
 
-        /* ── SOP（唯讀）：交接報告 —— 零 LLM、可排程、跳過 Pilot Run ── */
+        /* ── Flow（唯讀）：交接報告 —— 零 LLM、可排程、跳過 Pilot Run ── */
         {
           id: 'sm-eq-007',
           title: '整理當班交接報告',
           purpose: '每班結束前彙整稼動、異常與待交接事項，產出交接報告。',
-          description: '每天固定要做三次的彙整工作，步驟每次都一樣、結果可以重現，所以做成 SOP 並掛上排程。\n\n流程大意：取當班機台稼動資料與同時段警報並分級，接著計算稼動率與異常密度，取未結案 Case 與待交接事項，最後套用課內的交接報告格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。產出會直接置頂在首頁佈告欄，交班 Modal 也會拿同一份預填。',
+          description: '每天固定要做三次的彙整工作，步驟每次都一樣、結果可以重現，所以做成 Flow 並掛上排程。\n\n流程大意：取當班機台稼動資料與同時段警報並分級，接著計算稼動率與異常密度，取未結案 Case 與待交接事項，最後套用課內的交接報告格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。產出會直接置頂在首頁佈告欄，交班 Modal 也會拿同一份預填。',
           sourceKM: '對話式建立 · 未從 KM 引入',
           importedAt: '2026-05-12',
           importedBy: '王志明',
@@ -859,7 +859,7 @@ const PERSONAS = {
           approvedBy: '林課長',
         },
 
-        /* ── SOP（含寫入）：走完 Pilot Run；排程執行到寫入步驟會暫停等人。
+        /* ── Flow（含寫入）：走完 Pilot Run；排程執行到寫入步驟會暫停等人。
               Chat 情境 1 就是這一份的執行過程。 ── */
         {
           id: 'sm-eq-008',
@@ -955,7 +955,7 @@ const PERSONAS = {
           toolRuns: [
             { tool: 'fdc.get_alarm_detail',     label: '查警報明細',   mode: 'read',  allowed: true,  result: '取得 1 筆：冷卻水壓 0.11 MPa、過濾器壓差 0.07 MPa' },
             { tool: 'eqp.get_sensor_trend',     label: '查感測器趨勢', mode: 'read',  allowed: true,  result: '近 2 小時水壓緩降，非跳動' },
-            { tool: 'mes.create_urgent_order',  label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為輔助判斷，不可異動系統', result: '已拒絕 → 改為建議' },
+            { tool: 'mes.create_urgent_order',  label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為 Guide，不可異動系統', result: '已拒絕 → 改為建議' },
           ],
         },
         { role: 'user', text: '冷卻水路阻塞通常多久會再發生？' },
@@ -1048,10 +1048,10 @@ const PERSONAS = {
         { q: 'CP 值低於 1.33 時應該採取什麼行動？', a: 'CP < 1.33 屬警戒狀態：立即通知 Section Admin、啟動根因分析、暫停批量生產直到 CP 恢復 ≥ 1.67。', contributor: '鄭志明', date: '今天', sourceSOP: 'SPC 管制圖異常處置 Skill v2.0' },
         { q: 'DCR 申請需要準備哪些文件？', a: '必要文件：(1)變更原因說明 (2)影響評估報告 (3)驗證計畫 (4)回復計畫。跨 Section 異動需額外附 Fab Admin 核可。', contributor: '黃怡君', date: '04/07', sourceSOP: '製程變更管制程序 Skill v3.1' },
       ],
-      /* ── Skill 管理只放「輔助判斷」與「SOP」兩種。
+      /* ── Skill 管理只放「Guide」與「Flow」兩種。
             純文件性質的內容已於 2026-07-26 移出至 data/knowledge.js ── */
       sopManagement: [
-        /* ── 輔助判斷（Draft）：良率異常每次長得不一樣 ── */
+        /* ── Guide（Draft）：良率異常每次長得不一樣 ── */
         {
           id: 'sm-pr-008',
           title: '良率異常根因研判',
@@ -1121,7 +1121,7 @@ const PERSONAS = {
                 input: '幫我把研磨時間加長 5 秒',
                 steps: [
                   { kind: 'match', text: 'CMP-03 站點 —— 符合本 Skill 適用範圍' },
-                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=CMP-03, polish_time=+5s', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=CMP-03, polish_time=+5s', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '製程參數我不能代為變更 —— 這份 Skill 只有唯讀工具，任何參數調整都必須走 DCR 程序。\n\n而且以目前的資料還不該調：量測問題還沒排除（這一批沒有重測值），現在調研磨時間可能是在補一個不存在的問題。\n\n建議動作：先重測；若確認不是量測問題且要調參數，我可以幫你把變更理由與佐證數據整理成 DCR 需要的格式，由你送出。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -1136,12 +1136,12 @@ const PERSONAS = {
           },
         },
 
-        /* ── SOP（唯讀）：Qualification 驗證報告，簽核中 ── */
+        /* ── Flow（唯讀）：Qualification 驗證報告，簽核中 ── */
         {
           id: 'sm-pr-003',
           title: 'Recipe Qualification 驗證報告',
           purpose: '新配方三批試跑完成後，自動彙整量測數據並產出 Qualification 驗證報告。',
-          description: '新 Recipe 或關鍵參數變更後的驗證報告，過去要工程師從三個系統抄數據再手算 Cpk，容易抄錯也很花時間。\n\n流程大意：取指定配方的三批試跑量測數據，接著計算膜厚均勻性、研磨率穩定性與跨批次 Cpk，然後比對驗證規範的四項門檻，最後套用課內的驗證報告格式輸出。\n\n全程只讀取資料、不異動任何系統。報告產出後仍須由人提交 Section Admin 審核，本 SOP 不會代為送審。',
+          description: '新 Recipe 或關鍵參數變更後的驗證報告，過去要工程師從三個系統抄數據再手算 Cpk，容易抄錯也很花時間。\n\n流程大意：取指定配方的三批試跑量測數據，接著計算膜厚均勻性、研磨率穩定性與跨批次 Cpk，然後比對驗證規範的四項門檻，最後套用課內的驗證報告格式輸出。\n\n全程只讀取資料、不異動任何系統。報告產出後仍須由人提交 Section Admin 審核，本 Flow 不會代為送審。',
           sourceKM: 'Confluence · ETC 製程課 / 製程文件',
           importedAt: '2026-04-08',
           importedBy: '李佳穎',
@@ -1187,7 +1187,7 @@ const PERSONAS = {
                 { label: '跨批 Cpk',   value: '1.68', unit: '',      note: '門檻 ≥1.33，通過' },
               ],
               situation: 'R-518 三批試跑（L2301/L2302/L2303）四項驗證指標全數通過。顆粒污染 32 顆/cm²（門檻 <50）。',
-              pending: '• 報告已產出，需由工程師提交 Section Admin 審核。本 SOP 不會代為送審。',
+              pending: '• 報告已產出，需由工程師提交 Section Admin 審核。本 Flow 不會代為送審。',
             },
             calculations: [
               { stepNum: 3, label: '膜厚均勻性 1.6%', how: '3σ ÷ mean = 3×0.0142 ÷ 2.68（本課以 3σ/mean 計，非 range/mean）', from: '步驟 1 的 45 點量測值', custom: true },
@@ -1205,7 +1205,7 @@ const PERSONAS = {
           ],
         },
 
-        /* ── SOP（含寫入）：跨站通報，走完 Pilot Run ── */
+        /* ── Flow（含寫入）：跨站通報，走完 Pilot Run ── */
         {
           id: 'sm-pr-004',
           title: '製程異常跨站通報',
@@ -1273,7 +1273,7 @@ const PERSONAS = {
           ],
         },
 
-        /* ── SOP（唯讀）：每日 SPC 巡檢摘要，已生效 ── */
+        /* ── Flow（唯讀）：每日 SPC 巡檢摘要，已生效 ── */
         {
           id: 'sm-pr-007',
           title: '每日 SPC 巡檢摘要',
@@ -1338,7 +1338,7 @@ const PERSONAS = {
           approvedBy: '李佳穎',
         },
 
-        /* ── 輔助判斷：CP 值趨勢每次長得不一樣，沒有標準流程可套 ── */
+        /* ── Guide：CP 值趨勢每次長得不一樣，沒有標準流程可套 ── */
         {
           id: 'sm-pr-006',
           title: 'CP 值下滑趨勢研判',
@@ -1384,7 +1384,7 @@ const PERSONAS = {
                   { kind: 'tool', tool: 'spc.get_trend', label: '查 SPC 趨勢', params: 'station=R-512, days=30', allowed: true, result: '近 30 天連續 9 點同側（Nelson Rule 2），下滑起點 03/29' },
                   { kind: 'tool', tool: 'recipe.get_version', label: '查配方版本紀錄', params: 'station=R-512', allowed: true, result: 'v4.1 → v4.2（03/28 壓力上限 4.0 → 4.2 torr）' },
                   { kind: 'tool', tool: 'mes.get_lot_history', label: '查批號履歷', params: 'station=R-512, days=30', allowed: true, result: '同期間原料批號無切換' },
-                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：傾向配方變更造成，2 項數據支持，材料端已排除。**\n\n依據：CP 值 1.82 → 1.41，下滑起點 03/29（SPC 16:38 取）；配方 v4.1 → v4.2 壓力上限由 4.0 調升至 4.2，時間 03/28（Recipe 管理 16:39 取）；同期間原料批號無切換（MES 16:39 取）。\n時間軸比對：下滑起點落在配方變更後第 1 天，兩事件未重疊、可以分得開。\n排除：材料端同期無異動 → 排除原料；單站獨有、其他站點同期無徵兆 → 設備端優先度降低。\n\n建議動作：先做 Process Window Study 驗證壓力影響，確認後走 DCR 回調參數。DCR 須由你送出 —— 我不能也不會代為變更參數。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -1416,7 +1416,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'R-512 —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'recipe.get_version', label: '查配方版本紀錄', params: 'station=R-512', allowed: true, result: '目前 v4.2，壓力上限 4.2 torr' },
-                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '參數我不能代為變更 —— 這份 Skill 只有唯讀工具，任何變更都必須走 DCR 程序。\n\n以下是 DCR 需要的內容，我可以先幫你整理好：\n· 變更項目：R-512 壓力上限 4.2 → 4.0 torr（回到 v4.1 設定）\n· 變更理由：CP 值於配方切換後第 1 天由 1.82 降至 1.41\n· 佐證：SPC 近 30 天趨勢、Recipe 版本紀錄、同期原料無切換\n\n請由你送出 DCR。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -1537,7 +1537,7 @@ const PERSONAS = {
         { q: '產能落後超過 5% 時第一步應該做什麼？', a: '立即通知生產線組長啟動「產能落後緊急應變程序」：(1)確認落後原因(設備/人員/材料) (2)評估可補救產能 (3)30 分鐘內向部長回報。', contributor: '陳建宏', date: '今天', sourceSOP: '產能落後緊急應變程序 Skill v1.8' },
         { q: 'MES 工單優先序異動需要誰核准？', a: 'P1 急單由部長核准；P2 一般優先序調整由組長核准；P3 非急單調整工程師自行決策後回報。', contributor: '林組長', date: '04/06', sourceSOP: null },
       ],
-      /* ── Skill 管理只放「輔助判斷」與「SOP」兩種。
+      /* ── Skill 管理只放「Guide」與「Flow」兩種。
             純文件性質的內容已於 2026-07-26 移出至 data/knowledge.js ── */
       sopManagement: [
         {
@@ -1610,7 +1610,7 @@ const PERSONAS = {
                 input: '幫我把 W26-031 在 MES 上調到第一順位',
                 steps: [
                   { kind: 'match', text: 'W26-031 屬 LINE-1 —— 符合本 Skill 適用範圍' },
-                  { kind: 'tool', tool: 'mes.update_priority', label: '調整工單順序', params: 'lot_id=W26-031, priority=1', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.update_priority', label: '調整工單順序', params: 'lot_id=W26-031, priority=1', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: 'MES 上的工單順序我不能代為異動 —— 這份 Skill 只有唯讀工具。\n\n建議順序與理由：W26-031 排第一（今日到期客戶急單，第 1 層交期即分出先後）。\n請由你在 MES 的工單排序畫面調整。\n\n（以上為依課上指引的建議順序，不是核准流程；責任仍在下決定的組長。）',
                 vary: [
@@ -1637,12 +1637,12 @@ const PERSONAS = {
           ],
         },
 
-        /* ── SOP（含寫入）：停機通報，走完 Pilot Run ── */
+        /* ── Flow（含寫入）：停機通報，走完 Pilot Run ── */
         {
           id: 'sm-mfg-004',
           title: '停機跨班通報與記錄',
           purpose: '停機超過 1 小時時，自動整理影響評估、登錄 MES 並通報接班人員。',
-          description: '停機事件的通報與記錄，過去要組長在三個系統之間手動搬資料，這份 SOP 把它收成一次執行。\n\n流程大意：先取停機事件與預計時長，接著算出對當班產能的影響與受影響批號清單，然後在 MES 登錄停機原因代碼，最後通報 Section Lead 與接班班組。\n\n登錄 MES 與發送通報這兩步會異動系統，執行到那兩步一定會停下來等人確認，排程執行也一樣。',
+          description: '停機事件的通報與記錄，過去要組長在三個系統之間手動搬資料，這份 Flow 把它收成一次執行。\n\n流程大意：先取停機事件與預計時長，接著算出對當班產能的影響與受影響批號清單，然後在 MES 登錄停機原因代碼，最後通報 Section Lead 與接班班組。\n\n登錄 MES 與發送通報這兩步會異動系統，執行到那兩步一定會停下來等人確認，排程執行也一樣。',
           sourceKM: 'Confluence · 製造課 / 設備管理',
           importedAt: '2026-04-02',
           importedBy: '林組長',
@@ -1705,12 +1705,12 @@ const PERSONAS = {
           ],
         },
 
-        /* ── SOP（唯讀）：日報彙整，已掛排程 sch-mf-002 ── */
+        /* ── Flow（唯讀）：日報彙整，已掛排程 sch-mf-002 ── */
         {
           id: 'sm-mfg-005',
           title: '生產日報彙整',
           purpose: '每日 20:00 自動彙整三線產出、停機與異常，產出標準格式日報。',
-          description: '每天固定要做的彙整工作，步驟每次都一樣、結果可以重現，所以做成 SOP 並掛上排程。\n\n流程大意：從 MES 取當日三線產出（批號、數量、良率），取停機記錄與異常事件，接著計算 OEE 與目標達成率，最後套用課內的日報格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。',
+          description: '每天固定要做的彙整工作，步驟每次都一樣、結果可以重現，所以做成 Flow 並掛上排程。\n\n流程大意：從 MES 取當日三線產出（批號、數量、良率），取停機記錄與異常事件，接著計算 OEE 與目標達成率，最後套用課內的日報格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。',
           sourceKM: 'Confluence · 製造課 / 日常管理',
           importedAt: '2026-03-01',
           importedBy: '陳建宏',
@@ -1776,7 +1776,7 @@ const PERSONAS = {
           approvedBy: '吳部長',
         },
 
-        /* ── 輔助判斷：產能落後每次原因不同，沒有標準流程可套 ── */
+        /* ── Guide：產能落後每次原因不同，沒有標準流程可套 ── */
         {
           id: 'sm-mfg-006',
           title: '產能落後根因研判',
@@ -1819,7 +1819,7 @@ const PERSONAS = {
                   { kind: 'tool', tool: 'line.get_throughput', label: '查產線產出', params: 'line=LINE-3', allowed: true, result: '逐小時拆解：13:00–15:00 產出趨近 0，其餘時段接近標準' },
                   { kind: 'tool', tool: 'eqp.list_downtime', label: '查停機記錄', params: 'line=LINE-3, days=1', allowed: true, result: '13:00 起傳送帶異常停機 1.8 h' },
                   { kind: 'tool', tool: 'mes.get_changeover', label: '查換線與待料', params: 'line=LINE-3', allowed: true, result: '換線 2 次、逾時 22 分；待料 0' },
-                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：主因為設備停機，可解釋 78% 的缺口。**\n\n逐小時對照：08–13 時接近目標（每小時 32–35 片），13–15 時幾乎停擺（每小時 4 片）—— 不是整日平均落後 8%。\n缺口拆解：總缺口 78 片。停機 61 片（1.8 h × 34 片/h，設備監控 15:38 取）占 78%；換線逾時 9 片占 12%（MES 15:39 取）；待料 0；**未解釋 8 片占 10%**。\n排除：出勤與人力配置與昨日相同 → 人員因素優先度最低。\n\n建議動作：今晚加班 1.5 h 可補回約 51 片。加班單須經課長核准並由你在系統送出 —— 我無法代為開立。\n（以上為根因假設與補救方向建議，不是核准流程，責任仍在執行者。）',
                 vary: [
@@ -1851,7 +1851,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'LINE-3 屬 LINE —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'line.get_throughput', label: '查產線產出', params: 'line=LINE-3', allowed: true, result: '今日缺口 78 片，剩餘班別時數 1.2 h' },
-                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '本 Skill 類型為「輔助判斷」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '加班單我不能代為開立 —— 這份 Skill 只有唯讀工具。\n\n以下是可以直接貼上的加班申請內容：\n· 產線 LINE-3 · 建議時數 1.5 h · 預估補回 51 片\n· 事由：13:00 起傳送帶異常停機 1.8 h，造成今日缺口 78 片\n\n加班須經課長核准，請由你在系統送出。\n（以上為補救方向建議，不是核准流程，責任仍在執行者。）',
                 vary: [

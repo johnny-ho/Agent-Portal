@@ -4,10 +4,10 @@
    2026-07-26 PO 指定。對話標題直接就是該情境的目標，
    讓 demo 時「這串在演什麼」不需要另外解釋。
 
-   ① SOP 執行 · 人工介入 · 順利完成
-   ② SOP 執行 · 人工介入 · API 變更導致 codify 失效
+   ① Flow 執行 · 人工介入 · 順利完成
+   ② Flow 執行 · 人工介入 · API 變更導致 codify 失效
    ③ 輔助問答 · 給明確建議 · 婉拒代為執行並給操作入口
-   ④ 單純問答（有知識，無 Skill／SOP）
+   ④ 單純問答（有知識，無 Skill／Flow）
    ⑤ 單純問答（無知識）→ 收斂成一張追蹤任務
 
    ── 腳本播放模型 ──
@@ -30,12 +30,12 @@
      { role: 'user', text }
      { role: 'ai',
        mode:  'approved' | 'guided' | 'general',   // 三態徽章
-       skill: { id, title, tier },                  // 命中的 Skill／SOP
+       skill: { id, title, tier },                  // 命中的 Skill／Flow
        plan:  { title, items: [{ key, skillId, title, tier }] },  // 宣告計畫（開跑前）
        knowledge: [{ id, title }],                  // 引用的知識文件
        text,                                        // 主要回應（無氣泡，全寬）
-       run:      { title, steps: [...] },           // SOP 執行進度 → 對話流只顯示步驟名
-       evidence: { title, steps: [...] },           // 輔助判斷查過的數據 → 只進右側面板
+       run:      { title, steps: [...] },           // Flow 執行進度 → 對話流只顯示步驟名
+       evidence: { title, steps: [...] },           // Guide 查過的數據 → 只進右側面板
        blocked:  { label, tool, reason },           // 被 Tool Gateway 擋下的寫入請求
        result:   { variant, title, lines: [] },     // 結果卡
        links:    [{ label, url }],                  // 操作入口（只渲染 label 成按鈕）
@@ -51,10 +51,10 @@ const CHAT_SCENARIOS = {
   /* ══════════════ ETC 設備課 ══════════════ */
   equipment: [
 
-    /* ── 情境 1：SOP 執行 · 人工介入 · 順利完成 ── */
+    /* ── 情境 1：Flow 執行 · 人工介入 · 順利完成 ── */
     {
       id: 'sc-eq-1',
-      title: '一句話要跑兩份 SOP（中途需人工確認）',
+      title: '一句話要跑兩份 Flow（中途需人工確認）',
       goal: 'Orchestrator 開跑前宣告 2 項計畫 → 第 1 項寫入步驟停下 → 確認開單 → 自動接第 2 項',
       time: '今天 07:52',
       turns: [
@@ -72,9 +72,9 @@ const CHAT_SCENARIOS = {
               { key: 'p2', skillId: 'sm-eq-007', title: '整理當班交接報告',   tier: 'sop' },
             ],
           },
-          text: '這件事要跑兩份已核准的 SOP，計畫列在右側面板了。已比對適用範圍（CMP／ETCH、ETC-2F 與 3F），先執行第 1 份。',
+          text: '這件事要跑兩份已核准的 Flow，計畫列在右側面板了。已比對適用範圍（CMP／ETCH、ETC-2F 與 3F），先執行第 1 份。',
           run: {
-            title: 'SOP 執行中',
+            title: 'Flow 執行中',
             steps: [
               { num: 1, label: '查詢今日 SPC 資料', tool: 'spc.query_daily', io: 'read', status: 'ok', detail: '取得 07:00–07:50 量測資料 12 筆' },
               { num: 2, label: '篩選 OOC 異常項目', io: 'compute', status: 'ok', detail: '超出管制線 2 筆 + 連續 3 點同側 1 筆 = 3 筆（本課自訂條件）' },
@@ -89,7 +89,7 @@ const CHAT_SCENARIOS = {
           text: '工單內容已依 3 筆異常擬好，需要你確認要不要開單。',
           sheet: {
             title: '需要你決定下一步',
-            desc: '「開立異常工單」會異動 Case Center。不論這份 SOP 是手動執行還是排程執行，跑到這一步都會停下來等人。',
+            desc: '「開立異常工單」會異動 Case Center。不論這份 Flow 是手動執行還是排程執行，跑到這一步都會停下來等人。',
             context: [
               { label: '異常筆數', value: '3 筆（E-308 ×3）' },
               { label: '擬開工單', value: '1 張 · P2 · 指派值班 EE' },
@@ -107,7 +107,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-eq-008', title: 'SPC 異常日報與開單', tier: 'sop' },
                   text: '已完成。工單與通知都送出了，本次執行的完整紀錄可以匯出帶進交班。',
                   run: {
-                    title: 'SOP 執行完成',
+                    title: 'Flow 執行完成',
                     steps: [
                       { num: 3, label: '開立異常工單', tool: 'case_center.create_case', io: 'write', status: 'ok', detail: '已開立 #CS-20260726-014' },
                       { num: 4, label: '發送通知給值班 EE', tool: 'notify.send_to_duty', io: 'write', status: 'ok', detail: '已通知 張文凱（當班 EE）' },
@@ -119,7 +119,7 @@ const CHAT_SCENARIOS = {
                     lines: [
                       '對象：E-308 · Chamber A 氣體流量',
                       '優先序：P2 · 指派：張文凱',
-                      '來源：SPC 異常日報與開單（已核准 SOP）',
+                      '來源：SPC 異常日報與開單（已核准 Flow）',
                     ],
                   },
                   links: [
@@ -135,9 +135,9 @@ const CHAT_SCENARIOS = {
                   role: 'ai',
                   mode: 'approved',
                   skill: { id: 'sm-eq-008', title: 'SPC 異常日報與開單', tier: 'sop' },
-                  text: '好，這次不開單。3 筆異常已記錄在今日 SPC 日報中，步驟 3、4 標記為「人工略過」。\n\n略過原因會回報給這份 SOP 的 owner（陳育民）。如果同一個步驟一直被略過，通常代表流程和實際狀況對不上，值得回頭改。',
+                  text: '好，這次不開單。3 筆異常已記錄在今日 SPC 日報中，步驟 3、4 標記為「人工略過」。\n\n略過原因會回報給這份 Flow 的 owner（陳育民）。如果同一個步驟一直被略過，通常代表流程和實際狀況對不上，值得回頭改。',
                   run: {
-                    title: 'SOP 執行結束（部分略過）',
+                    title: 'Flow 執行結束（部分略過）',
                     steps: [
                       { num: 3, label: '開立異常工單', tool: 'case_center.create_case', io: 'write', status: 'skip', detail: '人工略過' },
                       { num: 4, label: '發送通知給值班 EE', tool: 'notify.send_to_duty', io: 'write', status: 'skip', detail: '人工略過' },
@@ -150,7 +150,7 @@ const CHAT_SCENARIOS = {
         },
 
         /* ── 計畫的第 2 項：不需要使用者再開口，決策卡結束後自動接上 ──
-           sm-eq-007 是純唯讀、不會停下來的 SOP，正好對比出
+           sm-eq-007 是純唯讀、不會停下來的 Flow，正好對比出
            「第 1 項停過一次要人確認、第 2 項一路跑完」。 */
         {
           role: 'ai',
@@ -158,7 +158,7 @@ const CHAT_SCENARIOS = {
           skill: { id: 'sm-eq-007', title: '整理當班交接報告', tier: 'sop' },
           text: '接著跑計畫的第 2 項。這份全程只讀資料、不動任何系統，中途不會停下來問你。',
           run: {
-            title: 'SOP 執行中',
+            title: 'Flow 執行中',
             steps: [
               { num: 1, label: '取當班機台稼動資料', tool: 'eqp.get_uptime', io: 'read', status: 'ok', detail: '12 台機台 · 08:00–15:30' },
               { num: 2, label: '取同時段警報並分級', tool: 'fdc.list_alarms', io: 'read', status: 'ok', detail: '警報 5 件（Level-2 ×1）' },
@@ -183,11 +183,11 @@ const CHAT_SCENARIOS = {
       ],
     },
 
-    /* ── 情境 2：SOP 執行 · 人工介入 · API 變更導致 codify 失效 ── */
+    /* ── 情境 2：Flow 執行 · 人工介入 · API 變更導致 codify 失效 ── */
     {
       id: 'sc-eq-2',
-      title: '執行 FDC 快速反應 SOP（API 變更導致失效）',
-      goal: '呼叫 SOP → 人工確認 → 開單失敗 → AI 指出根因與修復方向',
+      title: '執行 FDC 快速反應 Flow（API 變更導致失效）',
+      goal: '呼叫 Flow → 人工確認 → 開單失敗 → AI 指出根因與修復方向',
       time: '今天 10:38',
       turns: [
         { role: 'user', text: 'E-308 剛跳 FDC 警報，幫我跑 FDC 異常快速反應流程。' },
@@ -195,16 +195,16 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
-          /* 單一 SOP 的計畫也照樣宣告 —— 面板永遠是同一個位置回答同一個問題 */
+          /* 單一 Flow 的計畫也照樣宣告 —— 面板永遠是同一個位置回答同一個問題 */
           plan: {
             title: '跑 FDC 異常快速反應流程',
             items: [
               { key: 'p1', skillId: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
             ],
           },
-          text: 'E-308 屬 CMP、位於 ETC-3F，符合這份 SOP 的適用範圍，開始執行。',
+          text: 'E-308 屬 CMP、位於 ETC-3F，符合這份 Flow 的適用範圍，開始執行。',
           run: {
-            title: 'SOP 執行中',
+            title: 'Flow 執行中',
             steps: [
               { num: 1, label: '取警報明細與觸發參數', tool: 'fdc.get_alarm_detail', io: 'read', status: 'ok', detail: 'Chamber A 氣體流量，連續 3 點超 2σ，10:36 觸發' },
               { num: 2, label: '判定警報等級', io: 'compute', status: 'ok', detail: '判定為 Level-2（本課自訂條件）→ 不走隔離分支，直接進通報' },
@@ -237,14 +237,14 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
                   text: '開單失敗了，這不是你的操作問題。',
                   run: {
-                    title: 'SOP 執行中斷',
+                    title: 'Flow 執行中斷',
                     steps: [
                       { num: 5, label: '開立異常單並通報', tool: 'case_center.create_case', io: 'write', status: 'fail', detail: 'HTTP 400 · unknown field "severity"', reason: 'Case Center API 已於 07/24 升級至 v3，欄位 severity 改名為 priorityLevel，且新增必填欄位 impactScope' },
                     ],
                   },
                   result: {
                     variant: 'error',
-                    title: '工單未開立 —— 這份 SOP 的第 5 步已經失效',
+                    title: '工單未開立 —— 這份 Flow 的第 5 步已經失效',
                     lines: [
                       '標準元件「異常單開立 v2.1」是照 Case Center API v2 codify 的',
                       'Case Center 於 2026-07-24 升級到 v3，欄位定義改了',
@@ -263,7 +263,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
                   text: '好，步驟 5 標記為人工略過。提醒你 Level-2 的 10 分鐘通報時限仍然要算，記得手動通知林課長。',
                   run: {
-                    title: 'SOP 執行結束（部分略過）',
+                    title: 'Flow 執行結束（部分略過）',
                     steps: [
                       { num: 5, label: '開立異常單並通報', tool: 'case_center.create_case', io: 'write', status: 'skip', detail: '人工略過' },
                     ],
@@ -278,7 +278,7 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
-          text: '分兩件事處理，先顧眼前的警報，再修 SOP。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 SOP 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 SOP 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 SOP 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 SOP owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 SOP 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 SOP 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 SOP 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。\n\n要不要我把「標準元件升版 ＋ 盤點其他排程 SOP」列成一張追蹤任務？',
+          text: '分兩件事處理，先顧眼前的警報，再修 Flow。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 Flow 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 Flow 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 Flow 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 Flow owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 Flow 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 Flow 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 Flow 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。\n\n要不要我把「標準元件升版 ＋ 盤點其他排程 Flow」列成一張追蹤任務？',
           links: [
             { label: '手動開單', url: '/app/case-center/create?prefill=fdc-e308-20260726' },
             { label: '回報失效', url: '/app/skill/sm-eq-004/report-issue' },
@@ -288,11 +288,11 @@ const CHAT_SCENARIOS = {
         {
           role: 'ai',
           mode: 'general',
-          text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 SOP、升版後重跑一次 dry run 比對差異。',
+          text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 Flow、升版後重跑一次 dry run 比對差異。',
           result: {
             variant: 'success',
             title: '任務 #T-2026-0726-03 已建立',
-            lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 SOP 執行失敗紀錄'],
+            lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 Flow 執行失敗紀錄'],
           },
           links: [
             { label: '開啟任務', url: '/app/tasks/T-2026-0726-03' },
@@ -331,11 +331,11 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'guided',
           skill: { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
-          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是輔助判斷型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 下面那一行就是。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
+          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是 Guide 型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 下面那一行就是。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
           blocked: {
             label: '變更 SPC 管制界限',
             tool: 'spc.update_control_limit',
-            reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具',
+            reason: '本 Skill 類型為「Guide」，允許清單內只有唯讀工具',
           },
           links: [
             { label: '開啟 SPC Console', url: '/app/spc-console/limits?station=E-101&recipe=CMP-Standard' },
@@ -345,11 +345,11 @@ const CHAT_SCENARIOS = {
       ],
     },
 
-    /* ── 情境 4：單純問答（有知識、無 Skill／SOP） ── */
+    /* ── 情境 4：單純問答（有知識、無 Skill／Flow） ── */
     {
       id: 'sc-eq-4',
       title: 'E-405 爐管跳 ERR-7702 該怎麼處理',
-      goal: '無對應 Skill／SOP，依課上知識回答，只建議不執行',
+      goal: '無對應 Skill／Flow，依課上知識回答，只建議不執行',
       time: '昨天 21:05',
       turns: [
         { role: 'user', text: 'E-405 爐管跳 ERR-7702，這個要怎麼處理？' },
@@ -382,13 +382,13 @@ const CHAT_SCENARIOS = {
         {
           role: 'ai',
           mode: 'general',
-          text: '我查了課上所有的 Skill、SOP 與知識文件，**ERR-9105 完全沒有紀錄**。\n\n我也不打算靠猜的給你一個聽起來合理的答案 —— 半夜三點照著一個猜出來的步驟去動 CVD 機台，風險不對等。\n\n**現在可以做的**\n\n1. 問課上處理過 CVD 的資深同事。依課內的活動紀錄，陳育民與張文凱過去半年碰過 E-502 的異常最多。\n2. 若無人可問且警報持續，依《FDC 警報分級對照表》的通報原則升報 Section Admin，由課長決定是否停機。\n3. 查設備原廠手冊的 ERR-91xx 章節。\n\n**另外想跟你確認一件事**\n\n這次問不到不只是這一次的問題 —— 下一個值班的人半夜遇到一樣的狀況，還是會問不到。要不要我把這件事列成一張任務，追蹤到有人把 ERR-9105 的處理方式補進知識庫為止？',
+          text: '我查了課上所有的 Skill、Flow 與知識文件，**ERR-9105 完全沒有紀錄**。\n\n我也不打算靠猜的給你一個聽起來合理的答案 —— 半夜三點照著一個猜出來的步驟去動 CVD 機台，風險不對等。\n\n**現在可以做的**\n\n1. 問課上處理過 CVD 的資深同事。依課內的活動紀錄，陳育民與張文凱過去半年碰過 E-502 的異常最多。\n2. 若無人可問且警報持續，依《FDC 警報分級對照表》的通報原則升報 Section Admin，由課長決定是否停機。\n3. 查設備原廠手冊的 ERR-91xx 章節。\n\n**另外想跟你確認一件事**\n\n這次問不到不只是這一次的問題 —— 下一個值班的人半夜遇到一樣的狀況，還是會問不到。要不要我把這件事列成一張任務，追蹤到有人把 ERR-9105 的處理方式補進知識庫為止？',
         },
         { role: 'user', text: '好，幫我建一張追蹤任務。' },
         {
           role: 'ai',
           mode: 'general',
-          text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 SOP；如果每次要看現場數據判斷，就建成輔助判斷。到時候系統會提示。',
+          text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 Flow；如果每次要看現場數據判斷，就建成 Guide。到時候系統會提示。',
           result: {
             variant: 'success',
             title: '任務 #T-2026-0725-11 已建立',
@@ -411,8 +411,8 @@ const CHAT_SCENARIOS = {
   process: [
     {
       id: 'sc-pr-1',
-      title: '執行跨站通報 SOP（中途需人工確認）',
-      goal: '呼叫 SOP → 執行到 Hold 批號停下 → 確認 → 完成通報',
+      title: '執行跨站通報 Flow（中途需人工確認）',
+      goal: '呼叫 Flow → 執行到 Hold 批號停下 → 確認 → 完成通報',
       time: '今天 14:05',
       turns: [
         { role: 'user', text: 'CMP-03 剛跳 SPC 失控，幫我跑跨站通報流程。' },
@@ -428,7 +428,7 @@ const CHAT_SCENARIOS = {
           },
           text: 'CMP-03 屬 CMP、位於 ETC-3F、觸發碼 SPC-OOC，符合適用範圍，開始執行。',
           run: {
-            title: 'SOP 執行中',
+            title: 'Flow 執行中',
             steps: [
               { num: 1, label: '取失控事件與規則', tool: 'spc.get_ooc_detail', io: 'read', status: 'ok', detail: 'Nelson Rule 2（連續 9 點同側），14:02 觸發' },
               { num: 2, label: '評估上下游影響站點', io: 'compute', status: 'ok', detail: '上游 ETCH-02、下游 CLEAN-01（本課自訂：各推一站）' },
@@ -462,7 +462,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-pr-004', title: '製程異常跨站通報', tier: 'sop' },
                   text: '已完成，用時 4 分 12 秒，在 15 分鐘時限內。',
                   run: {
-                    title: 'SOP 執行完成',
+                    title: 'Flow 執行完成',
                     steps: [
                       { num: 4, label: '標記批號 Hold', tool: 'mes.hold_lots', io: 'write', status: 'ok', detail: '5 批已標記 Hold' },
                       { num: 5, label: '通知相鄰站點 Admin', tool: 'notify.send_to_section', io: 'write', status: 'ok', detail: '已通知 ETCH-02、CLEAN-01 的 Section Admin' },
@@ -485,7 +485,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-pr-004', title: '製程異常跨站通報', tier: 'sop' },
                   text: '已中止，沒有任何批號被 Hold。\n\n這次的「影響範圍」是用本課自訂的「上下游各推一站」算出來的。如果實際影響範圍常常跟這個規則對不上，值得回去改第 2 步的自訂邏輯 —— 我把這次的中止原因回報給 owner（鄭志明）了。\n\n15 分鐘時限還在跑，記得手動完成 Hold 與通報。',
                   run: {
-                    title: 'SOP 執行中止',
+                    title: 'Flow 執行中止',
                     steps: [
                       { num: 4, label: '標記批號 Hold', tool: 'mes.hold_lots', io: 'write', status: 'skip', detail: '人工中止' },
                     ],
@@ -525,11 +525,11 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'guided',
           skill: { id: 'sm-pr-006', title: 'CP 值下滑趨勢研判', tier: 'guided' },
-          text: '我不能幫你改。剛才確實試了，被擋下來了 —— 下面那一行就是。\n\n這份 Skill 是輔助判斷型，允許清單裡只有唯讀工具。而且「調回去」在管制上跟「調過去」是同一件事：兩者都是製程參數變更，都要走 DCR，都要影響評估與回滾計畫。\n\n**你要自己做的話**\n\n1. 開一張 DCR（下面連結已帶好 R-512 與壓力參數）\n2. 影響評估這欄可以直接用我剛才的研判內容，我把時間軸整理好了\n3. 送 Section Admin 初審 → 課長核准 → 生效\n\n**不過我還是建議先做 Process Window Study。** 現在的證據是時間吻合，不是因果確立。直接回調有機會做對，但如果真正原因是別的，你會白繞一圈，而且下次還會再發生。',
+          text: '我不能幫你改。剛才確實試了，被擋下來了 —— 下面那一行就是。\n\n這份 Skill 是 Guide 型，允許清單裡只有唯讀工具。而且「調回去」在管制上跟「調過去」是同一件事：兩者都是製程參數變更，都要走 DCR，都要影響評估與回滾計畫。\n\n**你要自己做的話**\n\n1. 開一張 DCR（下面連結已帶好 R-512 與壓力參數）\n2. 影響評估這欄可以直接用我剛才的研判內容，我把時間軸整理好了\n3. 送 Section Admin 初審 → 課長核准 → 生效\n\n**不過我還是建議先做 Process Window Study。** 現在的證據是時間吻合，不是因果確立。直接回調有機會做對，但如果真正原因是別的，你會白繞一圈，而且下次還會再發生。',
           blocked: {
             label: '調整配方參數',
             tool: 'recipe.update_param',
-            reason: '本 Skill 類型為「輔助判斷」，允許清單內只有唯讀工具',
+            reason: '本 Skill 類型為「Guide」，允許清單內只有唯讀工具',
           },
           links: [
             { label: '開 DCR 申請', url: '/app/dcr/create?recipe=R-512&param=pressure_upper' },
@@ -544,8 +544,8 @@ const CHAT_SCENARIOS = {
   mfg: [
     {
       id: 'sc-mf-1',
-      title: '執行停機通報 SOP（中途需人工確認）',
-      goal: '呼叫 SOP → 執行到登錄 MES 停下 → 確認 → 完成通報',
+      title: '執行停機通報 Flow（中途需人工確認）',
+      goal: '呼叫 Flow → 執行到登錄 MES 停下 → 確認 → 完成通報',
       time: '今天 14:22',
       turns: [
         { role: 'user', text: 'LINE-3 停機快兩小時了，幫我跑停機跨班通報。' },
@@ -561,7 +561,7 @@ const CHAT_SCENARIOS = {
           },
           text: 'LINE-3 停機 1.8 小時，超過 1 小時門檻，符合適用範圍，開始執行。',
           run: {
-            title: 'SOP 執行中',
+            title: 'Flow 執行中',
             steps: [
               { num: 1, label: '取停機事件與預計時長', tool: 'eqp.get_downtime', io: 'read', status: 'ok', detail: '13:00 起傳送帶異常，預計 1.8 h，仍在進行' },
               { num: 2, label: '取受影響批號清單', tool: 'mes.list_wip', io: 'read', status: 'ok', detail: '4 批受影響，含急單 W26-031' },
@@ -596,7 +596,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-mfg-004', title: '停機跨班通報與記錄', tier: 'sop' },
                   text: '已完成。通報單也一併帶進今晚的交班記錄了。',
                   run: {
-                    title: 'SOP 執行完成',
+                    title: 'Flow 執行完成',
                     steps: [
                       { num: 4, label: '登錄停機原因代碼', tool: 'mes.log_downtime', io: 'write', status: 'ok', detail: 'MC-03 已登錄，事件編號 DT-20260726-07' },
                       { num: 5, label: '通報接班班組', tool: 'notify.send_to_duty', io: 'write', status: 'ok', detail: '已通知小夜班組長與設備課' },
@@ -619,7 +619,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-mfg-004', title: '停機跨班通報與記錄', tier: 'sop' },
                   text: '已中止，MES 沒有寫入任何資料。\n\n代碼判斷是第 1 步的標準元件依停機現象自動對照的。如果常常對不上，代表對照表需要更新 —— 我把這次的中止回報給 owner（林組長）了。\n\n記得手動登錄，停機超過 2 小時要升報組長。',
                   run: {
-                    title: 'SOP 執行中止',
+                    title: 'Flow 執行中止',
                     steps: [
                       { num: 4, label: '登錄停機原因代碼', tool: 'mes.log_downtime', io: 'write', status: 'skip', detail: '人工中止' },
                     ],
@@ -641,13 +641,13 @@ const CHAT_SCENARIOS = {
         {
           role: 'ai',
           mode: 'general',
-          text: '我查了課上的 Skill、SOP 與知識文件，**沒有找到「客戶臨時要求」這類插隊情境的決策依據**。\n\n課上有一份《排程優先序決策研判》，但它目前還在簽核中（尚未生效），而且它處理的是三線內部資源競爭，不涵蓋客戶端臨時變更 —— 那牽涉到業務承諾與違約條款，不是排程規則能決定的。\n\n這件事我不適合替你判斷。**建議直接問組長或部長**，因為要衡量的是客戶關係與其他訂單的交期風險，那些資訊不在系統裡。\n\n**另外**\n\n這種狀況應該不是第一次。要不要我列成一張任務，請課上有經驗的人把「客戶臨時變更的處理原則」寫成知識？下次有人半夜遇到，至少有東西可以參考。',
+          text: '我查了課上的 Skill、Flow 與知識文件，**沒有找到「客戶臨時要求」這類插隊情境的決策依據**。\n\n課上有一份《排程優先序決策研判》，但它目前還在簽核中（尚未生效），而且它處理的是三線內部資源競爭，不涵蓋客戶端臨時變更 —— 那牽涉到業務承諾與違約條款，不是排程規則能決定的。\n\n這件事我不適合替你判斷。**建議直接問組長或部長**，因為要衡量的是客戶關係與其他訂單的交期風險，那些資訊不在系統裡。\n\n**另外**\n\n這種狀況應該不是第一次。要不要我列成一張任務，請課上有經驗的人把「客戶臨時變更的處理原則」寫成知識？下次有人半夜遇到，至少有東西可以參考。',
         },
         { role: 'user', text: '好，幫我建一張追蹤任務。' },
         {
           role: 'ai',
           mode: 'general',
-          text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份輔助判斷 Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是輔助判斷的場景。',
+          text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份 Guide Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是 Guide 的場景。',
           result: {
             variant: 'success',
             title: '任務 #T-2026-0725-08 已建立',

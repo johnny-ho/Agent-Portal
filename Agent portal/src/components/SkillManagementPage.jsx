@@ -2,7 +2,7 @@
    SKILL MANAGEMENT PAGE (v4)
 
    2026-07-26 改版：
-     · 知識拆出去獨立成「知識管理」，本頁只剩「輔助判斷」與「SOP」
+     · 知識拆出去獨立成「知識管理」，本頁只剩「Guide」與「Flow」
      · 清單只是進入點，列上的操作只有刪除；其餘行為進詳情頁再做
      · 詳情從 1000px Modal 改為全頁（SkillDetailPage.jsx），
        因為 Graph 與 Ask AI 側欄要同時展開
@@ -308,7 +308,7 @@ function SOPManagementPage({ p }) {
       <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text }}>Skill 管理</div>
-          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · 輔助判斷與 SOP · 同課審批 · 不可跨課使用</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Guide 與 Flow · 同課審批 · 不可跨課使用</div>
         </div>
         <div style={{ flex: 1 }} />
         <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>

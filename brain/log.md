@@ -364,3 +364,23 @@ PO：「記為已知限制是幹嘛的？拿掉。」
 build 984,648 bytes。實測：畫面上已無「已知限制」字樣；`sm-eq-009` 五條全確認 → 可送簽；取消任一勾 → 立刻擋下並指名是哪一條；勾回去 → 恢復可送簽；console 零 error。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（決議 13 的摩擦清單、決議 14 的對照表與移除清單）。
+
+## [2026-07-30] decision | Skill 類型改名：SOP → Flow、輔助判斷 → Guide
+
+PO：「目前 SOP 背後代表的是 codify graph，也就是 run 程式碼，但輔助判斷比較像是 skill.md 給 agent 應用的概念。目前 SOP 在公司內也是很泛用的名詞，我認為目前叫做 SOP 也可能造成混淆。」
+
+討論先建立一個可驗證的篩選標準，而不是憑語感挑字：**撞名面**。數了 `data/knowledge.js` 15 篇文件的尾字——程序 ×5、指引 ×5、規範 ×1、流程 ×1——結論是「SOP」的問題不只是廠內泛用，而是**在本產品內部就已經撞名**：知識管理裡放的正是廠內慣稱的 SOP 文件，而且它們與 Skill 管理裡的同名項目互相引用（知識《生產日報彙整指引 v2.3》↔ Skill「生產日報彙整」`tier: 'sop'`）。同一個詞既指那份文件、也指那張圖。
+
+這張表也淘汰了看起來最漂亮的答案：依 PO 的描述，最對稱的一組是「**流程／指引**」（codify graph 就是流程，skill.md 就是指引，概念頁內部本來就這樣寫），但知識庫有 5 篇「XX指引」，改了等於把同一個病複製到另一邊。另外兩個候選也各有硬傷被排除：「核准流程」**內含階段**（Draft 那一份還沒核准）、「自動流程」**名字會說謊**（含寫入的 Flow 會停下等人）。我先提的中文「固定流程」被 PO 判定繞口，放棄。
+
+**PO 定案：`SOP → Flow`、`輔助判斷 → Guide`。** 容器名「Skill 管理」不改——中文找不到能蓋住兩者的詞，而最接近的「技能管理」在廠內是員工技能矩陣／技能認證，撞得比 SOP 更兇；且 Flow 與 Guide 本來就都是 skill，父層沒有錯。code key `guided`／`sop` 也不改，`SKILL_TIER_CFG` 就是為換用字而存在的單一改點。
+
+**這一輪只換顯示字，行為零改動**：三層分界、Tool Gateway 把關、兩種類型各自的驗收方法、送簽硬條件全部不變。
+
+實作：`shared.jsx` 的 `SKILL_TIER_CFG` 兩處 `label`／`short`；全站文案 9 個元件 + 4 份 data 共 220 餘處（含 Chat 五情境腳本、佈告欄「Flow 產出」徽章、交班 Modal「Flow 已算好」、排程「本 Flow 含 N 個需確認步驟」、Guide 詳情的 🔒 說明）；`SchedulingPage.blockReason()` 補空白（拉丁字類型名接中文要有空白）；`SkillDetailPage.tierWord()` 註解更新（兩個類型名現在都是拉丁字，原本看第一個字元的判斷邏輯本來就通用）。識別字刻意不動：`sopManagement`／`SOPManagementPage`／`fromSOP`／`sourceSOP`／`sopReport`／`tier: 'sop'`。
+
+build 984,511 bytes。驗證：`index.html` 裡獨立詞「SOP」與「輔助判斷」殘留皆為 0，三個識別字（`SOPManagementPage` ×5、`fromSOP` ×3、`sourceSOP` ×6）完好；23 個模組經 Babel 編譯全數通過。⚠️ 本次無法做瀏覽器實測——`shell.html` 依賴 unpkg/CDN，本 session 的網路政策擋住外連，改以 Babel 本地編譯等價驗證語法。
+
+⚠️ 留下的中英混搭：「Skill 管理」裡裝 `Flow`／`Guide`，隔壁 tab 仍叫「知識管理」。若要整齊，方向是把知識也改英文（`Knowledge`），不是把 Flow／Guide 改回中文。另 `SettingPage.jsx:1601` 的 tab key 是 `'knowledge'`（Skill 管理）、知識管理是 `'knowledge-doc'`，是 2026-07-26 拆分留下的殘跡，與命名無關但同區，之後動到再清。
+
+受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 15，並在頁首標明舊段落沿用舊用字）、[decisions.md](decisions.md)（補 07-27~29 與 07-30 兩列）、index.md。
