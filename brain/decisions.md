@@ -38,4 +38,6 @@ status: current
 | — | 2026-07-27~29 | **Skill 驗收方法兩層分開**（決議 10–14，完整脈絡見概念頁）：SOP 改**情境試跑**（壞資料情境系統自動生、PASS＝行為符合約定而非有輸出）＋ Graph **節點試打**（write 永不真送）；**SOP 不再有測試案例**（codify graph 沒有「意圖」可測）；輔助判斷的測試案例改為**驗收**（AC × 提問情境、同一提問跑 5 次、人看內容判定）；**系統與 AI 都不介入判斷**——圓點與比例全移除，改成把每次「做了什麼＋最終回答」攤開給人看 | [agent-skill-tiering](concepts/agent-skill-tiering.md) |
 | — | 2026-07-30 | **Skill 類型改名：`SOP → Flow`、`輔助判斷 → Guide`**。理由不只是「SOP 在廠內泛用」，而是**在本產品內部就撞名**——知識管理裡放的正是廠內慣稱的 SOP 文件（`data/knowledge.js` 15 篇中「程序」×5、「指引」×5），且與 Skill 管理裡的同名項目互相引用。同一理由淘汰了對稱度最高的「流程／指引」（指引撞 5 篇）、「核准流程」（Draft 還沒核准，名字內含階段）與「自動流程」（含寫入的會停下等人，名字說謊）。**容器名「Skill 管理」不改**（「技能管理」在廠內是員工技能矩陣，撞更兇），**code key `guided`／`sop` 不改**。行為零改動，只換顯示字 | [agent-skill-tiering](concepts/agent-skill-tiering.md) |
 
+| — | 2026-07-31 | **類型再改名 `Guide → Skill`、`Flow → Codify`，並升成 Skill 管理的兩個分頁**。決議 15 用「撞名面」挑字，這輪補上第二個標準「**先驗認知**」——`Skill` 是 Agentic AI 的通用詞使用者本來就懂，`Codify` 不是，所以**進入預設站 Skill、讓使用者自己去點 Codify**，而不是塞說明。分頁取代原本工具列上的類型 Segmented（語意從「可篩的一份清單」變成「兩件不同的事」），「全部類型」消失，換來每個分頁掛一句小標題；Skill 那句尾巴的「升級 Codify」是飛輪 1 第一次在 UI 上以一句話出現。**已知代價：容器「Skill 管理」與類型「Skill」父子同名**，PO 接受，要修的方向是動容器名。code key `guided`／`sop` 仍不改 | [agent-skill-tiering](concepts/agent-skill-tiering.md)、[setting](entities/modules/setting.md) |
+
 **模式觀察**（PM 視角）：決議多次走「先做 → 發現雙頭管理/定位混淆 → 收斂單一入口」路徑（v2.8 釘選、v3.6 Nav）；引用舊版行為時務必先查本表確認未被推翻。

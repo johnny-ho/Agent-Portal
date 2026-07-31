@@ -1,18 +1,23 @@
 ---
 type: concept
-title: Agent Skill 三層模型（知識／Guide／Flow）
-description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-30 第五輪：類型改名 SOP → Flow、輔助判斷 → Guide（「SOP」在廠內與知識庫都另有所指，撞名）
+title: Agent Skill 三層模型（知識／Skill／Codify）
+description: 三層 Skill 的分界、建立流程、Tool Gateway runtime 把關、兩個飛輪 — Agent 架構的實作依據；2026-07-31 第六輪：類型再改名 Guide → Skill、Flow → Codify，並升成 Skill 管理裡的兩個分頁（進入預設 Skill）
 tags: [concept, ai, architecture, skill, governance, naming]
-updated: 2026-07-30
+updated: 2026-07-31
 sources: [PO×AI 討論 2026-07-25 / 07-26 / 07-27 / 07-28 / 07-29 / 07-30, PRODUCT_BASELINE.md §8, personas.js sopManagement, data/knowledge.js, data/chatScenarios.js]
 status: current
 ---
 
 # Agent Skill 三層模型
 
-> **PO 定案詞彙（UI 用字）：知識 / Guide / Flow。** 不使用 codify graph、skill.md、tier 等實作語言面對使用者。
+> **PO 定案詞彙（UI 用字）：知識 / Skill / Codify。** 不使用 codify graph、skill.md、tier 等實作語言面對使用者。
 >
-> ⚠️ **2026-07-30 改名**（決議 15，見文末）：`輔助判斷 → Guide`、`SOP → Flow`。**本頁 2026-07-30 之前的段落一律沿用當時的舊用字**（輔助判斷／SOP），以保留決議脈絡可讀；code key `guided` / `sop` 未變。閱讀舊段落時請自行代換。
+> ⚠️ **兩輪改名，本頁舊段落一律沿用當時的用字**，以保留決議脈絡可讀；code key `guided` / `sop` 兩輪都沒變。閱讀舊段落時請自行代換：
+>
+> | code key | 2026-07-30 前 | 決議 15（07-30） | 決議 16（07-31，現行） |
+> |---|---|---|---|
+> | `guided` | 輔助判斷 | Guide | **Skill** |
+> | `sop` | SOP | Flow | **Codify** |
 >
 > **背景**：現有 Skill 管理本質是 SOP（codify graph）——Seed 描述需求、agent 生成流程與 code node、簽核後供調用。PO 提出 SOP 無法覆蓋異常長尾，值班人員需要 LLM 彈性路徑。本頁是該討論的結論與實作依據。
 
@@ -840,6 +845,63 @@ PO 看完驗收之後指出 Description 範例太精簡、**沒有 skill.md 的�
 | `components/SkillDetailPage.jsx` | `tierWord()` 註解更新：兩個類型名現在都是拉丁字，判斷邏輯（看第一個字元）本來就通用，不寫死 |
 
 **識別字刻意不動**（避免無謂的擴散）：`sopManagement`、`SOPManagementPage`、`fromSOP`、`sourceSOP`、`sopReport`、`tier: 'sop'`。
+
+## 2026-07-31 第六輪：改名再一次 + 兩個類型升成分頁（決議 16）
+
+**PO（與使用者討論後回來）：「使用者認為 Skill 是一個 Agentic AI 普遍的概念，很好理解。但 Codify 不是。」**
+
+### 為什麼決議 15 才過一天就再改
+
+決議 15 挑字的標準是**撞名面**（不要跟廠內文件類別、不要跟知識庫的尾字撞）。這個標準過關的字不代表使用者**已經懂**它。這一輪補上的是第二個標準：**先驗認知**——使用者接觸 Agentic AI 時，`Skill` 是外面已經在用的通用詞（Claude Skills、agent skill），不需要我們教；`Flow` 則是我們自己造的區別詞，跟 `Guide` 一樣要從零解釋。
+
+決議 15 的結構（兩個對稱的拉丁字名詞、容器不改、code key 不改）完全保留，只是把字換成使用者已經帶著答案來的那一組：
+
+| code key | 決議 15 | 決議 16 | 為什麼 |
+|---|---|---|---|
+| `guided` | Guide | **Skill** | Agentic AI 的通用詞，使用者不必學；語意也對——它就是 agent 讀著跑的那份 skill.md |
+| `sop` | Flow | **Codify** | 本頁從 2026-07-25 起就一直用 `codify graph` 描述它的實作，這次只是把內部用語搬上檯面。它是新詞，所以不當入口，見下 |
+| 容器 | Skill 管理 | **不改** | 同決議 15 的理由 |
+| code key | `guided` / `sop` | **不改** | 同決議 15 |
+
+⚠️ **代價（要誠實記著）**：容器叫「Skill 管理」，裡面又有一個類型叫「Skill」，父子同名。決議 15 用「Flow 與 Guide 本來就都是 skill，父層沒有錯」來保住容器名，這一輪等於讓其中一個子項吃掉了父層的名字。PO 接受這個代價，因為換來的是**進入頁面第一眼就命中使用者已知的概念**。若之後要修，方向是動容器名，不是把類型名改回去。
+
+### 為什麼要做成分頁，而不是繼續用篩選器
+
+這是同一個決策的另一半，不是附帶的版面調整。**Codify 是使用者不認得的詞，所以它不能當入口，但也不能藏起來。** 分頁正好給出這個梯度：
+
+1. 進 Skill 管理 → 預設站在 **Skill**，先讓人知道「AI 可以照我寫的腳本做事」這件事存在；
+2. 旁邊那顆 **Codify** 一直在，人自己會去點——**探索的動作由使用者發起，比我們塞一段說明有效**。
+
+原本兩個類型是工具列上的一顆 Segmented（`全部類型 / Guide / Flow`），語意是「這是一份清單，你可以篩」。分頁的語意是「這是兩件不同的事」。後者才對得上三層模型從 2026-07-25 起的立場：兩種類型的建立方式、驗收方法、能不能排程全都不同。
+
+「全部類型」那一顆一併消失——人永遠站在其中一種上面。這也讓**每個分頁可以掛自己的一句小標題**（沒有「全部」時，小標題才有唯一的主詞）：
+
+| 分頁 | 小標題（PO 定稿，逐字） |
+|---|---|
+| Skill | Skill 是 AI 執行的腳本，你可以隨時修改並指揮 AI 做事。如果你需要做的結果 100% 相同且絕對不會做跑偏，升級 Codify。 |
+| Codify | Codify 是 AI 透過對話 或 理解你的 Skill 後，將任務轉換為程式碼，並在需要的時候調用的方法。 |
+
+Skill 那句尾巴的「升級 Codify」是刻意的：**它就是飛輪 1（Guide → SOP 收斂）在 UI 上第一次以一句話出現**，而且從人已經站著的那一格指向另一格，不必先理解 Codify 是什麼也讀得懂觸發條件（結果要 100% 相同）。
+
+### 實作落點（2026-07-31）
+
+| 檔案 | 內容 |
+|---|---|
+| `components/shared.jsx` | `SKILL_TIER_CFG` 兩處 `label`／`short`；新增 `tabDesc`（兩句小標題）與 `SKILL_DEFAULT_TIER = 'guided'`（`SKILL_TIERS` 的順序即分頁順序）|
+| `components/SkillManagementPage.jsx` | `tierFilter`（預設 `'all'`）→ `activeTier`（預設 `SKILL_DEFAULT_TIER`）；類型 Segmented 從工具列移到 header 下方獨立一排並放大；小標題掛在分頁與工具列之間；階段筆數改用**分頁後**的資料計算（否則徽章數字對不上眼前清單）；切分頁時 stage filter 歸零；建立完成後若新項目屬另一分頁則自動切過去；清單的「類型」欄移除（分頁已宣告類型，每列再標一次是重複資訊）；空狀態與搜尋 aria-label 帶入當前類型名 |
+| 全站文案（9 個元件 + 4 份 data） | `Flow` 158 處 → `Codify`、`Guide` 64 處 → `Skill` |
+
+**未動**：`SettingPage.jsx` 的 `EDA3 Flow`（KPI 報表資料來源，與 Skill 類型無關的同名詞）；小寫 `codify graph`（本頁沿用已久的實作用語，與新類型名同字反而更一致）；`SkillCreateFlow`／`setFlow`／`rawFlow`／`buildFlowRows` 等識別字。
+
+改名後出現兩處中文語句擠壓，一併改掉：`本 Skill 類型為「Skill」` → `類型為「Skill」`（工具被拒的理由字串，15 處）、`升級成一份 Skill Skill` → `升級成一份 Skill`。
+
+build 987,628 bytes。實測（本機 http server + 瀏覽器）：進 Skill 管理預設落在 Skill 分頁（3 筆）、小標題正確；切 Codify → 清單 4 筆、小標題換成 Codify 那句、階段徽章重算為 Draft 0／Testing 1／Approving 0／Pilot 1／Production 2；詳情頁徽章顯示 `Codify`、Description 說明文字同步；建立 Modal 兩張類型卡為 Skill／Codify；console 僅有既有的 Babel 500KB 提示，零 error。
+
+### 留下的缺口
+
+- **父子同名**（容器「Skill 管理」× 類型「Skill」）已知未解，見上文代價段。
+- 決議 15 記的中英混搭仍在：隔壁 tab 還是「知識管理」。
+- 決議 12 的路由層缺口、決議 14 的驗收成本，兩輪改名都沒碰。
 
 ## 關聯
 

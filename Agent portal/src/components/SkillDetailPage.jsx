@@ -1,16 +1,16 @@
 /* ════════════════════════════════════════
-   SKILL DETAIL PAGE — Guide / Flow 詳情（全頁）
+   SKILL DETAIL PAGE — Skill / Codify 詳情（全頁）
 
    2026-07-26 PO 定案的版面：
-     Title / Scope / Description / Graph（僅 Flow）/ 驗收 & Dry-run
+     Title / Scope / Description / Graph（僅 Codify）/ 驗收 & Dry-run
      右上：[Ask AI]（修正這一份）與 [Signoff]（送簽核與生效）
 
    原本的大 Modal 改成全頁，理由是 Graph 與 Ask AI 側欄要同時展開，
    1000px 的 Modal 塞不下這兩者。
 
    刻意拿掉的東西（資訊沒有不見，換了地方）：
-     · 「會碰到哪些系統」大區塊 → Flow 收進 Graph 節點標記，
-        Guide 收成 Scope 底下一行可展開的摘要
+     · 「會碰到哪些系統」大區塊 → Codify 收進 Graph 節點標記，
+        Skill 收成 Scope 底下一行可展開的摘要
      · 「最近一次處理紀錄」 → Chat 情境 3 就是它的活體展示，
         這裡只在測試區保留一則做為對照
    ════════════════════════════════════════ */
@@ -18,22 +18,22 @@
 /* ── 送簽的硬條件（回傳擋下的原因，null = 可送）──
 
    2026-07-28 PO 定案：**兩種類型的驗收方法完全不同，不共用同一套題目。**
-     · Flow＝codify graph，每個節點都是程式碼。它沒有「意圖」可測 ——
+     · Codify＝codify graph，每個節點都是程式碼。它沒有「意圖」可測 ——
        圖裡沒有的工具它根本呼叫不到，範圍是勾出來的結構化條件。
        要測的是**結果與例外**：情境試跑。
-     · Guide＝同一份指引換個問法就走不同路，沒有固定步驟可以試跑。
+     · Skill＝同一份指引換個問法就走不同路，沒有固定步驟可以試跑。
        要測的是**意圖**：驗收條件（含系統自動補的、不可刪的那幾條）。
 
-   2026-07-29 PO 定案：Guide 的「測試案例」改為「驗收」。
+   2026-07-29 PO 定案：Skill 的「測試案例」改為「驗收」。
    原因有二 ——
      (1) 「測試案例」跟 codify graph 的 test 混淆，兩者驗的東西根本不同；
-     (2) 更根本的：Guide 每次結果都不一樣，「跑一次 PASS」在邏輯上就不成立。
+     (2) 更根本的：Skill 每次結果都不一樣，「跑一次 PASS」在邏輯上就不成立。
    改成每個提問情境跑 5 次、由人看內容確認驗收條件是否成立。
    判定權因此從系統移到人身上（誠實 —— 本來也沒有東西能自動判斷 LLM 的回答對不對），
    代價是「簽核變蓋章」的風險升高。2026-07-29 PO 再定案：
    **系統與 AI 都不介入判斷**，連初判都不要 —— 那等於把責任壓在 AI 身上。
    這一區只做一件事：把每一次實際做了什麼、最後回了什麼攤開，人自己看完再勾。
-   唯一保留的硬約束是「改了 Description 就作廢先前的紀錄」（契約失效，同 Flow 的白話說明）。
+   唯一保留的硬約束是「改了 Description 就作廢先前的紀錄」（契約失效，同 Codify 的白話說明）。
 
    見 brain/concepts/agent-skill-tiering.md 決議 12、13 與「簽核驗收」 */
 function getSignoffGate(skill, calcOpened) {
@@ -100,7 +100,7 @@ function acceptProbes(skill)  { return (skill.acceptance || {}).probes   || []; 
 function acceptCrits(skill)   { return (skill.acceptance || {}).criteria || []; }
 
 /* 指引改過就作廢 —— 「勾完再改指引」不能繞過驗收，
-   跟 Flow 那邊「code 改了白話說明沒改＝契約失效」是同一個道理 */
+   跟 Codify 那邊「code 改了白話說明沒改＝契約失效」是同一個道理 */
 function acceptStale(skill) {
   if (!skill.acceptRun) return false;
   return (skill.acceptRun.descRev || 0) !== (skill.descRev || 0);
@@ -126,7 +126,7 @@ function synthSteps(skill, probe) {
   }));
   if (probe.kind === 'writereq') {
     steps.push({ kind: 'tool', tool: 'mes.create_case', label: '開立工單', allowed: false,
-      reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' });
+      reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' });
   }
   return steps;
 }
@@ -215,7 +215,7 @@ function SdSection({ id, title, desc, badge, extra, refreshing, flash, contentKe
 }
 
 /* ════════════════════════════════════════
-   SkillGraph — Flow 的流程圖（僅 Flow 有）
+   SkillGraph — Codify 的流程圖（僅 Codify 有）
 
    節點直接標出讀 / 寫 / 計算與「需人工確認」，
    所以不需要另開一個「會碰到哪些系統」的大區塊。
@@ -466,7 +466,7 @@ function ProbeModal({ skill, step, onClose, onSaveScenario }) {
     }, 800);
   }
 
-  /* 算出來的東西：Flow 的試跑資料裡若有這一步的算法就照它講，講得比通則準 */
+  /* 算出來的東西：Codify 的試跑資料裡若有這一步的算法就照它講，講得比通則準 */
   var calc = ((skill.dryRun && skill.dryRun.calculations) || []).filter(function(c) { return c.stepNum === step.num; })[0];
 
   var fields = (spec && spec.fields) || [];
@@ -732,7 +732,7 @@ function ScopeBlock({ skill, p, onSave }) {
       </div>
 
       {/* 工具授權摘要：一行，需要細節才展開。
-          Guide 的「不能寫入」要看得到，才知道邊界在哪。 */}
+          Skill 的「不能寫入」要看得到，才知道邊界在哪。 */}
       <div style={{ marginTop: 8 }}>
         <div
           onClick={function() { setToolsOpen(function(v) { return !v; }); }}
@@ -760,8 +760,8 @@ function ScopeBlock({ skill, p, onSave }) {
             })}
             {skill.tier === 'guided' && (
               <div style={{ padding: '8px 16px', borderTop: '1px solid ' + C.border, background: C.bgPanel, fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>
-                🔒 「Guide」不能異動系統，寫入類工具無法加入。<br />
-                需要 AI 代為執行動作，請改建一個 <span style={{ fontWeight: 600, color: C.textSub }}>Flow</span>：Flow 的每個異動步驟都會停下來等人確認。
+                🔒 「Skill」不能異動系統，寫入類工具無法加入。<br />
+                需要 AI 代為執行動作，請改建一個 <span style={{ fontWeight: 600, color: C.textSub }}>Codify</span>：Codify 的每個異動步驟都會停下來等人確認。
               </div>
             )}
           </div>
@@ -790,7 +790,7 @@ function ScopeBlock({ skill, p, onSave }) {
 }
 
 /* ════════════════════════════════════════
-   Description 區 — Skill 是 skill.md 風格文本，Flow 是流程敘述
+   Description 區 — Skill 是 skill.md 風格文本，Codify 是流程敘述
    簽核簽的是這一段（白話說明＝契約），不是 code
    ════════════════════════════════════════ */
 function DescriptionBlock({ skill, p }) {
@@ -877,10 +877,10 @@ function DescriptionBlock({ skill, p }) {
    2026-07-27：這一區分成兩層不同的東西，別再混為一談 ——
      · 驗收＝**意圖層**（使用者這樣問 → AI 該怎麼回）。驗路由、拒絕、適用範圍。
      · 情境試跑＝**資料層**（資料長這樣 → 每個節點該怎麼反應）。見 ScenarioBlock。
-   Flow 的風險不在「AI 答錯」，在節點吃到爛資料照樣算完、輸出一份看起來正常的東西。
+   Codify 的風險不在「AI 答錯」，在節點吃到爛資料照樣算完、輸出一份看起來正常的東西。
 
    2026-07-29：意圖層那邊從「測試案例」改成「驗收」。除了跟 codify graph 的 test
-   混淆之外，更根本的問題是 Guide 每次結果都不一樣 —— 跑一次得到 PASS
+   混淆之外，更根本的問題是 Skill 每次結果都不一樣 —— 跑一次得到 PASS
    在邏輯上就不成立。改成同一個提問跑 5 次，由人看內容確認條件是否成立。
    ════════════════════════════════════════ */
 /* 新增驗收條件 / 提問情境：明確的表單任務，不是對話，所以用 Modal 是對的。 */
@@ -1273,7 +1273,7 @@ function ScenarioBlock({ skill, p, onSave, onOpenCalc }) {
 }
 
 function TestBlock({ skill, p, onSave, onOpenCalc }) {
-  /* Flow 沒有「意圖」可測 —— 圖裡沒有的工具它根本呼叫不到，
+  /* Codify 沒有「意圖」可測 —— 圖裡沒有的工具它根本呼叫不到，
      範圍是勾出來的結構化條件。它只有情境試跑。 */
   if (skill.tier === 'sop') {
     return <ScenarioBlock skill={skill} p={p} onSave={onSave} onOpenCalc={onOpenCalc} />;
@@ -1282,7 +1282,7 @@ function TestBlock({ skill, p, onSave, onOpenCalc }) {
 }
 
 /* ════════════════════════════════════════
-   驗收 —— 只有 Guide 有（2026-07-29 取代「測試案例」）
+   驗收 —— 只有 Skill 有（2026-07-29 取代「測試案例」）
 
    一條條件的分母不是「跑幾次」，是「這條驗得到的那幾次」。
    前提不成立的次數畫成灰點，不進分子也不進分母。
@@ -1627,7 +1627,7 @@ function StatusBlock({ skill, p }) {
     return (
       <SdSection title="Pilot Run 紀錄"
         badge={skill.pirunRuns.length + ' 次'}
-        desc="含寫入的 Flow 才走 Pilot Run。這裡驗的不是流程跑不跑得動，是「那張確認卡上的資訊，夠不夠人做判斷」。">
+        desc="含寫入的 Codify 才走 Pilot Run。這裡驗的不是流程跑不跑得動，是「那張確認卡上的資訊，夠不夠人做判斷」。">
         <antd.List bordered size="small" dataSource={skill.pirunRuns}
           renderItem={function(r) {
             return (
@@ -1715,7 +1715,7 @@ function buildAiSuggestions(skill) {
     key: 'desc',
     prompt: '描述寫得夠讓新人看懂嗎？',
     reply: (skill.tier === 'sop'
-      ? '以 Flow 來說算清楚，但少了一句「不用這份的時候是什麼狀況」。\n\n新人最常犯的錯不是照著做錯，是在不該用的時候拿來用。建議在開頭補一段排除條件。'
+      ? '以 Codify 來說算清楚，但少了一句「不用這份的時候是什麼狀況」。\n\n新人最常犯的錯不是照著做錯，是在不該用的時候拿來用。建議在開頭補一段排除條件。'
       : '結構是對的（什麼時候用 → 判斷順序 → 要確認的數據 → 注意事項），但少了一句「不用這份的時候是什麼狀況」。\n\n順序寫得再清楚，也擋不掉一開始就不該套用的情境 —— 排除條件要寫在最前面。'),
     action: {
       target: 'description',
@@ -1728,7 +1728,7 @@ function buildAiSuggestions(skill) {
     },
   });
 
-  /* 3. 驗收條件 —— 只有 Guide 有。Flow 的驗收是情境試跑，題目由系統依節點自動出，不用人想 */
+  /* 3. 驗收條件 —— 只有 Skill 有。Codify 的驗收是情境試跑，題目由系統依節點自動出，不用人想 */
   var seedCrits = acceptCrits(skill).filter(function(c) { return c.origin === 'seed'; }).length;
   if (skill.tier !== 'sop' && seedCrits < 4) {
     list.push({
@@ -1750,8 +1750,8 @@ function buildAiSuggestions(skill) {
   /* 4. 邊界（永遠有，純討論、沒有可 take 的變更） */
   list.push({
     key: 'scopecheck',
-    prompt: '你可以順便幫我改別的 Flow 嗎？',
-    reply: '不行。我這次被綁定的只有這一份「' + skill.title + '」，改不到其他 Skill 或 Flow。\n\n這是刻意的：每一份的簽核與責任歸屬都是獨立的，如果一個對話可以連帶改動好幾份，簽核就失去意義了。\n\n要改別份，請到 Skill 管理開啟那一份，在它的頁面上按 Ask AI。',
+    prompt: '你可以順便幫我改別的 Codify 嗎？',
+    reply: '不行。我這次被綁定的只有這一份「' + skill.title + '」，改不到其他 Skill 或 Codify。\n\n這是刻意的：每一份的簽核與責任歸屬都是獨立的，如果一個對話可以連帶改動好幾份，簽核就失去意義了。\n\n要改別份，請到 Skill 管理開啟那一份，在它的頁面上按 Ask AI。',
     action: null,
   });
 
@@ -2004,7 +2004,7 @@ function AskAiPanel({ skill, onClose, onApply, intake }) {
           <antd.Button size="small" type="text" onClick={onClose} style={{ color: C.textMuted }}>✕</antd.Button>
         </div>
         <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4, lineHeight: 1.6 }}>
-          只能修改<span style={{ color: C.textSub, fontWeight: 600 }}>「{skill.title}」</span>這一份，動不到其他 Skill／Flow。
+          只能修改<span style={{ color: C.textSub, fontWeight: 600 }}>「{skill.title}」</span>這一份，動不到其他 Skill／Codify。
         </div>
       </div>
 
@@ -2063,7 +2063,7 @@ function buildFormalDescription(skill) {
       + '\n\n## 會碰到哪些系統\n目前全程只讀取資料、不異動任何系統。若之後加入會異動系統的步驟，執行到那幾步一律會停下來等人確認 —— 手動執行如此，排程執行也一樣。'
       + '\n\n## 什麼時候不用這份\n（AI 依適用範圍草擬，請補上課上實際的排除條件）';
   }
-  /* Guide 的正式格式不是「一篇說明文件」，是**agent 照著跑的操作手冊**：
+  /* Skill 的正式格式不是「一篇說明文件」，是**agent 照著跑的操作手冊**：
      要寫出呼叫哪一支工具、分支的門檻在哪、什麼時候要停下來，
      以及回答一定要帶出哪些東西 —— 最後那一段是讓研判結果可以被別人檢查的關鍵，
      沒有它，agent 產出的就只是一句看不出憑據的結論。 */
@@ -2086,8 +2086,8 @@ function buildFormalDescription(skill) {
     + '\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。本類型只有唯讀工具，不會異動任何系統。';
 }
 
-/* 2026-07-30 起兩個類型名都是拉丁字（Guide / Flow），夾在中文句子裡都要補空白。
-   不處理的話會出現「那就改成Flow吧」這種擠在一起的句子。
+/* 2026-07-30 起兩個類型名都是拉丁字（Skill / Codify），夾在中文句子裡都要補空白。
+   不處理的話會出現「那就改成Codify吧」這種擠在一起的句子。
    知識仍是中文，所以照舊由第一個字元判斷，不寫死。 */
 function tierWord(t) {
   var l = SKILL_TIER_CFG[t].label;
@@ -2140,12 +2140,12 @@ function buildIntakeReview(skill, p) {
       runSteps: ['讀取你填的流程描述', '比對這個類型的標準格式', '補上缺少的段落', '產生正式的 Description'],
       resultText: '整理好了。你原本寫的意思都在，只是補上了結構與缺掉的段落 —— 套用後可以再編輯。',
       before: (raw || '（未填）').slice(0, 60) + (raw.length > 60 ? '…' : ''),
-      after: isSop ? '（正式 Flow 流程敘述：流程大意 / 會碰到的系統 / 異動步驟的處理）' : '（正式判斷指引：什麼時候用 / 可以動用的工具 / 研判步驟與門檻 / 回答一定要包含 / 停下來不要硬判的情況）',
+      after: isSop ? '（正式 Codify 流程敘述：流程大意 / 會碰到的系統 / 異動步驟的處理）' : '（正式判斷指引：什麼時候用 / 可以動用的工具 / 研判步驟與門檻 / 回答一定要包含 / 停下來不要硬判的情況）',
       appliedNote: 'Description 已更新',
     },
   });
 
-  /* 3. Graph —— 只有 Flow 有，且還沒拆步驟時才提 */
+  /* 3. Graph —— 只有 Codify 有，且還沒拆步驟時才提 */
   if (isSop && (skill.plainSteps || []).length === 0) {
     findings.push('**流程圖**　還沒有。我可以依你寫的流程拆成步驟，並標出哪幾步會異動系統。');
     suggestions.push({
@@ -2167,11 +2167,11 @@ function buildIntakeReview(skill, p) {
   /* 4. 驗收 —— 不給 action，因為它要的是使用者自己去按那顆執行鈕。
      兩種類型驗收方法不同，講的話也不一樣。 */
   findings.push(isSop
-    ? '**驗收**　Flow 不測「使用者會怎麼問」——圖裡沒有的工具它呼叫不到，範圍也是勾出來的。要驗的是資料壞掉時每個節點怎麼反應，題目系統會依你的節點自動出。拆完步驟之後，記得回左邊按一次「執行情境試跑」。'
-    : '**驗收**　目前只有系統自動補的 ' + critCnt + ' 條驗收條件與 ' + probeCnt + ' 個提問情境，還沒跑過。Guide 每次結果都不一樣，所以驗收是同一個問法跑 ' + ACCEPT_RUNS + ' 次、由你看內容確認 —— 整理完內容之後，記得回左邊按一次「執行驗收」。');
+    ? '**驗收**　Codify 不測「使用者會怎麼問」——圖裡沒有的工具它呼叫不到，範圍也是勾出來的。要驗的是資料壞掉時每個節點怎麼反應，題目系統會依你的節點自動出。拆完步驟之後，記得回左邊按一次「執行情境試跑」。'
+    : '**驗收**　目前只有系統自動補的 ' + critCnt + ' 條驗收條件與 ' + probeCnt + ' 個提問情境，還沒跑過。Skill 每次結果都不一樣，所以驗收是同一個問法跑 ' + ACCEPT_RUNS + ' 次、由你看內容確認 —— 整理完內容之後，記得回左邊按一次「執行驗收」。');
 
   return {
-    runSteps: ['讀取你填的名稱與流程', '比對課上已有的 Skill 與 Flow', '檢查適用範圍圈到的機台', '判斷類型是否合適'],
+    runSteps: ['讀取你填的名稱與流程', '比對課上已有的 Skill 與 Codify', '檢查適用範圍圈到的機台', '判斷類型是否合適'],
     reply: '我看過你填的內容了。\n\n' + findings.join('\n\n') + '\n\n下面幾件事我可以幫你做，一次一件。',
     suggestions: suggestions,
   };
@@ -2213,7 +2213,7 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
         ? buildFormalDescription(skill)
         : act.after + '\n\n' + (skill.description || '');
       /* 指引是這份的契約。改了之後 AI 的行為就跟上次驗的不是同一件事，
-         所以先前的驗收結果與確認一律作廢（Guide 才有這件事）。 */
+         所以先前的驗收結果與確認一律作廢（Skill 才有這件事）。 */
       next.descRev = (skill.descRev || 0) + 1;
 
     } else if (act.target === 'scope') {
@@ -2222,8 +2222,8 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
     } else if (act.target === 'tier') {
       next.tier = act.tier;
-      /* 類型換了，驗收方法整個換掉 —— Flow 走情境試跑（系統依節點自動出，
-         不需要驗收條件），Guide 走驗收。 */
+      /* 類型換了，驗收方法整個換掉 —— Codify 走情境試跑（系統依節點自動出，
+         不需要驗收條件），Skill 走驗收。 */
       if (act.tier === 'sop') {
         next.acceptance = { criteria: [], probes: [] };
         next.acceptRun = undefined;
@@ -2367,12 +2367,12 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
             <SdSection id="sd-desc" title="Description" {...sectionProps('description')}
               desc={skill.tier === 'sop'
-                ? '這份 Flow 在做什麼、流程大意。簽核簽的是這段白話說明，不是底下的 code。'
-                : '這份 Guide 的完整指引，也是 AI 的操作手冊 —— 呼叫哪支工具、什麼門檻下走哪條分支、回答要帶出哪些依據，都寫在這裡。它寫得多明確，研判就有多穩，也才檢查得出 AI 到底做了什麼。'}>
+                ? '這份 Codify 在做什麼、流程大意。簽核簽的是這段白話說明，不是底下的 code。'
+                : '這份 Skill 的完整指引，也是 AI 的操作手冊 —— 呼叫哪支工具、什麼門檻下走哪條分支、回答要帶出哪些依據，都寫在這裡。它寫得多明確，研判就有多穩，也才檢查得出 AI 到底做了什麼。'}>
               <DescriptionBlock skill={skill} p={p} />
             </SdSection>
 
-            {/* Graph 只有 Flow 有 —— Guide 沒有固定步驟，畫不出流程圖 */}
+            {/* Graph 只有 Codify 有 —— Skill 沒有固定步驟，畫不出流程圖 */}
             {skill.tier === 'sop' && (
               <SdSection id="sd-graph" title="Graph" {...sectionProps('graph')}
                 badge={(skill.plainSteps || []).length + ' 個步驟'}
@@ -2385,7 +2385,7 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
             <SdSection id="sd-test" title={skill.tier === 'sop' ? 'Dry-run' : '驗收'}
               desc={skill.tier === 'sop'
-                ? 'Flow 是 codify graph，每個節點都是一段程式碼，沒有「意圖」可測 —— 圖裡沒有的工具它呼叫不到，範圍也是勾出來的結構化條件。要驗的是結果與例外：資料壞掉時每個節點怎麼反應。全部符合約定才能送簽。'
+                ? 'Codify 是 codify graph，每個節點都是一段程式碼，沒有「意圖」可測 —— 圖裡沒有的工具它呼叫不到，範圍也是勾出來的結構化條件。要驗的是結果與例外：資料壞掉時每個節點怎麼反應。全部符合約定才能送簽。'
                 : '同一份指引換個問法就會走不同路，沒有固定步驟可以試跑，而且每次結果都不一樣 —— 所以驗的是意圖，而且要跑很多次。你寫下每次回答都該成立的條件，系統把每個提問情境各跑 ' + ACCEPT_RUNS + ' 次，由你看內容確認。全數確認才能送簽。'}>
               <TestBlock skill={skill} p={p} onSave={onSave} onOpenCalc={function() { setCalcOpened(true); }} />
             </SdSection>

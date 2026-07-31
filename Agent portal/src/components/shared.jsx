@@ -147,9 +147,14 @@ const STATUS_CFG = {
 
 /* ════════════════════════════════════════
    Skill 三層模型 — 全站共用詞彙
-   知識 / Guide / Flow。分界是「能不能設成排程」，
+   知識 / Skill / Codify。分界是「能不能設成排程」，
    使用者一秒就懂，比講副作用範圍好解釋。
    見 brain/concepts/agent-skill-tiering.md
+
+   2026-07-31 決議 16：類型改名 `Guide → Skill`、`Flow → Codify`。
+   Skill 是 Agentic AI 的通用詞，使用者一看就懂；Codify 不是，
+   所以由 Skill 當入口先讓人知道「AI 可以照我寫的腳本做事」，
+   再讓人自己探索 Codify。code key `guided` / `sop` 一律不變。
    ════════════════════════════════════════ */
 const SKILL_TIER_CFG = {
   knowledge: {
@@ -161,28 +166,32 @@ const SKILL_TIER_CFG = {
     schedulable: false,
   },
   guided: {
-    label: 'Guide',
-    short: 'Guide',
+    label: 'Skill',
+    short: 'Skill',
     color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
     oneLiner: '每次狀況不同，AI 依課上的指引研判並給建議',
     detail: '可以查現場數據當證據，但不能異動任何系統；每次結果不一樣，所以不能設成排程。',
+    tabDesc: 'Skill 是 AI 執行的腳本，你可以隨時修改並指揮 AI 做事。如果你需要做的結果 100% 相同且絕對不會做跑偏，升級 Codify。',
     schedulable: false,
   },
   sop: {
-    label: 'Flow',
-    short: 'Flow',
+    label: 'Codify',
+    short: 'Codify',
     color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
     oneLiner: '每次步驟都一樣、結果可重現的固定流程',
     detail: '執行時完全照核准過的步驟跑，可以設成排程自動執行；會異動系統的步驟一律停下來等人確認。',
+    tabDesc: 'Codify 是 AI 透過對話 或 理解你的 Skill 後，將任務轉換為程式碼，並在需要的時候調用的方法。',
     schedulable: true,
   },
 };
 
-/* Skill 管理清單只有這兩種。
+/* Skill 管理清單只有這兩種，順序即分頁順序 —— guided（Skill）在前，
+   進 Skill 管理預設就落在它上面，Codify 讓人自己切過去探索。
    2026-07-26 PO 決議：知識從 Skill 管理拆出去獨立成一頁，
-   因為它在 Guide／Flow 執行前後都會被引用，不是與它們平行的第三條路線。
+   因為它在 Skill／Codify 執行前後都會被引用，不是與它們平行的第三條路線。
    SKILL_TIER_CFG.knowledge 保留，僅供舊資料與知識頁的用語一致性使用。 */
 const SKILL_TIERS = ['guided', 'sop'];
+const SKILL_DEFAULT_TIER = 'guided';
 
 /* ── 步驟的讀寫性質：Graph 節點與工具列都吃這一份 ── */
 const SKILL_IO_CFG = {

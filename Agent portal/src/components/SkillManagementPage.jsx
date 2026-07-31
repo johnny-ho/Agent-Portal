@@ -2,10 +2,17 @@
    SKILL MANAGEMENT PAGE (v4)
 
    2026-07-26 改版：
-     · 知識拆出去獨立成「知識管理」，本頁只剩「Guide」與「Flow」
+     · 知識拆出去獨立成「知識管理」，本頁只剩「Skill」與「Codify」
      · 清單只是進入點，列上的操作只有刪除；其餘行為進詳情頁再做
      · 詳情從 1000px Modal 改為全頁（SkillDetailPage.jsx），
        因為 Graph 與 Ask AI 側欄要同時展開
+
+   2026-07-31 改版：
+     · 兩個類型從「工具列上的一顆篩選」升成「頁面層級的兩個分頁」，
+       進入後預設落在 Skill —— Skill 是 Agentic AI 的通用詞，先讓人
+       知道我們有這個能力，再讓人自己切過去探索 Codify
+     · 每個分頁在清單上方掛一句小標題，解釋這個類型是什麼、何時該升級
+     · 類型欄拿掉：分頁本身已經宣告了類型，每列再標一次是重複資訊
 
    五階段管理流程維持：Draft → Testing → Approving → Pilot Run → Production
    註：主元件函式名稱維持 SOPManagementPage，以相容 SettingPage。
@@ -22,7 +29,7 @@ const SKILL_STAGE_CFG = {
 };
 
 /* 清單欄寬（Table columns 共用常數）*/
-const SK_COL_W = { tier: 96, stage: 104, owner: 96, date: 104, action: 72 };
+const SK_COL_W = { stage: 104, owner: 96, date: 104, action: 72 };
 
 /* ── 適用範圍：結構化條件的白話描述 ──
    scope 是勾出來的條件，不是一句自由文字，所以可以直接算出「目前符合哪幾台」。*/
@@ -112,15 +119,12 @@ function DryRunOutput({ output }) {
 /* ════════════════════════════════════════
    Skill 清單欄位（AntD Table columns）
    列上只有刪除；其餘行為進詳情頁再做。
+   類型不再入欄：清單永遠只裝當前分頁那一種。
    ════════════════════════════════════════ */
 function useSkillColumns({ onDelete }) {
   var { C, fz } = useTheme();
 
   return [
-    {
-      title: '類型', dataIndex: 'tier', key: 'tier', width: SK_COL_W.tier,
-      render: function(v) { return <SkillTierTag tier={v} />; },
-    },
     {
       title: '狀態', dataIndex: 'stage', key: 'stage', width: SK_COL_W.stage,
       render: function(v) { return <StatusTag stage={v} />; },
@@ -192,7 +196,7 @@ function useSkillColumns({ onDelete }) {
 function SOPManagementPage({ p }) {
   var { C, fz } = useTheme();
   var [filter, setFilter]         = React.useState('all');
-  var [tierFilter, setTierFilter] = React.useState('all');
+  var [activeTier, setActiveTier] = React.useState(SKILL_DEFAULT_TIER);
   var [skills, setSkills]         = React.useState(p.knowledge.sopManagement || []);
   var [showCreate, setShowCreate] = React.useState(false);
   var [detailId, setDetailId]     = React.useState(null);
@@ -204,7 +208,7 @@ function SOPManagementPage({ p }) {
     setSkills(p.knowledge.sopManagement || []);
     setDetailId(null);
     setFilter('all');
-    setTierFilter('all');
+    setActiveTier(SKILL_DEFAULT_TIER);
     setSearch('');
   }, [p.key]);
 
@@ -232,12 +236,17 @@ function SOPManagementPage({ p }) {
 
   var columns = useSkillColumns({ onDelete: deleteSkill });
 
-  var counts = {};
-  SKILL_STAGES.forEach(function(s) { counts[s] = skills.filter(function(x) { return x.stage === s; }).length; });
+  /* 分頁先切，階段筆數才算 —— 徽章上的數字必須跟人眼前這份清單對得上 */
+  var tierCounts = {};
+  SKILL_TIERS.forEach(function(t) { tierCounts[t] = skills.filter(function(x) { return x.tier === t; }).length; });
 
-  var displayed = skills
+  var tierSkills = skills.filter(function(s) { return s.tier === activeTier; });
+
+  var counts = {};
+  SKILL_STAGES.forEach(function(s) { counts[s] = tierSkills.filter(function(x) { return x.stage === s; }).length; });
+
+  var displayed = tierSkills
     .filter(function(s) { return filter === 'all' || s.stage === filter; })
-    .filter(function(s) { return tierFilter === 'all' || s.tier === tierFilter; })
     .filter(function(s) {
       if (!searchQuery.trim()) return true;
       var q = searchQuery.toLowerCase();
@@ -287,19 +296,33 @@ function SOPManagementPage({ p }) {
   /* Pilot Run 縮成 Pilot：單行工具列每 32px 都要省 */
   var STAGE_SHORT = { pirun: 'Pilot' };
 
-  var stageOptions = [{ value: 'all', label: stageLabel('全部階段', skills.length, filter === 'all') }].concat(
+  var stageOptions = [{ value: 'all', label: stageLabel('全部階段', tierSkills.length, filter === 'all') }].concat(
     SKILL_STAGES.map(function(s) {
       return { value: s, label: stageLabel(STAGE_SHORT[s] || SKILL_STAGE_CFG[s].label, counts[s] || 0, filter === s) };
     })
   );
 
-  var tierCounts = {};
-  SKILL_TIERS.forEach(function(t) { tierCounts[t] = skills.filter(function(x) { return x.tier === t; }).length; });
-  var tierOptions = [{ value: 'all', label: stageLabel('全部類型', skills.length, tierFilter === 'all') }].concat(
-    SKILL_TIERS.map(function(t) {
-      return { value: t, label: stageLabel(SKILL_TIER_CFG[t].label, tierCounts[t] || 0, tierFilter === t) };
-    })
-  );
+  /* 分頁：兩顆膠囊，字級比工具列那排大一號 —— 它是頁面層級的切換，
+     不是又一個篩選器；沒有「全部」那一顆，人一定站在其中一種上面。 */
+  var tierTabOptions = SKILL_TIERS.map(function(t) {
+    var cfg = SKILL_TIER_CFG[t];
+    var active = activeTier === t;
+    return {
+      value: t,
+      label: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px', color: active ? '#FFFFFF' : C.textSub, fontWeight: 600, fontSize: fz(13) }}>
+          {cfg.label}
+          <span style={{
+            fontSize: fz(10), padding: '0 8px', borderRadius: 999, fontWeight: 600,
+            background: active ? 'rgba(255,255,255,0.25)' : C.hover,
+            color: active ? '#FFFFFF' : C.textMuted,
+          }}>{tierCounts[t] || 0}</span>
+        </span>
+      ),
+    };
+  });
+
+  var activeTierCfg = SKILL_TIER_CFG[activeTier];
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.bg }}>
@@ -308,28 +331,43 @@ function SOPManagementPage({ p }) {
       <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text }}>Skill 管理</div>
-          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Guide 與 Flow · 同課審批 · 不可跨課使用</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Skill 與 Codify · 同課審批 · 不可跨課使用</div>
         </div>
         <div style={{ flex: 1 }} />
         <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
       </div>
 
-      {/* 工具列：搜尋 / 類型 / 階段 / 排序 收成單一行。
-          2026-07-26 PO 定案：原本四個中文 label（搜尋、類型、階段、排序）拿掉 ——
-          Segmented 第一顆本來就寫「全部類型 / 全部階段」，排序把 label 收進值裡，
-          語意沒有消失，換來列表往上提三條橫線的高度。 */}
       <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+
+        {/* 分頁：Skill 在前、Codify 在後，進來就站在 Skill 上。
+            小標題貼著分頁走 —— 人切過去的第一件事是知道這一格是什麼。 */}
+        <div style={{ padding: '16px 24px 8px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+          <antd.Segmented
+            value={activeTier}
+            onChange={function(t) { setActiveTier(t); setFilter('all'); }}
+            options={tierTabOptions}
+            style={{ alignSelf: 'flex-start' }}
+          />
+          <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, maxWidth: 720 }}>
+            {activeTierCfg.tabDesc}
+          </div>
+        </div>
+
+      {/* 工具列：搜尋 / 階段 / 排序 收成單一行。
+          2026-07-26 PO 定案：原本四個中文 label（搜尋、類型、階段、排序）拿掉 ——
+          Segmented 第一顆本來就寫「全部階段」，排序把 label 收進值裡，
+          語意沒有消失，換來列表往上提三條橫線的高度。
+          2026-07-31：類型那顆升成上面的分頁，工具列少一顆。 */}
         <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
           <antd.Input
             allowClear
             value={searchQuery}
             onChange={function(e) { setSearch(e.target.value); }}
             prefix={<span style={{ color: C.textMuted, fontSize: fz(12) }}>🔍</span>}
-            aria-label="搜尋 Skill 名稱、用途或人員"
+            aria-label={'搜尋 ' + activeTierCfg.label + ' 名稱、用途或人員'}
             placeholder="搜尋名稱、用途、人員…"
             style={{ flex: 1, minWidth: 176 }}
           />
-          <antd.Segmented size="small" value={tierFilter} onChange={setTierFilter} options={tierOptions} />
           <antd.Segmented size="small" value={filter} onChange={setFilter} options={stageOptions} />
           <antd.Select
             value={sortBy}
@@ -361,7 +399,9 @@ function SOPManagementPage({ p }) {
                 image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   <span style={{ fontSize: fz(13), color: C.textMuted }}>
-                    {searchQuery.trim() ? '沒有符合搜尋條件的 Skill' : '此條件下目前沒有 Skill'}
+                    {searchQuery.trim()
+                      ? '沒有符合搜尋條件的 ' + activeTierCfg.label
+                      : '此條件下目前沒有 ' + activeTierCfg.label}
                   </span>
                 }
                 style={{ padding: 32 }}
@@ -384,6 +424,8 @@ function SOPManagementPage({ p }) {
           onClose={function() { setShowCreate(false); }}
           onCreate={function(skill) {
             setSkills(function(prev) { return [skill].concat(prev); });
+            /* 建的可能是另一種類型 —— 分頁跟著跑，人從詳情退回來才看得到它 */
+            if (skill.tier && skill.tier !== activeTier) { setActiveTier(skill.tier); setFilter('all'); }
             setShowCreate(false);
             setDetailId(skill.id);
           }}
