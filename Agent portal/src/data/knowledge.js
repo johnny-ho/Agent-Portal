@@ -2,7 +2,7 @@
    KNOWLEDGE — 課上的知識文件
 
    2026-07-26 PO 決議：知識從 Skill 管理拆出來獨立。
-   理由：知識管理是單獨的一件事，在 Guide / Flow 執行前後都會被引用，
+   理由：知識管理是單獨的一件事，在 Skill / Codify 執行前後都會被引用，
    不該被當成與它們平行的第三條路線。
    （此決議推翻 brain/concepts/agent-skill-tiering.md
      「三種類型放同一管理頁」那一條，該頁已回填。）
@@ -84,7 +84,7 @@ const KNOWLEDGE_DOCS = {
       status: 'published',
       tags: ['ERR-4421', '冷卻系統', '異常排除'],
       usage: 41,
-      /* 這一份被 Guide Skill 引用 —— 知識不是平行路線，是被引用的底料 */
+      /* 這一份被 Skill 引用 —— 知識不是平行路線，是被引用的底料 */
       usedBy: [
         { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
       ],
@@ -341,7 +341,7 @@ function getKnowledgeDocs(personaKey) {
   return KNOWLEDGE_DOCS[personaKey] || [];
 }
 
-/* Skill／Flow 詳情頁的「引用知識」用：由 id 取回標題與狀態 */
+/* Skill／Codify 詳情頁的「引用知識」用：由 id 取回標題與狀態 */
 function findKnowledgeDoc(personaKey, docId) {
   return getKnowledgeDocs(personaKey).filter(function(d) { return d.id === docId; })[0] || null;
 }

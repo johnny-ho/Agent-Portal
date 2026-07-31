@@ -8,7 +8,7 @@
 
    現在這裡只收四樣東西 —— 類型、名稱、適用範圍、大致流程 ——
    然後把它們當成 context 丟給 agent：建立完立刻進詳情頁，
-   右側 Ask AI 自己開始體檢（含「你這個其實比較像 Flow」這種類型建議）。
+   右側 Ask AI 自己開始體檢（含「你這個其實比較像 Codify」這種類型建議）。
    使用者第一次用就看得到有 agent 在幫忙，不會面對一張空白頁。
 
    類型允許選錯，是刻意的：讓 agent 去糾正，比要人先讀懂兩張說明卡再選好。
@@ -47,20 +47,20 @@ function recommendTier(text) {
     return {
       tier: 'sop',
       why: '你描述的是每次都照同樣順序做完的彙整，步驟固定、結果可以重現。',
-      benefit: '做成 Flow 才能設成排程自動跑，時間到就有產出。',
+      benefit: '做成 Codify 才能設成排程自動跑，時間到就有產出。',
     };
   }
   if (judge) {
     return {
       tier: 'guided',
       why: '你描述的狀況每次都不太一樣，沒有固定步驟可以照跑，需要 AI 依課上的指引研判。',
-      benefit: 'Guide 可以查現場數據當證據，但不會去動任何系統，也不能設排程。',
+      benefit: 'Skill 可以查現場數據當證據，但不會去動任何系統，也不能設排程。',
     };
   }
   return {
     tier: 'guided',
     why: '從你的描述看不出固定步驟，比較像是每次要視狀況判斷的事。',
-    benefit: '先做成 Guide 比較安全；之後大家的做法收斂了，再改成 Flow。',
+    benefit: '先做成 Skill 比較安全；之後大家的做法收斂了，再改成 Codify。',
   };
 }
 
@@ -308,8 +308,8 @@ function SkillCreateFlow({ p, onClose, onCreate }) {
       /* 左側先放使用者填的原文；要不要換成正式格式，由 agent 建議、使用者決定 */
       description: raw,
       knowledgeRefs: [],
-      /* 只有 Guide 有驗收（系統自動補的條件與情境不可刪，一律還沒跑過）。
-         Flow 走情境試跑 —— 題目依節點自動生，不存在資料裡。 */
+      /* 只有 Skill 有驗收（系統自動補的條件與情境不可刪，一律還沒跑過）。
+         Codify 走情境試跑 —— 題目依節點自動生，不存在資料裡。 */
       acceptance: tier === 'sop'
         ? { criteria: [], probes: [] }
         : buildAutoAcceptance(p, scope, title.trim()),
@@ -424,7 +424,7 @@ function SkillCreateFlow({ p, onClose, onCreate }) {
 /* 依適用範圍與類型自動補的驗收條件與提問情境 —— Seed 會寫「該做什麼」，
    不會想到寫「不該做什麼」，而不該做的才是真正會出事的。系統補的不可刪。
 
-   2026-07-28 起**只有 Guide 會用到**：Flow 沒有「意圖」可測，
+   2026-07-28 起**只有 Skill 會用到**：Codify 沒有「意圖」可測，
    它的驗收是情境試跑（題目依節點自動生）。
 
    2026-07-29 起條件上沒有任何判定欄位 —— 系統與 AI 都不判斷條件有沒有做到，
@@ -477,7 +477,7 @@ function WriteToggle({ draft, onEnable, onDisable }) {
 
   function ask() {
     modal.confirm({
-      title: '要讓這個 Flow 執行會異動系統的動作嗎？',
+      title: '要讓這個 Codify 執行會異動系統的動作嗎？',
       width: 512,
       content: (
         <div style={{ fontSize: fz(13), lineHeight: 1.8, color: C.textSub }}>
@@ -501,7 +501,7 @@ function WriteToggle({ draft, onEnable, onDisable }) {
     <div style={{ padding: '8px 16px', background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
       {contextHolder}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>讓這個 Flow 也能執行動作（開單、通知…）</div>
+        <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>讓這個 Codify 也能執行動作（開單、通知…）</div>
         <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 4 }}>唯讀是預設。加上動作會提高簽核與執行時的確認成本。</div>
       </div>
       <antd.Switch

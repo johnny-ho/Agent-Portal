@@ -384,3 +384,19 @@ build 984,511 bytes。驗證：`index.html` 裡獨立詞「SOP」與「輔助判
 ⚠️ 留下的中英混搭：「Skill 管理」裡裝 `Flow`／`Guide`，隔壁 tab 仍叫「知識管理」。若要整齊，方向是把知識也改英文（`Knowledge`），不是把 Flow／Guide 改回中文。另 `SettingPage.jsx:1601` 的 tab key 是 `'knowledge'`（Skill 管理）、知識管理是 `'knowledge-doc'`，是 2026-07-26 拆分留下的殘跡，與命名無關但同區，之後動到再清。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 15，並在頁首標明舊段落沿用舊用字）、[decisions.md](decisions.md)（補 07-27~29 與 07-30 兩列）、index.md。
+
+## [2026-07-31] decision | 類型再改名 Guide → Skill、Flow → Codify，並升成兩個分頁
+
+PO 帶著使用者回饋回來：「使用者認為 Skill 是一個 Agentic AI 普遍的概念，很好理解。但 Codify 不是。」
+
+決議 15（07-30）挑字的標準是**撞名面**，而撞名面過關不等於使用者已經懂。這輪補上第二個標準：**先驗認知**。`Skill` 在 Agentic AI 圈子已是通用詞，不必教；`Codify` 是新詞，所以它不當入口——但也不能藏，於是有了另一半決策：**兩個類型從工具列上的一顆篩選 Segmented 升成頁面層級的兩個分頁，進入預設站 Skill，Codify 就在旁邊等使用者自己去點。** 語意也跟著換：篩選器說「這是一份清單，你可以篩」，分頁說「這是兩件不同的事」——後者才對得上三層模型從 07-25 起的立場（兩種類型的建立、驗收、可否排程全不同）。
+
+「全部類型」那一顆一併消失，人永遠站在其中一種上面，小標題才有唯一主詞。兩句小標題 PO 定稿逐字採用。Skill 那句尾巴的「如果你需要做的結果 100% 相同且絕對不會做跑偏，升級 Codify」是**飛輪 1（Guide → SOP 收斂）第一次在 UI 上以一句話出現**，而且從人已經站著的那一格指向另一格。
+
+⚠️ **已知代價**：容器叫「Skill 管理」，裡面又有一個類型叫「Skill」，父子同名。決議 15 保住容器名的理由是「Flow 與 Guide 本來就都是 skill，父層沒有錯」，這輪等於讓子項吃掉父層的名字。PO 接受，換來的是進頁第一眼就命中已知概念；要修的方向是動容器名，不是把類型名改回去。
+
+實作：`shared.jsx` 兩處 `label`／`short` + 新增 `tabDesc` 與 `SKILL_DEFAULT_TIER`；`SkillManagementPage.jsx` 的 `tierFilter` → `activeTier`（分頁 Segmented 移出工具列、階段筆數改用分頁後的資料算、切分頁時 stage filter 歸零、建立後自動切到新項目的分頁、清單「類型」欄移除）；全站文案 `Flow` 158 處 → `Codify`、`Guide` 64 處 → `Skill`。刻意未動：`SettingPage.jsx` 的 `EDA3 Flow`（KPI 報表來源，同名但無關）、小寫 `codify graph`（本來就是這個實作的用語）、`SkillCreateFlow` 等識別字。順手修掉改名造成的兩處語句擠壓（`本 Skill 類型為「Skill」` → `類型為「Skill」` 15 處、`一份 Skill Skill` → `一份 Skill`）。
+
+build 987,628 bytes。**本輪有做瀏覽器實測**（上一輪因 CDN 被擋只能靠 Babel 編譯等價驗證）：預設落 Skill 分頁 3 筆、小標題正確；切 Codify → 4 筆、小標題與階段徽章（Draft 0／Testing 1／Approving 0／Pilot 1／Production 2）全部重算；詳情頁徽章與說明同步；建立 Modal 兩張卡為 Skill／Codify；console 僅既有 Babel 500KB 提示，零 error。
+
+受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 16，頁首改名對照表補成兩輪）、[decisions.md](decisions.md)、index.md。

@@ -891,7 +891,7 @@ function KnowledgeTab({ p }) {
 /* ═══════════════════════════════════
    Tab 6：知識管理
    2026-07-26：知識從 Skill 管理拆出來獨立。
-   它在 Guide／Flow 執行前後都會被引用，是底料不是平行路線。
+   它在 Skill／Codify 執行前後都會被引用，是底料不是平行路線。
    ═══════════════════════════════════ */
 function KnowledgeDocTab({ p }) {
   return (

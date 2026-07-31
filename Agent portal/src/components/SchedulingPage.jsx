@@ -132,7 +132,7 @@ function SchStepTimeline({ steps, compact }) {
 /* ════════════════════════════════════════
    SchNewScheduleModal — 新增排程
 
-   排程只掛得上 Flow。Guide 每次結果都不一樣、產出的是給人看的建議，
+   排程只掛得上 Codify。Skill 每次結果都不一樣、產出的是給人看的建議，
    沒人在場就沒有意義；知識根本沒有要執行的東西。
    但不可用的類型不隱藏 —— 看得到、標明原因，Seed 才知道邊界在哪。
    見 brain/concepts/agent-skill-tiering.md「三層分界」
@@ -143,7 +143,7 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
   var { C, fz } = useTheme();
   var all = ((p.knowledge || {}).sopManagement) || [];
 
-  /* 可掛：Production 的 Flow。其餘全部列出來但不能選，並寫明為什麼 */
+  /* 可掛：Production 的 Codify。其餘全部列出來但不能選，並寫明為什麼 */
   function blockReason(s) {
     if (s.tier !== 'sop') {
       return SKILL_TIER_CFG[s.tier].label + ' 不能設排程：每次結果不一樣，需要有人在場看';
@@ -175,10 +175,10 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
       onOk={function() { if (pickedSkill) onCreate(pickedSkill, cron); }}
     >
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
-        排程只掛得上已上線的 Flow —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
+        排程只掛得上已上線的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
       </div>
 
-      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 Flow</div>
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 Codify</div>
       <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8, marginBottom: 16 }} className="scrollbar-thin">
         {options.length === 0 && (
           <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本課目前沒有任何 Skill。</div>
@@ -224,13 +224,13 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
           ? <antd.Alert
               type="warning"
               showIcon
-              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Flow 含 {confirmSteps} 個需確認步驟</span>}
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 含 {confirmSteps} 個需確認步驟</span>}
               description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，確認後才會繼續。不是設好就完全不用管。</span>}
             />
           : <antd.Alert
               type="success"
               showIcon
-              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Flow 只讀取資料，可以完全自動執行</span>}
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 只讀取資料，可以完全自動執行</span>}
               description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>不會異動任何系統，時間到就有產出。</span>}
             />
       )}
@@ -576,7 +576,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
                 {typeof selectedItem.confirmSteps === 'number' && (
                   <div style={{ fontSize: fz(12), color: selectedItem.confirmSteps > 0 ? '#F59E0B' : '#22C55E', marginTop: 4, fontWeight: 600 }}>
                     {selectedItem.confirmSteps > 0
-                      ? '⚠️ 本 Flow 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
+                      ? '⚠️ 本 Codify 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
                       : '只讀取資料，時間到就有產出，不會異動任何系統'}
                   </div>
                 )}
@@ -620,7 +620,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
 
       </div>
 
-      {/* 新增排程：只選得到已上線的 Flow */}
+      {/* 新增排程：只選得到已上線的 Codify */}
       {showNew && (
         <SchNewScheduleModal
           p={p}

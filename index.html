@@ -143,7 +143,7 @@ function matchScopeTargets(personaKey, scope) {
    TOOL_PROBE —— 節點試打的介面定義（2026-07-27）
 
    PO：「dry run 可以讓使用者選擇試打資料訪問的 api / node，這樣就不用猜。」
-   Flow 走 codify graph，每個節點是一段程式碼；出事的地方多半不是邏輯，
+   Codify 走 codify graph，每個節點是一段程式碼；出事的地方多半不是邏輯，
    是**介面**：欄位改名、型別不符、極值沒考慮。所以每個工具要有
    「吃什麼參數、吐什麼欄位」的定義，人才有辦法單獨打一個節點看它回什麼。
 
@@ -385,13 +385,13 @@ const PERSONAS = {
         { q: 'E-101 研磨頭換件力矩標準？v2.3 跟 v2.2 差異在哪？', a: '上蓋螺絲：18 N·m（v2.2 為 16 N·m，已更新）；固定環：12 N·m（未變動）。v2.3 新增步驟 7 冷卻水路確認。', contributor: '王志明', date: '今天', sourceSOP: 'CMP 研磨頭定期更換 Skill v2.3' },
         { q: 'ERR-4421 最常見的根因是什麼？', a: '依頻率：(1) 冷卻水路阻塞 60%、(2) 壓力感測器老化 25%、(3) 循環泵葉輪磨損 15%。', contributor: '吳志豪', date: '今天', sourceSOP: null },
       ],
-      /* ── Skill 管理只放「Guide」與「Flow」兩種。
+      /* ── Skill 管理只放「Skill」與「Codify」兩種。
             純文件性質的內容已於 2026-07-26 移出至 data/knowledge.js。
             知識不是與這兩者平行的第三條路線，而是它們引用的底料
             （見各 Skill 的 knowledgeRefs）。 ── */
       sopManagement: [
 
-        /* ── Guide（Draft）：剛用對話建好，還沒測 ── */
+        /* ── Skill（Draft）：剛用對話建好，還沒測 ── */
         {
           id: 'sm-eq-009',
           title: '換件後性能異常研判',
@@ -465,7 +465,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'E-101 屬 CMP —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'cmms.get_maint_record', label: '查換件記錄', params: 'eqp_id=E-101', allowed: true, result: '研磨頭批號 LOT-2207，數量 4' },
-                  { kind: 'tool', tool: 'inv.create_return', label: '開立退料單', params: 'part_no=PT-2207, qty=4', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'inv.create_return', label: '開立退料單', params: 'part_no=PT-2207, qty=4', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '退料單我不能代開 —— 這份 Skill 只有唯讀工具。\n\n以下是可以直接貼上的退料單內容：\n· 料號 PT-2207 研磨頭 · 批號 LOT-2207 · 數量 4\n· 退料原因：換件後研磨率 480 Å/min，低於規格下限 520\n· 佐證：CMMS 換件記錄（扭矩與 O-ring 均正常）、SPC 研磨率量測\n\n請由你在倉儲系統送出。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -488,7 +488,7 @@ const PERSONAS = {
           },
         },
 
-        /* ── Flow（唯讀，Testing）：PM 到期清單 ── */
+        /* ── Codify（唯讀，Testing）：PM 到期清單 ── */
         {
           id: 'sm-eq-010',
           title: 'PM 到期清單彙整',
@@ -564,7 +564,7 @@ const PERSONAS = {
           },
         },
 
-        /* ── Guide（Approving）：簽核中 ── */
+        /* ── Skill（Approving）：簽核中 ── */
         {
           id: 'sm-eq-011',
           title: '機台異音與震動研判',
@@ -607,7 +607,7 @@ const PERSONAS = {
                   { kind: 'tool', tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', params: 'eqp_id=E-203, hours=24', allowed: true, result: '震動 4.8 mm/s，30 天基線 2.0 mm/s（2.4 倍），近 6 小時突然跳高' },
                   { kind: 'tool', tool: 'eqp.compare_fleet', label: '比對同型機台', params: 'eqp_class=CMP', allowed: true, result: '同型 5 台同期無相同趨勢' },
                   { kind: 'tool', tool: 'cmms.get_maint_record', label: '查保養記錄', params: 'eqp_id=E-203', allowed: true, result: '上次 PM 距今 12 天' },
-                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：軸承或固定件鬆動，3 項數據一致。**\n\n依據：震動 4.8 mm/s（基線 2.0，2.4 倍，設備監控 09:05 取）；形態為 6 小時內突然跳高，非緩慢爬升；上次 PM 距今 12 天（CMMS 09:06 取）。\n排除：同型 5 台同期間無相同趨勢（設備監控 09:06 取）→ 排除廠務端電源／氣源；PM 才做完 12 天 → 磨耗解釋不合理。\n落在門檻：> 基線 2 倍且伴隨異音改變 → 建議立即停機。\n\n建議動作：在設備監控將 E-203 轉 Down 並開 CM 工單，須由你執行。\n（以上為依課上指引的研判建議，不是核准流程；停機決定權在當班工程師與課長。）',
                 vary: [
@@ -655,7 +655,7 @@ const PERSONAS = {
                 input: '判定要停機的話直接幫我停',
                 steps: [
                   { kind: 'match', text: 'E-203 屬 CMP —— 符合本 Skill 適用範圍' },
-                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'eqp.stop_equipment', label: '停止設備', params: 'eqp_id=E-203', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '停機我不能代為執行 —— 這份 Skill 只有唯讀工具。\n\n依前一次研判（震動 2.4 倍、突然跳高、同型無異常），落在「建議立即停機」那一段。\n要停的話請在設備監控把 E-203 轉 Down，並開 CM 工單註明震動值與基線倍數。\n\n（以上為依課上指引的研判建議，不是核准流程；停機決定權在當班工程師與課長。）',
                 vary: [
@@ -684,7 +684,7 @@ const PERSONAS = {
           ],
         },
 
-        /* ── Flow（含寫入，Pilot Run）：FDC 異常快速反應。
+        /* ── Codify（含寫入，Pilot Run）：FDC 異常快速反應。
               graph 有條件分支：Level-3 才走停機隔離。 ── */
         {
           id: 'sm-eq-004',
@@ -756,12 +756,12 @@ const PERSONAS = {
           ],
         },
 
-        /* ── Guide（Production）：Chat 情境 3 就是這一份的活體展示 ── */
+        /* ── Skill（Production）：Chat 情境 3 就是這一份的活體展示 ── */
         {
           id: 'sm-eq-006',
           title: 'ERR-4421 冷卻異常研判',
           purpose: 'ERR-4421 觸發時，研判是水路阻塞、感測器老化還是循環泵磨損。',
-          description: '# ERR-4421 冷卻異常研判\n\n## 什麼時候用這份\nCMP 機台觸發 ERR-4421（冷卻水路壓力低於 0.15 MPa）時使用。\n\n## 什麼時候不用這份\n非 ERR-4421 的冷卻相關警報不適用，請改查對應的異常排除文件。\n爐管等非 CMP 機台一律不適用，即使警報碼相同 —— 水路架構不同，判斷依據也不同。\n\n## 可以動用的工具\n- `fdc.get_alarm_detail(alarm_id)` — 警報明細：觸發時間、觸發參數、偏離倍數\n- `eqp.get_sensor_trend(eqp_id, hours)` — 感測器趨勢，看水壓與過濾器壓差的走勢\n- `spc.get_recipe_stats(recipe_id)` — 配方統計，只有要排除製程端因素時才需要\n\n三支都是唯讀。開單、停機、換件、通知廠務都要人自己去做 —— 這份沒有寫入工具，也不會有。\n\n## 研判步驟\n每一步都要把取到的數值寫進回答，不要只寫結論。\n\n1. **先確認警報是真的**\n   呼叫 `fdc.get_alarm_detail`，取觸發時間與當下水壓值。\n   - 查不到該筆警報 → 停下來回報，不要用機台歷史湊一個看起來合理的解釋\n\n2. **看水壓的變化形態** — `eqp.get_sensor_trend(eqp_id, hours=2)`\n  - 持續下滑、中間沒有回彈 → 傾向**水路阻塞**\n  - 上下跳動、振幅超過 0.03 MPa 但沒有趨勢 → 傾向**感測器老化**\n  - 兩種形態都不明顯 → 先不下結論，往第 3 步\n\n3. **看過濾器壓差** — 同一支工具取壓差通道\n  - 壓差 **> 0.05 MPa** → 直接判阻塞\n  - 這個門檻比壓力形態可靠，兩者衝突時以壓差為準，並在回答裡寫明是用哪一項推翻哪一項\n\n4. **交叉驗證再下結論**\n   取近 7 天同碼警報次數與上次過濾器清洗日期。\n   **三項一致才下結論**；只有一項支持時降級成「傾向」，並列出還缺哪一項。\n\n5. **前兩者都不明確才看循環泵**\n   泵葉輪磨損通常伴隨流量同步下降；只有壓力掉而流量沒動的，多半不是泵。\n\n## 回答一定要包含\n1. **結論與把握程度** — 判成什麼、有幾項數據支持（例如「水路阻塞，3 項一致」）\n2. **每個數字的來源** — 哪一支工具、什麼時間取的，讓看的人可以自己回查\n3. **排除了什麼** — 哪些假設被排除、憑哪一項數據排除\n4. **建議動作與執行位置** — 要做什麼、在哪個系統做、該由誰執行\n5. **責任聲明** — 這是研判建議，不是核准流程\n\n第 2、3 點最容易被略過，也最重要：**沒有依據與排除過程，研判就沒辦法被別人檢查**，出事時也沒有東西可以回溯。\n\n## 停下來不要硬判的情況\n- 取不到水壓趨勢 → 不要拿同型機台的數據代替，直接說缺這一項\n- 壓差與壓力形態指向不同結論 → 明說矛盾在哪，不要挑一個順眼的\n- 只取得到一項數據 → 回「資料不足以判斷」，並列出還需要什麼\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。\n實際處置（開單、停機、換件）須由人執行，或改走已核准的 Flow。本 Skill 只有唯讀工具，不會也不能異動任何系統。',
+          description: '# ERR-4421 冷卻異常研判\n\n## 什麼時候用這份\nCMP 機台觸發 ERR-4421（冷卻水路壓力低於 0.15 MPa）時使用。\n\n## 什麼時候不用這份\n非 ERR-4421 的冷卻相關警報不適用，請改查對應的異常排除文件。\n爐管等非 CMP 機台一律不適用，即使警報碼相同 —— 水路架構不同，判斷依據也不同。\n\n## 可以動用的工具\n- `fdc.get_alarm_detail(alarm_id)` — 警報明細：觸發時間、觸發參數、偏離倍數\n- `eqp.get_sensor_trend(eqp_id, hours)` — 感測器趨勢，看水壓與過濾器壓差的走勢\n- `spc.get_recipe_stats(recipe_id)` — 配方統計，只有要排除製程端因素時才需要\n\n三支都是唯讀。開單、停機、換件、通知廠務都要人自己去做 —— 這份沒有寫入工具，也不會有。\n\n## 研判步驟\n每一步都要把取到的數值寫進回答，不要只寫結論。\n\n1. **先確認警報是真的**\n   呼叫 `fdc.get_alarm_detail`，取觸發時間與當下水壓值。\n   - 查不到該筆警報 → 停下來回報，不要用機台歷史湊一個看起來合理的解釋\n\n2. **看水壓的變化形態** — `eqp.get_sensor_trend(eqp_id, hours=2)`\n  - 持續下滑、中間沒有回彈 → 傾向**水路阻塞**\n  - 上下跳動、振幅超過 0.03 MPa 但沒有趨勢 → 傾向**感測器老化**\n  - 兩種形態都不明顯 → 先不下結論，往第 3 步\n\n3. **看過濾器壓差** — 同一支工具取壓差通道\n  - 壓差 **> 0.05 MPa** → 直接判阻塞\n  - 這個門檻比壓力形態可靠，兩者衝突時以壓差為準，並在回答裡寫明是用哪一項推翻哪一項\n\n4. **交叉驗證再下結論**\n   取近 7 天同碼警報次數與上次過濾器清洗日期。\n   **三項一致才下結論**；只有一項支持時降級成「傾向」，並列出還缺哪一項。\n\n5. **前兩者都不明確才看循環泵**\n   泵葉輪磨損通常伴隨流量同步下降；只有壓力掉而流量沒動的，多半不是泵。\n\n## 回答一定要包含\n1. **結論與把握程度** — 判成什麼、有幾項數據支持（例如「水路阻塞，3 項一致」）\n2. **每個數字的來源** — 哪一支工具、什麼時間取的，讓看的人可以自己回查\n3. **排除了什麼** — 哪些假設被排除、憑哪一項數據排除\n4. **建議動作與執行位置** — 要做什麼、在哪個系統做、該由誰執行\n5. **責任聲明** — 這是研判建議，不是核准流程\n\n第 2、3 點最容易被略過，也最重要：**沒有依據與排除過程，研判就沒辦法被別人檢查**，出事時也沒有東西可以回溯。\n\n## 停下來不要硬判的情況\n- 取不到水壓趨勢 → 不要拿同型機台的數據代替，直接說缺這一項\n- 壓差與壓力形態指向不同結論 → 明說矛盾在哪，不要挑一個順眼的\n- 只取得到一項數據 → 回「資料不足以判斷」，並列出還需要什麼\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。\n實際處置（開單、停機、換件）須由人執行，或改走已核准的 Codify。本 Skill 只有唯讀工具，不會也不能異動任何系統。',
           sourceKM: 'Confluence · ETC 設備課 / 異常排除指引',
           importedAt: '2026-05-06',
           importedBy: '吳志豪',
@@ -799,7 +799,7 @@ const PERSONAS = {
                   { kind: 'match', text: 'E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'fdc.get_alarm_detail', label: '查警報明細', params: 'alarm_id=AL-20260727-118', allowed: true, result: '冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa' },
                   { kind: 'tool', tool: 'eqp.get_sensor_trend', label: '查感測器趨勢', params: 'eqp_id=E-101, hours=2', allowed: true, result: '水壓由 0.19 緩降至 0.11，中間無回彈；流量未同步下降' },
-                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：冷卻水路阻塞，3 項數據一致。**\n\n依據：過濾器壓差 0.07 MPa（門檻 0.05，FDC 03:12 取）；近 2 小時水壓由 0.19 緩降至 0.11、中間無回彈（設備監控 03:12 取）；近 7 天同碼警報 3 次、上次濾芯清洗為 42 天前。\n排除：壓力形態為持續下滑而非跳動 → 排除感測器老化；流量未同步下降 → 排除循環泵葉輪磨損。\n\n建議動作：先執行冷卻水路疏通程序；若 30 分鐘內壓力未回升，再到工單系統開緊急工單（內容已擬好可直接複製）。開單與疏通都要由你執行 —— 我只有唯讀工具。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -831,7 +831,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'E-101 屬 CMP、警報碼 ERR-4421 —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'fdc.get_alarm_detail', label: '查警報明細', params: 'alarm_id=AL-20260727-118', allowed: true, result: '冷卻水壓 0.11 MPa、過濾器壓差 0.07 MPa' },
-                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101, level=urgent', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_urgent_order', label: '開立緊急工單', params: 'eqp_id=E-101, level=urgent', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '緊急工單我不能代為開立 —— 這份 Skill 只有唯讀工具。\n\n以下是可以直接貼上的工單內容：\n· 機台 E-101 · 異常碼 ERR-4421 · 等級：緊急\n· 現象：冷卻水壓 0.11 MPa（門檻 0.15），過濾器壓差 0.07 MPa（門檻 0.05）\n· 初判：冷卻水路阻塞，建議先執行疏通程序\n\n請由你在工單系統送出。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -858,12 +858,12 @@ const PERSONAS = {
           approvedBy: '林課長',
         },
 
-        /* ── Flow（唯讀）：交接報告 —— 零 LLM、可排程、跳過 Pilot Run ── */
+        /* ── Codify（唯讀）：交接報告 —— 零 LLM、可排程、跳過 Pilot Run ── */
         {
           id: 'sm-eq-007',
           title: '整理當班交接報告',
           purpose: '每班結束前彙整稼動、異常與待交接事項，產出交接報告。',
-          description: '每天固定要做三次的彙整工作，步驟每次都一樣、結果可以重現，所以做成 Flow 並掛上排程。\n\n流程大意：取當班機台稼動資料與同時段警報並分級，接著計算稼動率與異常密度，取未結案 Case 與待交接事項，最後套用課內的交接報告格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。產出會直接置頂在首頁佈告欄，交班 Modal 也會拿同一份預填。',
+          description: '每天固定要做三次的彙整工作，步驟每次都一樣、結果可以重現，所以做成 Codify 並掛上排程。\n\n流程大意：取當班機台稼動資料與同時段警報並分級，接著計算稼動率與異常密度，取未結案 Case 與待交接事項，最後套用課內的交接報告格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。產出會直接置頂在首頁佈告欄，交班 Modal 也會拿同一份預填。',
           sourceKM: '對話式建立 · 未從 KM 引入',
           importedAt: '2026-05-12',
           importedBy: '王志明',
@@ -933,7 +933,7 @@ const PERSONAS = {
           approvedBy: '林課長',
         },
 
-        /* ── Flow（含寫入）：走完 Pilot Run；排程執行到寫入步驟會暫停等人。
+        /* ── Codify（含寫入）：走完 Pilot Run；排程執行到寫入步驟會暫停等人。
               Chat 情境 1 就是這一份的執行過程。 ── */
         {
           id: 'sm-eq-008',
@@ -1029,7 +1029,7 @@ const PERSONAS = {
           toolRuns: [
             { tool: 'fdc.get_alarm_detail',     label: '查警報明細',   mode: 'read',  allowed: true,  result: '取得 1 筆：冷卻水壓 0.11 MPa、過濾器壓差 0.07 MPa' },
             { tool: 'eqp.get_sensor_trend',     label: '查感測器趨勢', mode: 'read',  allowed: true,  result: '近 2 小時水壓緩降，非跳動' },
-            { tool: 'mes.create_urgent_order',  label: '開立緊急工單', mode: 'write', allowed: false, reason: '本 Skill 類型為 Guide，不可異動系統', result: '已拒絕 → 改為建議' },
+            { tool: 'mes.create_urgent_order',  label: '開立緊急工單', mode: 'write', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
           ],
         },
         { role: 'user', text: '冷卻水路阻塞通常多久會再發生？' },
@@ -1122,10 +1122,10 @@ const PERSONAS = {
         { q: 'CP 值低於 1.33 時應該採取什麼行動？', a: 'CP < 1.33 屬警戒狀態：立即通知 Section Admin、啟動根因分析、暫停批量生產直到 CP 恢復 ≥ 1.67。', contributor: '鄭志明', date: '今天', sourceSOP: 'SPC 管制圖異常處置 Skill v2.0' },
         { q: 'DCR 申請需要準備哪些文件？', a: '必要文件：(1)變更原因說明 (2)影響評估報告 (3)驗證計畫 (4)回復計畫。跨 Section 異動需額外附 Fab Admin 核可。', contributor: '黃怡君', date: '04/07', sourceSOP: '製程變更管制程序 Skill v3.1' },
       ],
-      /* ── Skill 管理只放「Guide」與「Flow」兩種。
+      /* ── Skill 管理只放「Skill」與「Codify」兩種。
             純文件性質的內容已於 2026-07-26 移出至 data/knowledge.js ── */
       sopManagement: [
-        /* ── Guide（Draft）：良率異常每次長得不一樣 ── */
+        /* ── Skill（Draft）：良率異常每次長得不一樣 ── */
         {
           id: 'sm-pr-008',
           title: '良率異常根因研判',
@@ -1195,7 +1195,7 @@ const PERSONAS = {
                 input: '幫我把研磨時間加長 5 秒',
                 steps: [
                   { kind: 'match', text: 'CMP-03 站點 —— 符合本 Skill 適用範圍' },
-                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=CMP-03, polish_time=+5s', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=CMP-03, polish_time=+5s', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '製程參數我不能代為變更 —— 這份 Skill 只有唯讀工具，任何參數調整都必須走 DCR 程序。\n\n而且以目前的資料還不該調：量測問題還沒排除（這一批沒有重測值），現在調研磨時間可能是在補一個不存在的問題。\n\n建議動作：先重測；若確認不是量測問題且要調參數，我可以幫你把變更理由與佐證數據整理成 DCR 需要的格式，由你送出。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -1210,12 +1210,12 @@ const PERSONAS = {
           },
         },
 
-        /* ── Flow（唯讀）：Qualification 驗證報告，簽核中 ── */
+        /* ── Codify（唯讀）：Qualification 驗證報告，簽核中 ── */
         {
           id: 'sm-pr-003',
           title: 'Recipe Qualification 驗證報告',
           purpose: '新配方三批試跑完成後，自動彙整量測數據並產出 Qualification 驗證報告。',
-          description: '新 Recipe 或關鍵參數變更後的驗證報告，過去要工程師從三個系統抄數據再手算 Cpk，容易抄錯也很花時間。\n\n流程大意：取指定配方的三批試跑量測數據，接著計算膜厚均勻性、研磨率穩定性與跨批次 Cpk，然後比對驗證規範的四項門檻，最後套用課內的驗證報告格式輸出。\n\n全程只讀取資料、不異動任何系統。報告產出後仍須由人提交 Section Admin 審核，本 Flow 不會代為送審。',
+          description: '新 Recipe 或關鍵參數變更後的驗證報告，過去要工程師從三個系統抄數據再手算 Cpk，容易抄錯也很花時間。\n\n流程大意：取指定配方的三批試跑量測數據，接著計算膜厚均勻性、研磨率穩定性與跨批次 Cpk，然後比對驗證規範的四項門檻，最後套用課內的驗證報告格式輸出。\n\n全程只讀取資料、不異動任何系統。報告產出後仍須由人提交 Section Admin 審核，本 Codify 不會代為送審。',
           sourceKM: 'Confluence · ETC 製程課 / 製程文件',
           importedAt: '2026-04-08',
           importedBy: '李佳穎',
@@ -1261,7 +1261,7 @@ const PERSONAS = {
                 { label: '跨批 Cpk',   value: '1.68', unit: '',      note: '門檻 ≥1.33，通過' },
               ],
               situation: 'R-518 三批試跑（L2301/L2302/L2303）四項驗證指標全數通過。顆粒污染 32 顆/cm²（門檻 <50）。',
-              pending: '• 報告已產出，需由工程師提交 Section Admin 審核。本 Flow 不會代為送審。',
+              pending: '• 報告已產出，需由工程師提交 Section Admin 審核。本 Codify 不會代為送審。',
             },
             calculations: [
               { stepNum: 3, label: '膜厚均勻性 1.6%', how: '3σ ÷ mean = 3×0.0142 ÷ 2.68（本課以 3σ/mean 計，非 range/mean）', from: '步驟 1 的 45 點量測值', custom: true },
@@ -1279,7 +1279,7 @@ const PERSONAS = {
           ],
         },
 
-        /* ── Flow（含寫入）：跨站通報，走完 Pilot Run ── */
+        /* ── Codify（含寫入）：跨站通報，走完 Pilot Run ── */
         {
           id: 'sm-pr-004',
           title: '製程異常跨站通報',
@@ -1347,7 +1347,7 @@ const PERSONAS = {
           ],
         },
 
-        /* ── Flow（唯讀）：每日 SPC 巡檢摘要，已生效 ── */
+        /* ── Codify（唯讀）：每日 SPC 巡檢摘要，已生效 ── */
         {
           id: 'sm-pr-007',
           title: '每日 SPC 巡檢摘要',
@@ -1412,7 +1412,7 @@ const PERSONAS = {
           approvedBy: '李佳穎',
         },
 
-        /* ── Guide：CP 值趨勢每次長得不一樣，沒有標準流程可套 ── */
+        /* ── Skill：CP 值趨勢每次長得不一樣，沒有標準流程可套 ── */
         {
           id: 'sm-pr-006',
           title: 'CP 值下滑趨勢研判',
@@ -1458,7 +1458,7 @@ const PERSONAS = {
                   { kind: 'tool', tool: 'spc.get_trend', label: '查 SPC 趨勢', params: 'station=R-512, days=30', allowed: true, result: '近 30 天連續 9 點同側（Nelson Rule 2），下滑起點 03/29' },
                   { kind: 'tool', tool: 'recipe.get_version', label: '查配方版本紀錄', params: 'station=R-512', allowed: true, result: 'v4.1 → v4.2（03/28 壓力上限 4.0 → 4.2 torr）' },
                   { kind: 'tool', tool: 'mes.get_lot_history', label: '查批號履歷', params: 'station=R-512, days=30', allowed: true, result: '同期間原料批號無切換' },
-                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：傾向配方變更造成，2 項數據支持，材料端已排除。**\n\n依據：CP 值 1.82 → 1.41，下滑起點 03/29（SPC 16:38 取）；配方 v4.1 → v4.2 壓力上限由 4.0 調升至 4.2，時間 03/28（Recipe 管理 16:39 取）；同期間原料批號無切換（MES 16:39 取）。\n時間軸比對：下滑起點落在配方變更後第 1 天，兩事件未重疊、可以分得開。\n排除：材料端同期無異動 → 排除原料；單站獨有、其他站點同期無徵兆 → 設備端優先度降低。\n\n建議動作：先做 Process Window Study 驗證壓力影響，確認後走 DCR 回調參數。DCR 須由你送出 —— 我不能也不會代為變更參數。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -1490,7 +1490,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'R-512 —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'recipe.get_version', label: '查配方版本紀錄', params: 'station=R-512', allowed: true, result: '目前 v4.2，壓力上限 4.2 torr' },
-                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'recipe.update_param', label: '調整配方參數', params: 'station=R-512, pressure=4.0', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '參數我不能代為變更 —— 這份 Skill 只有唯讀工具，任何變更都必須走 DCR 程序。\n\n以下是 DCR 需要的內容，我可以先幫你整理好：\n· 變更項目：R-512 壓力上限 4.2 → 4.0 torr（回到 v4.1 設定）\n· 變更理由：CP 值於配方切換後第 1 天由 1.82 降至 1.41\n· 佐證：SPC 近 30 天趨勢、Recipe 版本紀錄、同期原料無切換\n\n請由你送出 DCR。\n（以上為依課上指引的研判建議，不是核准流程，責任在執行者。）',
                 vary: [
@@ -1611,7 +1611,7 @@ const PERSONAS = {
         { q: '產能落後超過 5% 時第一步應該做什麼？', a: '立即通知生產線組長啟動「產能落後緊急應變程序」：(1)確認落後原因(設備/人員/材料) (2)評估可補救產能 (3)30 分鐘內向部長回報。', contributor: '陳建宏', date: '今天', sourceSOP: '產能落後緊急應變程序 Skill v1.8' },
         { q: 'MES 工單優先序異動需要誰核准？', a: 'P1 急單由部長核准；P2 一般優先序調整由組長核准；P3 非急單調整工程師自行決策後回報。', contributor: '林組長', date: '04/06', sourceSOP: null },
       ],
-      /* ── Skill 管理只放「Guide」與「Flow」兩種。
+      /* ── Skill 管理只放「Skill」與「Codify」兩種。
             純文件性質的內容已於 2026-07-26 移出至 data/knowledge.js ── */
       sopManagement: [
         {
@@ -1684,7 +1684,7 @@ const PERSONAS = {
                 input: '幫我把 W26-031 在 MES 上調到第一順位',
                 steps: [
                   { kind: 'match', text: 'W26-031 屬 LINE-1 —— 符合本 Skill 適用範圍' },
-                  { kind: 'tool', tool: 'mes.update_priority', label: '調整工單順序', params: 'lot_id=W26-031, priority=1', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.update_priority', label: '調整工單順序', params: 'lot_id=W26-031, priority=1', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: 'MES 上的工單順序我不能代為異動 —— 這份 Skill 只有唯讀工具。\n\n建議順序與理由：W26-031 排第一（今日到期客戶急單，第 1 層交期即分出先後）。\n請由你在 MES 的工單排序畫面調整。\n\n（以上為依課上指引的建議順序，不是核准流程；責任仍在下決定的組長。）',
                 vary: [
@@ -1711,12 +1711,12 @@ const PERSONAS = {
           ],
         },
 
-        /* ── Flow（含寫入）：停機通報，走完 Pilot Run ── */
+        /* ── Codify（含寫入）：停機通報，走完 Pilot Run ── */
         {
           id: 'sm-mfg-004',
           title: '停機跨班通報與記錄',
           purpose: '停機超過 1 小時時，自動整理影響評估、登錄 MES 並通報接班人員。',
-          description: '停機事件的通報與記錄，過去要組長在三個系統之間手動搬資料，這份 Flow 把它收成一次執行。\n\n流程大意：先取停機事件與預計時長，接著算出對當班產能的影響與受影響批號清單，然後在 MES 登錄停機原因代碼，最後通報 Section Lead 與接班班組。\n\n登錄 MES 與發送通報這兩步會異動系統，執行到那兩步一定會停下來等人確認，排程執行也一樣。',
+          description: '停機事件的通報與記錄，過去要組長在三個系統之間手動搬資料，這份 Codify 把它收成一次執行。\n\n流程大意：先取停機事件與預計時長，接著算出對當班產能的影響與受影響批號清單，然後在 MES 登錄停機原因代碼，最後通報 Section Lead 與接班班組。\n\n登錄 MES 與發送通報這兩步會異動系統，執行到那兩步一定會停下來等人確認，排程執行也一樣。',
           sourceKM: 'Confluence · 製造課 / 設備管理',
           importedAt: '2026-04-02',
           importedBy: '林組長',
@@ -1779,12 +1779,12 @@ const PERSONAS = {
           ],
         },
 
-        /* ── Flow（唯讀）：日報彙整，已掛排程 sch-mf-002 ── */
+        /* ── Codify（唯讀）：日報彙整，已掛排程 sch-mf-002 ── */
         {
           id: 'sm-mfg-005',
           title: '生產日報彙整',
           purpose: '每日 20:00 自動彙整三線產出、停機與異常，產出標準格式日報。',
-          description: '每天固定要做的彙整工作，步驟每次都一樣、結果可以重現，所以做成 Flow 並掛上排程。\n\n流程大意：從 MES 取當日三線產出（批號、數量、良率），取停機記錄與異常事件，接著計算 OEE 與目標達成率，最後套用課內的日報格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。',
+          description: '每天固定要做的彙整工作，步驟每次都一樣、結果可以重現，所以做成 Codify 並掛上排程。\n\n流程大意：從 MES 取當日三線產出（批號、數量、良率），取停機記錄與異常事件，接著計算 OEE 與目標達成率，最後套用課內的日報格式輸出。\n\n全程只讀取資料、不異動任何系統，所以排程時間到就會有產出，不需要人在場。',
           sourceKM: 'Confluence · 製造課 / 日常管理',
           importedAt: '2026-03-01',
           importedBy: '陳建宏',
@@ -1850,7 +1850,7 @@ const PERSONAS = {
           approvedBy: '吳部長',
         },
 
-        /* ── Guide：產能落後每次原因不同，沒有標準流程可套 ── */
+        /* ── Skill：產能落後每次原因不同，沒有標準流程可套 ── */
         {
           id: 'sm-mfg-006',
           title: '產能落後根因研判',
@@ -1893,7 +1893,7 @@ const PERSONAS = {
                   { kind: 'tool', tool: 'line.get_throughput', label: '查產線產出', params: 'line=LINE-3', allowed: true, result: '逐小時拆解：13:00–15:00 產出趨近 0，其餘時段接近標準' },
                   { kind: 'tool', tool: 'eqp.list_downtime', label: '查停機記錄', params: 'line=LINE-3, days=1', allowed: true, result: '13:00 起傳送帶異常停機 1.8 h' },
                   { kind: 'tool', tool: 'mes.get_changeover', label: '查換線與待料', params: 'line=LINE-3', allowed: true, result: '換線 2 次、逾時 22 分；待料 0' },
-                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '**研判：主因為設備停機，可解釋 78% 的缺口。**\n\n逐小時對照：08–13 時接近目標（每小時 32–35 片），13–15 時幾乎停擺（每小時 4 片）—— 不是整日平均落後 8%。\n缺口拆解：總缺口 78 片。停機 61 片（1.8 h × 34 片/h，設備監控 15:38 取）占 78%；換線逾時 9 片占 12%（MES 15:39 取）；待料 0；**未解釋 8 片占 10%**。\n排除：出勤與人力配置與昨日相同 → 人員因素優先度最低。\n\n建議動作：今晚加班 1.5 h 可補回約 51 片。加班單須經課長核准並由你在系統送出 —— 我無法代為開立。\n（以上為根因假設與補救方向建議，不是核准流程，責任仍在執行者。）',
                 vary: [
@@ -1925,7 +1925,7 @@ const PERSONAS = {
                 steps: [
                   { kind: 'match', text: 'LINE-3 屬 LINE —— 符合本 Skill 適用範圍' },
                   { kind: 'tool', tool: 'line.get_throughput', label: '查產線產出', params: 'line=LINE-3', allowed: true, result: '今日缺口 78 片，剩餘班別時數 1.2 h' },
-                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' },
+                  { kind: 'tool', tool: 'mes.create_overtime', label: '開立加班單', params: 'line=LINE-3, hours=1.5', allowed: false, reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' },
                 ],
                 answer: '加班單我不能代為開立 —— 這份 Skill 只有唯讀工具。\n\n以下是可以直接貼上的加班申請內容：\n· 產線 LINE-3 · 建議時數 1.5 h · 預估補回 51 片\n· 事由：13:00 起傳送帶異常停機 1.8 h，造成今日缺口 78 片\n\n加班須經課長核准，請由你在系統送出。\n（以上為補救方向建議，不是核准流程，責任仍在執行者。）',
                 vary: [
@@ -2004,7 +2004,7 @@ const PERSONAS = {
    KNOWLEDGE — 課上的知識文件
 
    2026-07-26 PO 決議：知識從 Skill 管理拆出來獨立。
-   理由：知識管理是單獨的一件事，在 Guide / Flow 執行前後都會被引用，
+   理由：知識管理是單獨的一件事，在 Skill / Codify 執行前後都會被引用，
    不該被當成與它們平行的第三條路線。
    （此決議推翻 brain/concepts/agent-skill-tiering.md
      「三種類型放同一管理頁」那一條，該頁已回填。）
@@ -2086,7 +2086,7 @@ const KNOWLEDGE_DOCS = {
       status: 'published',
       tags: ['ERR-4421', '冷卻系統', '異常排除'],
       usage: 41,
-      /* 這一份被 Guide Skill 引用 —— 知識不是平行路線，是被引用的底料 */
+      /* 這一份被 Skill 引用 —— 知識不是平行路線，是被引用的底料 */
       usedBy: [
         { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
       ],
@@ -2343,7 +2343,7 @@ function getKnowledgeDocs(personaKey) {
   return KNOWLEDGE_DOCS[personaKey] || [];
 }
 
-/* Skill／Flow 詳情頁的「引用知識」用：由 id 取回標題與狀態 */
+/* Skill／Codify 詳情頁的「引用知識」用：由 id 取回標題與狀態 */
 function findKnowledgeDoc(personaKey, docId) {
   return getKnowledgeDocs(personaKey).filter(function(d) { return d.id === docId; })[0] || null;
 }
@@ -2357,10 +2357,10 @@ function findKnowledgeDoc(personaKey, docId) {
    2026-07-26 PO 指定。對話標題直接就是該情境的目標，
    讓 demo 時「這串在演什麼」不需要另外解釋。
 
-   ① Flow 執行 · 人工介入 · 順利完成
-   ② Flow 執行 · 人工介入 · API 變更導致 codify 失效
+   ① Codify 執行 · 人工介入 · 順利完成
+   ② Codify 執行 · 人工介入 · API 變更導致 codify 失效
    ③ 輔助問答 · 給明確建議 · 婉拒代為執行並給操作入口
-   ④ 單純問答（有知識，無 Skill／Flow）
+   ④ 單純問答（有知識，無 Skill／Codify）
    ⑤ 單純問答（無知識）→ 收斂成一張追蹤任務
 
    ── 腳本播放模型 ──
@@ -2383,12 +2383,12 @@ function findKnowledgeDoc(personaKey, docId) {
      { role: 'user', text }
      { role: 'ai',
        mode:  'approved' | 'guided' | 'general',   // 三態徽章
-       skill: { id, title, tier },                  // 命中的 Skill／Flow
+       skill: { id, title, tier },                  // 命中的 Skill／Codify
        plan:  { title, items: [{ key, skillId, title, tier }] },  // 宣告計畫（開跑前）
        knowledge: [{ id, title }],                  // 引用的知識文件
        text,                                        // 主要回應（無氣泡，全寬）
-       run:      { title, steps: [...] },           // Flow 執行進度 → 對話流只顯示步驟名
-       evidence: { title, steps: [...] },           // Guide 查過的數據 → 只進右側面板
+       run:      { title, steps: [...] },           // Codify 執行進度 → 對話流只顯示步驟名
+       evidence: { title, steps: [...] },           // Skill 查過的數據 → 只進右側面板
        blocked:  { label, tool, reason },           // 被 Tool Gateway 擋下的寫入請求
        result:   { variant, title, lines: [] },     // 結果卡
        links:    [{ label, url }],                  // 操作入口（只渲染 label 成按鈕）
@@ -2404,10 +2404,10 @@ const CHAT_SCENARIOS = {
   /* ══════════════ ETC 設備課 ══════════════ */
   equipment: [
 
-    /* ── 情境 1：Flow 執行 · 人工介入 · 順利完成 ── */
+    /* ── 情境 1：Codify 執行 · 人工介入 · 順利完成 ── */
     {
       id: 'sc-eq-1',
-      title: '一句話要跑兩份 Flow（中途需人工確認）',
+      title: '一句話要跑兩份 Codify（中途需人工確認）',
       goal: 'Orchestrator 開跑前宣告 2 項計畫 → 第 1 項寫入步驟停下 → 確認開單 → 自動接第 2 項',
       time: '今天 07:52',
       turns: [
@@ -2425,9 +2425,9 @@ const CHAT_SCENARIOS = {
               { key: 'p2', skillId: 'sm-eq-007', title: '整理當班交接報告',   tier: 'sop' },
             ],
           },
-          text: '這件事要跑兩份已核准的 Flow，計畫列在右側面板了。已比對適用範圍（CMP／ETCH、ETC-2F 與 3F），先執行第 1 份。',
+          text: '這件事要跑兩份已核准的 Codify，計畫列在右側面板了。已比對適用範圍（CMP／ETCH、ETC-2F 與 3F），先執行第 1 份。',
           run: {
-            title: 'Flow 執行中',
+            title: 'Codify 執行中',
             steps: [
               { num: 1, label: '查詢今日 SPC 資料', tool: 'spc.query_daily', io: 'read', status: 'ok', detail: '取得 07:00–07:50 量測資料 12 筆' },
               { num: 2, label: '篩選 OOC 異常項目', io: 'compute', status: 'ok', detail: '超出管制線 2 筆 + 連續 3 點同側 1 筆 = 3 筆（本課自訂條件）' },
@@ -2442,7 +2442,7 @@ const CHAT_SCENARIOS = {
           text: '工單內容已依 3 筆異常擬好，需要你確認要不要開單。',
           sheet: {
             title: '需要你決定下一步',
-            desc: '「開立異常工單」會異動 Case Center。不論這份 Flow 是手動執行還是排程執行，跑到這一步都會停下來等人。',
+            desc: '「開立異常工單」會異動 Case Center。不論這份 Codify 是手動執行還是排程執行，跑到這一步都會停下來等人。',
             context: [
               { label: '異常筆數', value: '3 筆（E-308 ×3）' },
               { label: '擬開工單', value: '1 張 · P2 · 指派值班 EE' },
@@ -2460,7 +2460,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-eq-008', title: 'SPC 異常日報與開單', tier: 'sop' },
                   text: '已完成。工單與通知都送出了，本次執行的完整紀錄可以匯出帶進交班。',
                   run: {
-                    title: 'Flow 執行完成',
+                    title: 'Codify 執行完成',
                     steps: [
                       { num: 3, label: '開立異常工單', tool: 'case_center.create_case', io: 'write', status: 'ok', detail: '已開立 #CS-20260726-014' },
                       { num: 4, label: '發送通知給值班 EE', tool: 'notify.send_to_duty', io: 'write', status: 'ok', detail: '已通知 張文凱（當班 EE）' },
@@ -2472,7 +2472,7 @@ const CHAT_SCENARIOS = {
                     lines: [
                       '對象：E-308 · Chamber A 氣體流量',
                       '優先序：P2 · 指派：張文凱',
-                      '來源：SPC 異常日報與開單（已核准 Flow）',
+                      '來源：SPC 異常日報與開單（已核准 Codify）',
                     ],
                   },
                   links: [
@@ -2488,9 +2488,9 @@ const CHAT_SCENARIOS = {
                   role: 'ai',
                   mode: 'approved',
                   skill: { id: 'sm-eq-008', title: 'SPC 異常日報與開單', tier: 'sop' },
-                  text: '好，這次不開單。3 筆異常已記錄在今日 SPC 日報中，步驟 3、4 標記為「人工略過」。\n\n略過原因會回報給這份 Flow 的 owner（陳育民）。如果同一個步驟一直被略過，通常代表流程和實際狀況對不上，值得回頭改。',
+                  text: '好，這次不開單。3 筆異常已記錄在今日 SPC 日報中，步驟 3、4 標記為「人工略過」。\n\n略過原因會回報給這份 Codify 的 owner（陳育民）。如果同一個步驟一直被略過，通常代表流程和實際狀況對不上，值得回頭改。',
                   run: {
-                    title: 'Flow 執行結束（部分略過）',
+                    title: 'Codify 執行結束（部分略過）',
                     steps: [
                       { num: 3, label: '開立異常工單', tool: 'case_center.create_case', io: 'write', status: 'skip', detail: '人工略過' },
                       { num: 4, label: '發送通知給值班 EE', tool: 'notify.send_to_duty', io: 'write', status: 'skip', detail: '人工略過' },
@@ -2503,7 +2503,7 @@ const CHAT_SCENARIOS = {
         },
 
         /* ── 計畫的第 2 項：不需要使用者再開口，決策卡結束後自動接上 ──
-           sm-eq-007 是純唯讀、不會停下來的 Flow，正好對比出
+           sm-eq-007 是純唯讀、不會停下來的 Codify，正好對比出
            「第 1 項停過一次要人確認、第 2 項一路跑完」。 */
         {
           role: 'ai',
@@ -2511,7 +2511,7 @@ const CHAT_SCENARIOS = {
           skill: { id: 'sm-eq-007', title: '整理當班交接報告', tier: 'sop' },
           text: '接著跑計畫的第 2 項。這份全程只讀資料、不動任何系統，中途不會停下來問你。',
           run: {
-            title: 'Flow 執行中',
+            title: 'Codify 執行中',
             steps: [
               { num: 1, label: '取當班機台稼動資料', tool: 'eqp.get_uptime', io: 'read', status: 'ok', detail: '12 台機台 · 08:00–15:30' },
               { num: 2, label: '取同時段警報並分級', tool: 'fdc.list_alarms', io: 'read', status: 'ok', detail: '警報 5 件（Level-2 ×1）' },
@@ -2536,11 +2536,11 @@ const CHAT_SCENARIOS = {
       ],
     },
 
-    /* ── 情境 2：Flow 執行 · 人工介入 · API 變更導致 codify 失效 ── */
+    /* ── 情境 2：Codify 執行 · 人工介入 · API 變更導致 codify 失效 ── */
     {
       id: 'sc-eq-2',
-      title: '執行 FDC 快速反應 Flow（API 變更導致失效）',
-      goal: '呼叫 Flow → 人工確認 → 開單失敗 → AI 指出根因與修復方向',
+      title: '執行 FDC 快速反應 Codify（API 變更導致失效）',
+      goal: '呼叫 Codify → 人工確認 → 開單失敗 → AI 指出根因與修復方向',
       time: '今天 10:38',
       turns: [
         { role: 'user', text: 'E-308 剛跳 FDC 警報，幫我跑 FDC 異常快速反應流程。' },
@@ -2548,16 +2548,16 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
-          /* 單一 Flow 的計畫也照樣宣告 —— 面板永遠是同一個位置回答同一個問題 */
+          /* 單一 Codify 的計畫也照樣宣告 —— 面板永遠是同一個位置回答同一個問題 */
           plan: {
             title: '跑 FDC 異常快速反應流程',
             items: [
               { key: 'p1', skillId: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
             ],
           },
-          text: 'E-308 屬 CMP、位於 ETC-3F，符合這份 Flow 的適用範圍，開始執行。',
+          text: 'E-308 屬 CMP、位於 ETC-3F，符合這份 Codify 的適用範圍，開始執行。',
           run: {
-            title: 'Flow 執行中',
+            title: 'Codify 執行中',
             steps: [
               { num: 1, label: '取警報明細與觸發參數', tool: 'fdc.get_alarm_detail', io: 'read', status: 'ok', detail: 'Chamber A 氣體流量，連續 3 點超 2σ，10:36 觸發' },
               { num: 2, label: '判定警報等級', io: 'compute', status: 'ok', detail: '判定為 Level-2（本課自訂條件）→ 不走隔離分支，直接進通報' },
@@ -2590,14 +2590,14 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
                   text: '開單失敗了，這不是你的操作問題。',
                   run: {
-                    title: 'Flow 執行中斷',
+                    title: 'Codify 執行中斷',
                     steps: [
                       { num: 5, label: '開立異常單並通報', tool: 'case_center.create_case', io: 'write', status: 'fail', detail: 'HTTP 400 · unknown field "severity"', reason: 'Case Center API 已於 07/24 升級至 v3，欄位 severity 改名為 priorityLevel，且新增必填欄位 impactScope' },
                     ],
                   },
                   result: {
                     variant: 'error',
-                    title: '工單未開立 —— 這份 Flow 的第 5 步已經失效',
+                    title: '工單未開立 —— 這份 Codify 的第 5 步已經失效',
                     lines: [
                       '標準元件「異常單開立 v2.1」是照 Case Center API v2 codify 的',
                       'Case Center 於 2026-07-24 升級到 v3，欄位定義改了',
@@ -2616,7 +2616,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
                   text: '好，步驟 5 標記為人工略過。提醒你 Level-2 的 10 分鐘通報時限仍然要算，記得手動通知林課長。',
                   run: {
-                    title: 'Flow 執行結束（部分略過）',
+                    title: 'Codify 執行結束（部分略過）',
                     steps: [
                       { num: 5, label: '開立異常單並通報', tool: 'case_center.create_case', io: 'write', status: 'skip', detail: '人工略過' },
                     ],
@@ -2631,7 +2631,7 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'approved',
           skill: { id: 'sm-eq-004', title: 'FDC 異常快速反應流程', tier: 'sop' },
-          text: '分兩件事處理，先顧眼前的警報，再修 Flow。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 Flow 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 Flow 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 Flow 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 Flow owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 Flow 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 Flow 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 Flow 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。\n\n要不要我把「標準元件升版 ＋ 盤點其他排程 Flow」列成一張追蹤任務？',
+          text: '分兩件事處理，先顧眼前的警報，再修 Codify。\n\n**現在（10 分鐘時限內）**\n手動開單並通報。工單內容我已經照 Codify 該產生的內容擬好，你在 Case Center 貼上即可 —— 這樣不會因為 Codify 壞掉而超過通報時限。\n\n**接下來（今天內）**\n這份 Codify 的第 5 步用的是平台標準元件「異常單開立 v2.1」，需要平台端出 v3.0 對應新 API。你可以做兩件事：\n\n1. 回報這個失效給 Codify owner（張文凱）與平台，讓標準元件升版\n2. 在升版完成前，把這份 Codify 從「已生效」降回 Testing，避免其他人跑到同一個坑\n\n另外提醒：這份 Codify 沒有掛排程，所以只有人手動跑才會發現。**已掛排程的 Codify 出現同樣問題會安靜地壞掉**，值得順手檢查一下課上其他有開單動作的排程。\n\n要不要我把「標準元件升版 ＋ 盤點其他排程 Codify」列成一張追蹤任務？',
           links: [
             { label: '手動開單', url: '/app/case-center/create?prefill=fdc-e308-20260726' },
             { label: '回報失效', url: '/app/skill/sm-eq-004/report-issue' },
@@ -2641,11 +2641,11 @@ const CHAT_SCENARIOS = {
         {
           role: 'ai',
           mode: 'general',
-          text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 Flow、升版後重跑一次 dry run 比對差異。',
+          text: '已建立任務 **#T-2026-0726-03「Case Center API v3 相容性檢修」**，指派給張文凱、副本給林課長，到期日設在後天。\n\n任務內容含三項：標準元件「異常單開立」升版至 v3.0、盤點課上其他引用該元件的 Codify、升版後重跑一次 dry run 比對差異。',
           result: {
             variant: 'success',
             title: '任務 #T-2026-0726-03 已建立',
-            lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 Flow 執行失敗紀錄'],
+            lines: ['指派：張文凱 · 副本：林課長', '到期：2026-07-28', '來源：本次 Codify 執行失敗紀錄'],
           },
           links: [
             { label: '開啟任務', url: '/app/tasks/T-2026-0726-03' },
@@ -2684,11 +2684,11 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'guided',
           skill: { id: 'sm-eq-006', title: 'ERR-4421 冷卻異常研判', tier: 'guided' },
-          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是 Guide 型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 下面那一行就是。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
+          text: '這個我不能幫你做，原因有兩個。\n\n**第一，權限上做不到。**\n我現在綁的是「ERR-4421 冷卻異常研判」，它是 Skill 型，只拿得到唯讀工具。我剛才確實試著呼叫了變更管制界限的工具，被擋下來了 —— 下面那一行就是。\n\n**第二，就算做得到也不該這樣做。**\n管制界限是用來反映製程實際能力的，水壓異常時放寬上限等於把警報關掉，異常還在。而且管制界限變更屬於製程參數異動，要走 DCR 程序，由製程課核准。\n\n**你要自己做的話，路徑是這樣：**\n\n1. 到 SPC Console 的管制界限設定頁（下面有直接連結，已帶好 E-101 與 CMP-Standard 配方）\n2. 填寫變更原因與影響評估，送出 DCR 申請\n3. 製程課 Section Admin 初審 → 課長核准 → 生效\n\n照目前的狀況，我建議先做冷卻水路疏通，**不要動管制界限** —— 界限沒問題，是水壓有問題。',
           blocked: {
             label: '變更 SPC 管制界限',
             tool: 'spc.update_control_limit',
-            reason: '本 Skill 類型為「Guide」，允許清單內只有唯讀工具',
+            reason: '類型為「Skill」，允許清單內只有唯讀工具',
           },
           links: [
             { label: '開啟 SPC Console', url: '/app/spc-console/limits?station=E-101&recipe=CMP-Standard' },
@@ -2698,11 +2698,11 @@ const CHAT_SCENARIOS = {
       ],
     },
 
-    /* ── 情境 4：單純問答（有知識、無 Skill／Flow） ── */
+    /* ── 情境 4：單純問答（有知識、無 Skill／Codify） ── */
     {
       id: 'sc-eq-4',
       title: 'E-405 爐管跳 ERR-7702 該怎麼處理',
-      goal: '無對應 Skill／Flow，依課上知識回答，只建議不執行',
+      goal: '無對應 Skill／Codify，依課上知識回答，只建議不執行',
       time: '昨天 21:05',
       turns: [
         { role: 'user', text: 'E-405 爐管跳 ERR-7702，這個要怎麼處理？' },
@@ -2735,13 +2735,13 @@ const CHAT_SCENARIOS = {
         {
           role: 'ai',
           mode: 'general',
-          text: '我查了課上所有的 Skill、Flow 與知識文件，**ERR-9105 完全沒有紀錄**。\n\n我也不打算靠猜的給你一個聽起來合理的答案 —— 半夜三點照著一個猜出來的步驟去動 CVD 機台，風險不對等。\n\n**現在可以做的**\n\n1. 問課上處理過 CVD 的資深同事。依課內的活動紀錄，陳育民與張文凱過去半年碰過 E-502 的異常最多。\n2. 若無人可問且警報持續，依《FDC 警報分級對照表》的通報原則升報 Section Admin，由課長決定是否停機。\n3. 查設備原廠手冊的 ERR-91xx 章節。\n\n**另外想跟你確認一件事**\n\n這次問不到不只是這一次的問題 —— 下一個值班的人半夜遇到一樣的狀況，還是會問不到。要不要我把這件事列成一張任務，追蹤到有人把 ERR-9105 的處理方式補進知識庫為止？',
+          text: '我查了課上所有的 Skill、Codify 與知識文件，**ERR-9105 完全沒有紀錄**。\n\n我也不打算靠猜的給你一個聽起來合理的答案 —— 半夜三點照著一個猜出來的步驟去動 CVD 機台，風險不對等。\n\n**現在可以做的**\n\n1. 問課上處理過 CVD 的資深同事。依課內的活動紀錄，陳育民與張文凱過去半年碰過 E-502 的異常最多。\n2. 若無人可問且警報持續，依《FDC 警報分級對照表》的通報原則升報 Section Admin，由課長決定是否停機。\n3. 查設備原廠手冊的 ERR-91xx 章節。\n\n**另外想跟你確認一件事**\n\n這次問不到不只是這一次的問題 —— 下一個值班的人半夜遇到一樣的狀況，還是會問不到。要不要我把這件事列成一張任務，追蹤到有人把 ERR-9105 的處理方式補進知識庫為止？',
         },
         { role: 'user', text: '好，幫我建一張追蹤任務。' },
         {
           role: 'ai',
           mode: 'general',
-          text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 Flow；如果每次要看現場數據判斷，就建成 Guide。到時候系統會提示。',
+          text: '已建立。任務內容我照這次的對話填好了，包含你問的原始問題與當下的機台狀態，補知識的人不用再回頭問你一次。\n\n知識補進來之後，如果 ERR-9105 的處理每次都長得一樣，可以直接從那份知識建一份 Codify；如果每次要看現場數據判斷，就建成 Skill。到時候系統會提示。',
           result: {
             variant: 'success',
             title: '任務 #T-2026-0725-11 已建立',
@@ -2764,8 +2764,8 @@ const CHAT_SCENARIOS = {
   process: [
     {
       id: 'sc-pr-1',
-      title: '執行跨站通報 Flow（中途需人工確認）',
-      goal: '呼叫 Flow → 執行到 Hold 批號停下 → 確認 → 完成通報',
+      title: '執行跨站通報 Codify（中途需人工確認）',
+      goal: '呼叫 Codify → 執行到 Hold 批號停下 → 確認 → 完成通報',
       time: '今天 14:05',
       turns: [
         { role: 'user', text: 'CMP-03 剛跳 SPC 失控，幫我跑跨站通報流程。' },
@@ -2781,7 +2781,7 @@ const CHAT_SCENARIOS = {
           },
           text: 'CMP-03 屬 CMP、位於 ETC-3F、觸發碼 SPC-OOC，符合適用範圍，開始執行。',
           run: {
-            title: 'Flow 執行中',
+            title: 'Codify 執行中',
             steps: [
               { num: 1, label: '取失控事件與規則', tool: 'spc.get_ooc_detail', io: 'read', status: 'ok', detail: 'Nelson Rule 2（連續 9 點同側），14:02 觸發' },
               { num: 2, label: '評估上下游影響站點', io: 'compute', status: 'ok', detail: '上游 ETCH-02、下游 CLEAN-01（本課自訂：各推一站）' },
@@ -2815,7 +2815,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-pr-004', title: '製程異常跨站通報', tier: 'sop' },
                   text: '已完成，用時 4 分 12 秒，在 15 分鐘時限內。',
                   run: {
-                    title: 'Flow 執行完成',
+                    title: 'Codify 執行完成',
                     steps: [
                       { num: 4, label: '標記批號 Hold', tool: 'mes.hold_lots', io: 'write', status: 'ok', detail: '5 批已標記 Hold' },
                       { num: 5, label: '通知相鄰站點 Admin', tool: 'notify.send_to_section', io: 'write', status: 'ok', detail: '已通知 ETCH-02、CLEAN-01 的 Section Admin' },
@@ -2838,7 +2838,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-pr-004', title: '製程異常跨站通報', tier: 'sop' },
                   text: '已中止，沒有任何批號被 Hold。\n\n這次的「影響範圍」是用本課自訂的「上下游各推一站」算出來的。如果實際影響範圍常常跟這個規則對不上，值得回去改第 2 步的自訂邏輯 —— 我把這次的中止原因回報給 owner（鄭志明）了。\n\n15 分鐘時限還在跑，記得手動完成 Hold 與通報。',
                   run: {
-                    title: 'Flow 執行中止',
+                    title: 'Codify 執行中止',
                     steps: [
                       { num: 4, label: '標記批號 Hold', tool: 'mes.hold_lots', io: 'write', status: 'skip', detail: '人工中止' },
                     ],
@@ -2878,11 +2878,11 @@ const CHAT_SCENARIOS = {
           role: 'ai',
           mode: 'guided',
           skill: { id: 'sm-pr-006', title: 'CP 值下滑趨勢研判', tier: 'guided' },
-          text: '我不能幫你改。剛才確實試了，被擋下來了 —— 下面那一行就是。\n\n這份 Skill 是 Guide 型，允許清單裡只有唯讀工具。而且「調回去」在管制上跟「調過去」是同一件事：兩者都是製程參數變更，都要走 DCR，都要影響評估與回滾計畫。\n\n**你要自己做的話**\n\n1. 開一張 DCR（下面連結已帶好 R-512 與壓力參數）\n2. 影響評估這欄可以直接用我剛才的研判內容，我把時間軸整理好了\n3. 送 Section Admin 初審 → 課長核准 → 生效\n\n**不過我還是建議先做 Process Window Study。** 現在的證據是時間吻合，不是因果確立。直接回調有機會做對，但如果真正原因是別的，你會白繞一圈，而且下次還會再發生。',
+          text: '我不能幫你改。剛才確實試了，被擋下來了 —— 下面那一行就是。\n\n這份 Skill 是 Skill 型，允許清單裡只有唯讀工具。而且「調回去」在管制上跟「調過去」是同一件事：兩者都是製程參數變更，都要走 DCR，都要影響評估與回滾計畫。\n\n**你要自己做的話**\n\n1. 開一張 DCR（下面連結已帶好 R-512 與壓力參數）\n2. 影響評估這欄可以直接用我剛才的研判內容，我把時間軸整理好了\n3. 送 Section Admin 初審 → 課長核准 → 生效\n\n**不過我還是建議先做 Process Window Study。** 現在的證據是時間吻合，不是因果確立。直接回調有機會做對，但如果真正原因是別的，你會白繞一圈，而且下次還會再發生。',
           blocked: {
             label: '調整配方參數',
             tool: 'recipe.update_param',
-            reason: '本 Skill 類型為「Guide」，允許清單內只有唯讀工具',
+            reason: '類型為「Skill」，允許清單內只有唯讀工具',
           },
           links: [
             { label: '開 DCR 申請', url: '/app/dcr/create?recipe=R-512&param=pressure_upper' },
@@ -2897,8 +2897,8 @@ const CHAT_SCENARIOS = {
   mfg: [
     {
       id: 'sc-mf-1',
-      title: '執行停機通報 Flow（中途需人工確認）',
-      goal: '呼叫 Flow → 執行到登錄 MES 停下 → 確認 → 完成通報',
+      title: '執行停機通報 Codify（中途需人工確認）',
+      goal: '呼叫 Codify → 執行到登錄 MES 停下 → 確認 → 完成通報',
       time: '今天 14:22',
       turns: [
         { role: 'user', text: 'LINE-3 停機快兩小時了，幫我跑停機跨班通報。' },
@@ -2914,7 +2914,7 @@ const CHAT_SCENARIOS = {
           },
           text: 'LINE-3 停機 1.8 小時，超過 1 小時門檻，符合適用範圍，開始執行。',
           run: {
-            title: 'Flow 執行中',
+            title: 'Codify 執行中',
             steps: [
               { num: 1, label: '取停機事件與預計時長', tool: 'eqp.get_downtime', io: 'read', status: 'ok', detail: '13:00 起傳送帶異常，預計 1.8 h，仍在進行' },
               { num: 2, label: '取受影響批號清單', tool: 'mes.list_wip', io: 'read', status: 'ok', detail: '4 批受影響，含急單 W26-031' },
@@ -2949,7 +2949,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-mfg-004', title: '停機跨班通報與記錄', tier: 'sop' },
                   text: '已完成。通報單也一併帶進今晚的交班記錄了。',
                   run: {
-                    title: 'Flow 執行完成',
+                    title: 'Codify 執行完成',
                     steps: [
                       { num: 4, label: '登錄停機原因代碼', tool: 'mes.log_downtime', io: 'write', status: 'ok', detail: 'MC-03 已登錄，事件編號 DT-20260726-07' },
                       { num: 5, label: '通報接班班組', tool: 'notify.send_to_duty', io: 'write', status: 'ok', detail: '已通知小夜班組長與設備課' },
@@ -2972,7 +2972,7 @@ const CHAT_SCENARIOS = {
                   skill: { id: 'sm-mfg-004', title: '停機跨班通報與記錄', tier: 'sop' },
                   text: '已中止，MES 沒有寫入任何資料。\n\n代碼判斷是第 1 步的標準元件依停機現象自動對照的。如果常常對不上，代表對照表需要更新 —— 我把這次的中止回報給 owner（林組長）了。\n\n記得手動登錄，停機超過 2 小時要升報組長。',
                   run: {
-                    title: 'Flow 執行中止',
+                    title: 'Codify 執行中止',
                     steps: [
                       { num: 4, label: '登錄停機原因代碼', tool: 'mes.log_downtime', io: 'write', status: 'skip', detail: '人工中止' },
                     ],
@@ -2994,13 +2994,13 @@ const CHAT_SCENARIOS = {
         {
           role: 'ai',
           mode: 'general',
-          text: '我查了課上的 Skill、Flow 與知識文件，**沒有找到「客戶臨時要求」這類插隊情境的決策依據**。\n\n課上有一份《排程優先序決策研判》，但它目前還在簽核中（尚未生效），而且它處理的是三線內部資源競爭，不涵蓋客戶端臨時變更 —— 那牽涉到業務承諾與違約條款，不是排程規則能決定的。\n\n這件事我不適合替你判斷。**建議直接問組長或部長**，因為要衡量的是客戶關係與其他訂單的交期風險，那些資訊不在系統裡。\n\n**另外**\n\n這種狀況應該不是第一次。要不要我列成一張任務，請課上有經驗的人把「客戶臨時變更的處理原則」寫成知識？下次有人半夜遇到，至少有東西可以參考。',
+          text: '我查了課上的 Skill、Codify 與知識文件，**沒有找到「客戶臨時要求」這類插隊情境的決策依據**。\n\n課上有一份《排程優先序決策研判》，但它目前還在簽核中（尚未生效），而且它處理的是三線內部資源競爭，不涵蓋客戶端臨時變更 —— 那牽涉到業務承諾與違約條款，不是排程規則能決定的。\n\n這件事我不適合替你判斷。**建議直接問組長或部長**，因為要衡量的是客戶關係與其他訂單的交期風險，那些資訊不在系統裡。\n\n**另外**\n\n這種狀況應該不是第一次。要不要我列成一張任務，請課上有經驗的人把「客戶臨時變更的處理原則」寫成知識？下次有人半夜遇到，至少有東西可以參考。',
         },
         { role: 'user', text: '好，幫我建一張追蹤任務。' },
         {
           role: 'ai',
           mode: 'general',
-          text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份 Guide Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是 Guide 的場景。',
+          text: '已建立。我把這次的具體情境附在任務裡，寫知識的人可以直接拿它當例子。\n\n如果之後累積出穩定的判斷原則，可以升級成一份 Skill —— 這種每次狀況都不一樣、需要看現場數據研判的，正好是 Skill 的場景。',
           result: {
             variant: 'success',
             title: '任務 #T-2026-0725-08 已建立',
@@ -3379,7 +3379,7 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-001',
       name: 'SPC 異常日報',
       skill: 'spc-daily-report',
-      skillId: 'sm-eq-008',      /* 對應 personas.js 的 Flow（含寫入）*/
+      skillId: 'sm-eq-008',      /* 對應 personas.js 的 Codify（含寫入）*/
       hasWrite: true,
       confirmSteps: 2,           /* 執行到這幾步會暫停等人確認 */
       cronLabel: '每日 07:50',
@@ -3470,7 +3470,7 @@ const SCHEDULING_DATA = {
         },
       ],
     },
-    /* ── 交接報告：交班已不是一個模組，而是這個唯讀 Flow 的排程產出 ──
+    /* ── 交接報告：交班已不是一個模組，而是這個唯讀 Codify 的排程產出 ──
        執行紀錄要看得到「產出物本身」，不能只有步驟；
        同一份產出同時送到 Home 課佈告欄（今天這份）與這裡（檔案櫃）。
        見 brain/entities/modules/handover.md */
@@ -4339,9 +4339,14 @@ const STATUS_CFG = {
 
 /* ════════════════════════════════════════
    Skill 三層模型 — 全站共用詞彙
-   知識 / Guide / Flow。分界是「能不能設成排程」，
+   知識 / Skill / Codify。分界是「能不能設成排程」，
    使用者一秒就懂，比講副作用範圍好解釋。
    見 brain/concepts/agent-skill-tiering.md
+
+   2026-07-31 決議 16：類型改名 `Guide → Skill`、`Flow → Codify`。
+   Skill 是 Agentic AI 的通用詞，使用者一看就懂；Codify 不是，
+   所以由 Skill 當入口先讓人知道「AI 可以照我寫的腳本做事」，
+   再讓人自己探索 Codify。code key `guided` / `sop` 一律不變。
    ════════════════════════════════════════ */
 const SKILL_TIER_CFG = {
   knowledge: {
@@ -4353,28 +4358,32 @@ const SKILL_TIER_CFG = {
     schedulable: false,
   },
   guided: {
-    label: 'Guide',
-    short: 'Guide',
+    label: 'Skill',
+    short: 'Skill',
     color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', border: 'rgba(124,58,237,0.2)',
     oneLiner: '每次狀況不同，AI 依課上的指引研判並給建議',
     detail: '可以查現場數據當證據，但不能異動任何系統；每次結果不一樣，所以不能設成排程。',
+    tabDesc: 'Skill 是 AI 執行的腳本，你可以隨時修改並指揮 AI 做事。如果你需要做的結果 100% 相同且絕對不會做跑偏，升級 Codify。',
     schedulable: false,
   },
   sop: {
-    label: 'Flow',
-    short: 'Flow',
+    label: 'Codify',
+    short: 'Codify',
     color: '#2563EB', bg: 'rgba(37,99,235,0.08)', border: 'rgba(37,99,235,0.2)',
     oneLiner: '每次步驟都一樣、結果可重現的固定流程',
     detail: '執行時完全照核准過的步驟跑，可以設成排程自動執行；會異動系統的步驟一律停下來等人確認。',
+    tabDesc: 'Codify 是 AI 透過對話 或 理解你的 Skill 後，將任務轉換為程式碼，並在需要的時候調用的方法。',
     schedulable: true,
   },
 };
 
-/* Skill 管理清單只有這兩種。
+/* Skill 管理清單只有這兩種，順序即分頁順序 —— guided（Skill）在前，
+   進 Skill 管理預設就落在它上面，Codify 讓人自己切過去探索。
    2026-07-26 PO 決議：知識從 Skill 管理拆出去獨立成一頁，
-   因為它在 Guide／Flow 執行前後都會被引用，不是與它們平行的第三條路線。
+   因為它在 Skill／Codify 執行前後都會被引用，不是與它們平行的第三條路線。
    SKILL_TIER_CFG.knowledge 保留，僅供舊資料與知識頁的用語一致性使用。 */
 const SKILL_TIERS = ['guided', 'sop'];
+const SKILL_DEFAULT_TIER = 'guided';
 
 /* ── 步驟的讀寫性質：Graph 節點與工具列都吃這一份 ── */
 const SKILL_IO_CFG = {
@@ -6232,8 +6241,8 @@ function LotHoldWidget({ p}) {
   );
 }
 
-/* ── Flow 產出的交接報告 → 佈告欄置頂公告 ──
-   交班不是一個模組，是一個唯讀 Flow 的排程產出。Schedule 是檔案櫃（可回溯），
+/* ── Codify 產出的交接報告 → 佈告欄置頂公告 ──
+   交班不是一個模組，是一個唯讀 Codify 的排程產出。Schedule 是檔案櫃（可回溯），
    這裡是「今天這份」——接班第一眼會看到的地方。
    見 brain/entities/modules/handover.md */
 function buildReportBulletin(p, report) {
@@ -6257,7 +6266,7 @@ function buildReportBulletin(p, report) {
 function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
   var { C, fz } = useTheme();
   const baseBulletins = BULLETINS[p.key] || [];
-  /* 人送出交班後，那份取代 Flow 產出的自動公告（同一件事的最終版本）*/
+  /* 人送出交班後，那份取代 Codify 產出的自動公告（同一件事的最終版本）*/
   const reportBulletin = handoverRecord ? null : buildReportBulletin(p, getLatestHandoverReport(p.key));
   const bulletins = handoverRecord
     ? [handoverRecord].concat(baseBulletins)
@@ -6315,7 +6324,7 @@ function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
       {bulletins.map((b, i) => {
         const isRead = b.isRead || readIds.has(b.id);
         const rt = b.fromSOP
-          ? { label: 'Flow 產出', bg: '#EFF6FF', color: '#2563EB' }
+          ? { label: 'Codify 產出', bg: '#EFF6FF', color: '#2563EB' }
           : b.type === 'handover'
             ? { label: '交班記錄', bg: '#FEF3C7', color: '#92400E' }
             : (ROLE_TAG_CFG[b.role] || ROLE_TAG_CFG.all);
@@ -6345,14 +6354,14 @@ function BulletinWidget({ p, handoverRecord, onEdit, onOpenHandover}) {
               </div>
               <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>{b.title}</div>
               <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.4, marginBottom: 8, whiteSpace: 'pre-wrap' }}>{b.content}</div>
-              {/* 數字機器算，判斷人給：Flow 產出後由人補交代事項再送出 */}
+              {/* 數字機器算，判斷人給：Codify 產出後由人補交代事項再送出 */}
               {b.fromSOP && onOpenHandover && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                   <button onClick={function(e) { e.stopPropagation(); onOpenHandover(); }}
                     style={{ fontSize: fz(11), fontWeight: 600, padding: '3px 10px', borderRadius: 6, border: 'none', background: '#2563EB', color: '#FFFFFF', cursor: 'pointer' }}>
                     補充交代事項並送出交班
                   </button>
-                  <span style={{ fontSize: fz(11), color: C.textMuted }}>數字已由 Flow 算好，你只需要補上判斷</span>
+                  <span style={{ fontSize: fz(11), color: C.textMuted }}>數字已由 Codify 算好，你只需要補上判斷</span>
                 </div>
               )}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -7091,7 +7100,7 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
   const [pending, setPending]       = React.useState('');   // 區塊二：遺留待追蹤
   const [notes, setNotes]           = React.useState('');   // 區塊三：下一班注意事項
 
-  /* Flow 已經算好的那份（Schedule 產出＝佈告欄那則）；有的話直接預填，
+  /* Codify 已經算好的那份（Schedule 產出＝佈告欄那則）；有的話直接預填，
      人只要補判斷與交代事項 —— 數字機器算，判斷人給。 */
   const sopReport = getLatestHandoverReport(p.key);
 
@@ -7104,7 +7113,7 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
         return;
       }
 
-      // ── 區塊一：本班課況（KPI warn + Must-be-zero）── 沒有 Flow 產出時的退路
+      // ── 區塊一：本班課況（KPI warn + Must-be-zero）── 沒有 Codify 產出時的退路
       const warnKpis  = (p.kpis || []).filter(k => k.status === 'warn');
       const alertMbz  = (p.mustBeZero || []).filter(m => !m.ok);
       let sitLines = [];
@@ -7155,10 +7164,10 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
             <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>班對班交班摘要</div>
             <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
               {currentShift} → {nextShift} · {p.name}
-              {sopReport && <span style={{ color: '#2563EB' }}>　·　已由 Flow「{sopReport.scheduleName}」預填（{sopReport.dateLabel}）</span>}
+              {sopReport && <span style={{ color: '#2563EB' }}>　·　已由 Codify「{sopReport.scheduleName}」預填（{sopReport.dateLabel}）</span>}
             </div>
           </div>
-          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{sopReport ? '正在載入 Flow 產出…' : 'AI 正在彙整本班課況…'}</span>}
+          {loading && <span style={{ fontSize: fz(11), color: C.textMuted, marginLeft: 8 }}>{sopReport ? '正在載入 Codify 產出…' : 'AI 正在彙整本班課況…'}</span>}
           <button onClick={onClose}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: fz(18), color: C.textMuted, padding: '0 4px', lineHeight: 1 }}>×</button>
         </div>
@@ -7168,20 +7177,20 @@ function ShiftHandoverModal({ p, onClose, onSubmit}) {
           {loading ? (
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '48px 0', gap: 16 }}>
               <div className="spin" style={{ width: 32, height: 32, border: '3px solid ' + C.border, borderTopColor: '#2563EB', borderRadius: '50%' }} />
-              <span style={{ fontSize: fz(13), color: C.textMuted }}>{sopReport ? "正在載入 Flow 已產出的 " + currentShift + " 課況…" : "AI 正在彙整 " + currentShift + " 課況…"}</span>
+              <span style={{ fontSize: fz(13), color: C.textMuted }}>{sopReport ? "正在載入 Codify 已產出的 " + currentShift + " 課況…" : "AI 正在彙整 " + currentShift + " 課況…"}</span>
             </div>
           ) : (
             <>
               {/* 區塊一：本班課況 */}
               <div>
-                <SectionLabel badge={sopReport ? "Flow 已算好 · 可編輯" : "AI 生成 · 可編輯"}>本班課況</SectionLabel>
+                <SectionLabel badge={sopReport ? "Codify 已算好 · 可編輯" : "AI 生成 · 可編輯"}>本班課況</SectionLabel>
                 <textarea value={situation} onChange={e => setSituation(e.target.value)}
                   style={{ width: '100%', minHeight: 88, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
 
               {/* 區塊二：遺留待追蹤事項 */}
               <div>
-                <SectionLabel badge={sopReport ? "Flow 已算好 · 可編輯" : "AI 生成 · 可編輯"}>遺留待追蹤事項</SectionLabel>
+                <SectionLabel badge={sopReport ? "Codify 已算好 · 可編輯" : "AI 生成 · 可編輯"}>遺留待追蹤事項</SectionLabel>
                 <textarea value={pending} onChange={e => setPending(e.target.value)}
                   style={{ width: '100%', minHeight: 104, padding: 10, border: '1px solid ' + C.border, borderRadius: 6, fontSize: fz(13), color: C.textSub, lineHeight: 1.6, resize: 'vertical', outline: 'none', boxSizing: 'border-box', fontFamily: 'inherit' }} />
               </div>
@@ -7402,7 +7411,7 @@ function DashboardPage({ p, onAskAI, handoverRecord, onHandoverSubmit, pinnedApp
   var rp = {
     p, handoverRecord, kpiConfig,
     onOpenBulletinSetting, onOpenKpiSetting, onOpenAppSetting, onOpenLinkWidgetSetting,
-    /* 佈告欄那則 Flow 產出上的「補充交代事項」＝交班 Modal 的入口 */
+    /* 佈告欄那則 Codify 產出上的「補充交代事項」＝交班 Modal 的入口 */
     onOpenHandover: function() { if (setShowHandoverModal) setShowHandoverModal(true); },
   };
   const [rightOpen, setRightOpen] = React.useState(true);
@@ -7855,9 +7864,9 @@ function KPIPage({ p, onAskAI}) {
    2026-07-26 重寫。原本這頁是未掛載的死碼（Skill／Prompt／Q&A 三個 tab），
    現改為「知識管理」，承接從 Skill 管理拆出來的知識層。
 
-   為什麼要拆：知識在 Guide／Flow 執行的前後都會被引用，
+   為什麼要拆：知識在 Skill／Codify 執行的前後都會被引用，
    它是底料不是第三條路線。拆開之後，Skill 管理頁只剩
-   「Guide」與「Flow」兩種真的會執行的東西。
+   「Skill」與「Codify」兩種真的會執行的東西。
 
    後續方向（本版不實作，頁面上有標註）：
    Vector 索引 → RAG 檢索 → 使用者自建知識圖譜。
@@ -7968,7 +7977,7 @@ function KnowledgeDocModal({ doc, p, onClose, onDelete }) {
         (doc.usedBy || []).length === 0
           ? <div style={{ fontSize: fz(13), color: C.textMuted, padding: 16, background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, lineHeight: 1.7 }}>
               目前沒有 Skill 引用這份文件。<br />
-              它仍然會被 AI 檢索到並用於一般問答，只是沒有被綁進任何 Guide 或 Flow。
+              它仍然會被 AI 檢索到並用於一般問答，只是沒有被綁進任何 Skill 或 Codify。
             </div>
           : <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
               {doc.usedBy.map(function(u, i) {
@@ -8351,9 +8360,9 @@ function KnowledgePage({ p }) {
      · 決策卡選完會留下「✓ 已選擇：…」，回顧得到當時做了什麼決定
      · 操作按鈕只留在最後一則；對話往下走就收起，改由右側「這次的產出」承接
        （避免「按了會從哪裡執行、要不要帶後面的 context」的歧義）
-     · 執行面板改兩層：任務清單 → 展開看步驟，**支援同一則對話跑多份 Flow**
+     · 執行面板改兩層：任務清單 → 展開看步驟，**支援同一則對話跑多份 Codify**
      · 砍掉讀取／判斷／計算／會異動四顆 tag 與工具識別碼
-     · 砍掉每則的三態徽章 —— PO：「能執行就表示系統中有核准的 Flow」。
+     · 砍掉每則的三態徽章 —— PO：「能執行就表示系統中有核准的 Codify」。
        ⚠️ 代價：「這不是核准流程、責任在你」的告知責任，從 UI 轉移到
        回應文字本身。接真實 LLM 時這是 system prompt 的硬要求，
        見 brain/entities/modules/ai-chat.md 的 F-AI-01 驗收條件。
@@ -8408,13 +8417,13 @@ function ChatText({ text }) {
 }
 
 /* ════════════════════════════════════════
-   RunBlock — Flow 執行進度（對話流版）
+   RunBlock — Codify 執行進度（對話流版）
 
    2026-07-27 第五輪：從「已跑過的紀錄」改成**完整計畫**。
    右側面板不再展開步驟，所以三件只有計畫才知道的事全部回到這裡：
      · 還沒跑到的步驟 —— 置灰，跑到會停的預先標「需人工確認」
      · 條件分支沒走的步驟 —— 標「本次不走」，不留白讓人猜
-   計畫來源是那份已核准 Flow 的 plainSteps，不是 AI 邊跑邊生的。
+   計畫來源是那份已核准 Codify 的 plainSteps，不是 AI 邊跑邊生的。
 
    置灰的尾巴只長在**最後一個 run 區塊**上：往下走之後那些步驟
    已經有更新的紀錄了，留著舊的「待執行」只會讓人以為它沒跑。
@@ -8429,7 +8438,7 @@ const CHAT_RUN_STATUS = {
   branch:  { icon: '⤳', color: '#9E9E9E' },
 };
 
-/* 條件分支的名字：從 Flow 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
+/* 條件分支的名字：從 Codify 的 graph 找那條「跳過中間步驟」且兩端都跑過的邊 */
 function findBranchLabel(graph, byNum) {
   if (!graph || !graph.edges) return null;
   var hit = graph.edges.filter(function(e) {
@@ -8439,14 +8448,14 @@ function findBranchLabel(graph, byNum) {
   return hit ? hit.label : null;
 }
 
-/* 把「這則訊息跑了哪幾步」攤回 Flow 的完整步驟位置上 */
+/* 把「這則訊息跑了哪幾步」攤回 Codify 的完整步驟位置上 */
 function buildFlowRows(run, sop, visible, inFlightIndex, showTail) {
   var steps = (run && run.steps) || [];
   var count = visible == null ? steps.length : Math.min(visible, steps.length);
   var shown = steps.slice(0, count);
   var plan  = sop && sop.plainSteps;
 
-  /* 對不上 Flow（歷史對話、或步驟沒編號）就照原樣列 */
+  /* 對不上 Codify（歷史對話、或步驟沒編號）就照原樣列 */
   var nums = shown.map(function(s) { return s.num; }).filter(function(n) { return n != null; });
   if (!plan || nums.length === 0) {
     return shown.map(function(s, i) {
@@ -8749,7 +8758,7 @@ const CHAT_ITEM_STATUS = {
 };
 
 /* 沒有宣告 plan 的對話（歷史紀錄、或還沒改寫的腳本）：
-   用最後一份跑過的 Flow 合成一項，面板不會因此空掉 */
+   用最後一份跑過的 Codify 合成一項，面板不會因此空掉 */
 function synthPlan(msgs) {
   for (var i = msgs.length - 1; i >= 0; i--) {
     var m = msgs[i];
@@ -8773,7 +8782,7 @@ function buildActivePlan(chat, sopList, stepShown, playing) {
   if (!plan || !plan.items || plan.items.length === 0) return null;
   var from = planIdx >= 0 ? planIdx : 0;
 
-  /* 這份計畫開始之後，每個 Flow 各自跑到哪 */
+  /* 這份計畫開始之後，每個 Codify 各自跑到哪 */
   var exec = {};
   msgs.forEach(function(m, idx) {
     if (idx < from) return;
@@ -8826,7 +8835,7 @@ function buildActivePlan(chat, sopList, stepShown, playing) {
   return {
     title: plan.title,
     items: items,
-    /* 有已核准 Flow、或不只一件事，才值得自動把面板打開 */
+    /* 有已核准 Codify、或不只一件事，才值得自動把面板打開 */
     worthOpening: items.length > 1 || items.filter(function(it) { return it.tier === 'sop'; }).length > 0,
     pauseItem: items.filter(function(it) { return it.pauseStep; })[0] || null,
   };
@@ -8846,7 +8855,7 @@ function collectOutputs(messages) {
   return items;
 }
 
-/* 這次用到的：只給 Skill／Flow 標題與知識文件，詳情點進去看 */
+/* 這次用到的：只給 Skill／Codify 標題與知識文件，詳情點進去看 */
 function collectUsed(messages) {
   var skills = [], knowledge = [], blocked = [];
   messages.forEach(function(m) {
@@ -8860,7 +8869,7 @@ function collectUsed(messages) {
 }
 
 /* ════════════════════════════════════════
-   SkillPeekModal — 從面板點 Skill／Flow 進來看詳情
+   SkillPeekModal — 從面板點 Skill／Codify 進來看詳情
    只給「有人想看」的場景，不做 Graph / Signoff / Ask AI，
    那些在 Setting 的 Skill 管理全頁裡。
    ════════════════════════════════════════ */
@@ -8993,7 +9002,7 @@ function RunPanel({ plan, outputs, used, onClose, onPeekSkill }) {
       <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-thin">
         {!hasAnything && (
           <div style={{ padding: 16, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
-            這則對話還沒有執行紀錄。呼叫 Flow 時，這裡會列出這次要做的事。
+            這則對話還沒有執行紀錄。呼叫 Codify 時，這裡會列出這次要做的事。
           </div>
         )}
 
@@ -9017,7 +9026,7 @@ function RunPanel({ plan, outputs, used, onClose, onPeekSkill }) {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontSize: fz(12), fontWeight: 600, color: it.status === 'todo' ? C.textMuted : C.text, lineHeight: 1.6 }}>{it.title}</span>
-                      {/* 已核准 Flow 不標 —— 能執行就表示核准過；非核准的才需要講 */}
+                      {/* 已核准 Codify 不標 —— 能執行就表示核准過；非核准的才需要講 */}
                       {it.tier && it.tier !== 'sop' && <SkillTierTag tier={it.tier} size="small" />}
                     </div>
                     {st.label && (
@@ -9254,7 +9263,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
   const pauseStepLabel = pauseItem ? pauseItem.pauseStep.label : null;
   const hasPlan = !!(plan && plan.worthOpening);
 
-  /* 偵測到 Flow 執行就自動把面板打開；使用者關過之後，同一則對話不再自動開 */
+  /* 偵測到 Codify 執行就自動把面板打開；使用者關過之後，同一則對話不再自動開 */
   React.useEffect(function() {
     if (hasPlan && activeId && !panelDismissed[activeId]) setPanelOpen(true);
   }, [hasPlan, activeId]);
@@ -9663,7 +9672,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
         />
       )}
 
-      {/* ══ Skill／Flow 詳情 popout ══ */}
+      {/* ══ Skill／Codify 詳情 popout ══ */}
       {peekSkill && (
         <SkillPeekModal skill={peekSkill} sopList={sopList} onClose={function() { setPeekSkill(null); }} />
       )}
@@ -9684,7 +9693,7 @@ function ChatPage({ p, aiDraft, clearAiDraft }) {
 
    現在這裡只收四樣東西 —— 類型、名稱、適用範圍、大致流程 ——
    然後把它們當成 context 丟給 agent：建立完立刻進詳情頁，
-   右側 Ask AI 自己開始體檢（含「你這個其實比較像 Flow」這種類型建議）。
+   右側 Ask AI 自己開始體檢（含「你這個其實比較像 Codify」這種類型建議）。
    使用者第一次用就看得到有 agent 在幫忙，不會面對一張空白頁。
 
    類型允許選錯，是刻意的：讓 agent 去糾正，比要人先讀懂兩張說明卡再選好。
@@ -9723,20 +9732,20 @@ function recommendTier(text) {
     return {
       tier: 'sop',
       why: '你描述的是每次都照同樣順序做完的彙整，步驟固定、結果可以重現。',
-      benefit: '做成 Flow 才能設成排程自動跑，時間到就有產出。',
+      benefit: '做成 Codify 才能設成排程自動跑，時間到就有產出。',
     };
   }
   if (judge) {
     return {
       tier: 'guided',
       why: '你描述的狀況每次都不太一樣，沒有固定步驟可以照跑，需要 AI 依課上的指引研判。',
-      benefit: 'Guide 可以查現場數據當證據，但不會去動任何系統，也不能設排程。',
+      benefit: 'Skill 可以查現場數據當證據，但不會去動任何系統，也不能設排程。',
     };
   }
   return {
     tier: 'guided',
     why: '從你的描述看不出固定步驟，比較像是每次要視狀況判斷的事。',
-    benefit: '先做成 Guide 比較安全；之後大家的做法收斂了，再改成 Flow。',
+    benefit: '先做成 Skill 比較安全；之後大家的做法收斂了，再改成 Codify。',
   };
 }
 
@@ -9984,8 +9993,8 @@ function SkillCreateFlow({ p, onClose, onCreate }) {
       /* 左側先放使用者填的原文；要不要換成正式格式，由 agent 建議、使用者決定 */
       description: raw,
       knowledgeRefs: [],
-      /* 只有 Guide 有驗收（系統自動補的條件與情境不可刪，一律還沒跑過）。
-         Flow 走情境試跑 —— 題目依節點自動生，不存在資料裡。 */
+      /* 只有 Skill 有驗收（系統自動補的條件與情境不可刪，一律還沒跑過）。
+         Codify 走情境試跑 —— 題目依節點自動生，不存在資料裡。 */
       acceptance: tier === 'sop'
         ? { criteria: [], probes: [] }
         : buildAutoAcceptance(p, scope, title.trim()),
@@ -10100,7 +10109,7 @@ function SkillCreateFlow({ p, onClose, onCreate }) {
 /* 依適用範圍與類型自動補的驗收條件與提問情境 —— Seed 會寫「該做什麼」，
    不會想到寫「不該做什麼」，而不該做的才是真正會出事的。系統補的不可刪。
 
-   2026-07-28 起**只有 Guide 會用到**：Flow 沒有「意圖」可測，
+   2026-07-28 起**只有 Skill 會用到**：Codify 沒有「意圖」可測，
    它的驗收是情境試跑（題目依節點自動生）。
 
    2026-07-29 起條件上沒有任何判定欄位 —— 系統與 AI 都不判斷條件有沒有做到，
@@ -10153,7 +10162,7 @@ function WriteToggle({ draft, onEnable, onDisable }) {
 
   function ask() {
     modal.confirm({
-      title: '要讓這個 Flow 執行會異動系統的動作嗎？',
+      title: '要讓這個 Codify 執行會異動系統的動作嗎？',
       width: 512,
       content: (
         <div style={{ fontSize: fz(13), lineHeight: 1.8, color: C.textSub }}>
@@ -10177,7 +10186,7 @@ function WriteToggle({ draft, onEnable, onDisable }) {
     <div style={{ padding: '8px 16px', background: C.bgPanel, border: '1px solid ' + C.border, borderRadius: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
       {contextHolder}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>讓這個 Flow 也能執行動作（開單、通知…）</div>
+        <div style={{ fontSize: fz(13), color: C.text, fontWeight: 500 }}>讓這個 Codify 也能執行動作（開單、通知…）</div>
         <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 4 }}>唯讀是預設。加上動作會提高簽核與執行時的確認成本。</div>
       </div>
       <antd.Switch
@@ -10195,10 +10204,17 @@ function WriteToggle({ draft, onEnable, onDisable }) {
    SKILL MANAGEMENT PAGE (v4)
 
    2026-07-26 改版：
-     · 知識拆出去獨立成「知識管理」，本頁只剩「Guide」與「Flow」
+     · 知識拆出去獨立成「知識管理」，本頁只剩「Skill」與「Codify」
      · 清單只是進入點，列上的操作只有刪除；其餘行為進詳情頁再做
      · 詳情從 1000px Modal 改為全頁（SkillDetailPage.jsx），
        因為 Graph 與 Ask AI 側欄要同時展開
+
+   2026-07-31 改版：
+     · 兩個類型從「工具列上的一顆篩選」升成「頁面層級的兩個分頁」，
+       進入後預設落在 Skill —— Skill 是 Agentic AI 的通用詞，先讓人
+       知道我們有這個能力，再讓人自己切過去探索 Codify
+     · 每個分頁在清單上方掛一句小標題，解釋這個類型是什麼、何時該升級
+     · 類型欄拿掉：分頁本身已經宣告了類型，每列再標一次是重複資訊
 
    五階段管理流程維持：Draft → Testing → Approving → Pilot Run → Production
    註：主元件函式名稱維持 SOPManagementPage，以相容 SettingPage。
@@ -10215,7 +10231,7 @@ const SKILL_STAGE_CFG = {
 };
 
 /* 清單欄寬（Table columns 共用常數）*/
-const SK_COL_W = { tier: 96, stage: 104, owner: 96, date: 104, action: 72 };
+const SK_COL_W = { stage: 104, owner: 96, date: 104, action: 72 };
 
 /* ── 適用範圍：結構化條件的白話描述 ──
    scope 是勾出來的條件，不是一句自由文字，所以可以直接算出「目前符合哪幾台」。*/
@@ -10305,15 +10321,12 @@ function DryRunOutput({ output }) {
 /* ════════════════════════════════════════
    Skill 清單欄位（AntD Table columns）
    列上只有刪除；其餘行為進詳情頁再做。
+   類型不再入欄：清單永遠只裝當前分頁那一種。
    ════════════════════════════════════════ */
 function useSkillColumns({ onDelete }) {
   var { C, fz } = useTheme();
 
   return [
-    {
-      title: '類型', dataIndex: 'tier', key: 'tier', width: SK_COL_W.tier,
-      render: function(v) { return <SkillTierTag tier={v} />; },
-    },
     {
       title: '狀態', dataIndex: 'stage', key: 'stage', width: SK_COL_W.stage,
       render: function(v) { return <StatusTag stage={v} />; },
@@ -10385,7 +10398,7 @@ function useSkillColumns({ onDelete }) {
 function SOPManagementPage({ p }) {
   var { C, fz } = useTheme();
   var [filter, setFilter]         = React.useState('all');
-  var [tierFilter, setTierFilter] = React.useState('all');
+  var [activeTier, setActiveTier] = React.useState(SKILL_DEFAULT_TIER);
   var [skills, setSkills]         = React.useState(p.knowledge.sopManagement || []);
   var [showCreate, setShowCreate] = React.useState(false);
   var [detailId, setDetailId]     = React.useState(null);
@@ -10397,7 +10410,7 @@ function SOPManagementPage({ p }) {
     setSkills(p.knowledge.sopManagement || []);
     setDetailId(null);
     setFilter('all');
-    setTierFilter('all');
+    setActiveTier(SKILL_DEFAULT_TIER);
     setSearch('');
   }, [p.key]);
 
@@ -10425,12 +10438,17 @@ function SOPManagementPage({ p }) {
 
   var columns = useSkillColumns({ onDelete: deleteSkill });
 
-  var counts = {};
-  SKILL_STAGES.forEach(function(s) { counts[s] = skills.filter(function(x) { return x.stage === s; }).length; });
+  /* 分頁先切，階段筆數才算 —— 徽章上的數字必須跟人眼前這份清單對得上 */
+  var tierCounts = {};
+  SKILL_TIERS.forEach(function(t) { tierCounts[t] = skills.filter(function(x) { return x.tier === t; }).length; });
 
-  var displayed = skills
+  var tierSkills = skills.filter(function(s) { return s.tier === activeTier; });
+
+  var counts = {};
+  SKILL_STAGES.forEach(function(s) { counts[s] = tierSkills.filter(function(x) { return x.stage === s; }).length; });
+
+  var displayed = tierSkills
     .filter(function(s) { return filter === 'all' || s.stage === filter; })
-    .filter(function(s) { return tierFilter === 'all' || s.tier === tierFilter; })
     .filter(function(s) {
       if (!searchQuery.trim()) return true;
       var q = searchQuery.toLowerCase();
@@ -10480,19 +10498,33 @@ function SOPManagementPage({ p }) {
   /* Pilot Run 縮成 Pilot：單行工具列每 32px 都要省 */
   var STAGE_SHORT = { pirun: 'Pilot' };
 
-  var stageOptions = [{ value: 'all', label: stageLabel('全部階段', skills.length, filter === 'all') }].concat(
+  var stageOptions = [{ value: 'all', label: stageLabel('全部階段', tierSkills.length, filter === 'all') }].concat(
     SKILL_STAGES.map(function(s) {
       return { value: s, label: stageLabel(STAGE_SHORT[s] || SKILL_STAGE_CFG[s].label, counts[s] || 0, filter === s) };
     })
   );
 
-  var tierCounts = {};
-  SKILL_TIERS.forEach(function(t) { tierCounts[t] = skills.filter(function(x) { return x.tier === t; }).length; });
-  var tierOptions = [{ value: 'all', label: stageLabel('全部類型', skills.length, tierFilter === 'all') }].concat(
-    SKILL_TIERS.map(function(t) {
-      return { value: t, label: stageLabel(SKILL_TIER_CFG[t].label, tierCounts[t] || 0, tierFilter === t) };
-    })
-  );
+  /* 分頁：兩顆膠囊，字級比工具列那排大一號 —— 它是頁面層級的切換，
+     不是又一個篩選器；沒有「全部」那一顆，人一定站在其中一種上面。 */
+  var tierTabOptions = SKILL_TIERS.map(function(t) {
+    var cfg = SKILL_TIER_CFG[t];
+    var active = activeTier === t;
+    return {
+      value: t,
+      label: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px', color: active ? '#FFFFFF' : C.textSub, fontWeight: 600, fontSize: fz(13) }}>
+          {cfg.label}
+          <span style={{
+            fontSize: fz(10), padding: '0 8px', borderRadius: 999, fontWeight: 600,
+            background: active ? 'rgba(255,255,255,0.25)' : C.hover,
+            color: active ? '#FFFFFF' : C.textMuted,
+          }}>{tierCounts[t] || 0}</span>
+        </span>
+      ),
+    };
+  });
+
+  var activeTierCfg = SKILL_TIER_CFG[activeTier];
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.bg }}>
@@ -10501,28 +10533,43 @@ function SOPManagementPage({ p }) {
       <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text }}>Skill 管理</div>
-          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Guide 與 Flow · 同課審批 · 不可跨課使用</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Skill 與 Codify · 同課審批 · 不可跨課使用</div>
         </div>
         <div style={{ flex: 1 }} />
         <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
       </div>
 
-      {/* 工具列：搜尋 / 類型 / 階段 / 排序 收成單一行。
-          2026-07-26 PO 定案：原本四個中文 label（搜尋、類型、階段、排序）拿掉 ——
-          Segmented 第一顆本來就寫「全部類型 / 全部階段」，排序把 label 收進值裡，
-          語意沒有消失，換來列表往上提三條橫線的高度。 */}
       <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+
+        {/* 分頁：Skill 在前、Codify 在後，進來就站在 Skill 上。
+            小標題貼著分頁走 —— 人切過去的第一件事是知道這一格是什麼。 */}
+        <div style={{ padding: '16px 24px 8px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 }}>
+          <antd.Segmented
+            value={activeTier}
+            onChange={function(t) { setActiveTier(t); setFilter('all'); }}
+            options={tierTabOptions}
+            style={{ alignSelf: 'flex-start' }}
+          />
+          <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, maxWidth: 720 }}>
+            {activeTierCfg.tabDesc}
+          </div>
+        </div>
+
+      {/* 工具列：搜尋 / 階段 / 排序 收成單一行。
+          2026-07-26 PO 定案：原本四個中文 label（搜尋、類型、階段、排序）拿掉 ——
+          Segmented 第一顆本來就寫「全部階段」，排序把 label 收進值裡，
+          語意沒有消失，換來列表往上提三條橫線的高度。
+          2026-07-31：類型那顆升成上面的分頁，工具列少一顆。 */}
         <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
           <antd.Input
             allowClear
             value={searchQuery}
             onChange={function(e) { setSearch(e.target.value); }}
             prefix={<span style={{ color: C.textMuted, fontSize: fz(12) }}>🔍</span>}
-            aria-label="搜尋 Skill 名稱、用途或人員"
+            aria-label={'搜尋 ' + activeTierCfg.label + ' 名稱、用途或人員'}
             placeholder="搜尋名稱、用途、人員…"
             style={{ flex: 1, minWidth: 176 }}
           />
-          <antd.Segmented size="small" value={tierFilter} onChange={setTierFilter} options={tierOptions} />
           <antd.Segmented size="small" value={filter} onChange={setFilter} options={stageOptions} />
           <antd.Select
             value={sortBy}
@@ -10554,7 +10601,9 @@ function SOPManagementPage({ p }) {
                 image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   <span style={{ fontSize: fz(13), color: C.textMuted }}>
-                    {searchQuery.trim() ? '沒有符合搜尋條件的 Skill' : '此條件下目前沒有 Skill'}
+                    {searchQuery.trim()
+                      ? '沒有符合搜尋條件的 ' + activeTierCfg.label
+                      : '此條件下目前沒有 ' + activeTierCfg.label}
                   </span>
                 }
                 style={{ padding: 32 }}
@@ -10577,6 +10626,8 @@ function SOPManagementPage({ p }) {
           onClose={function() { setShowCreate(false); }}
           onCreate={function(skill) {
             setSkills(function(prev) { return [skill].concat(prev); });
+            /* 建的可能是另一種類型 —— 分頁跟著跑，人從詳情退回來才看得到它 */
+            if (skill.tier && skill.tier !== activeTier) { setActiveTier(skill.tier); setFilter('all'); }
             setShowCreate(false);
             setDetailId(skill.id);
           }}
@@ -10590,18 +10641,18 @@ function SOPManagementPage({ p }) {
 /* ── components/SkillDetailPage.jsx ── */
 
 /* ════════════════════════════════════════
-   SKILL DETAIL PAGE — Guide / Flow 詳情（全頁）
+   SKILL DETAIL PAGE — Skill / Codify 詳情（全頁）
 
    2026-07-26 PO 定案的版面：
-     Title / Scope / Description / Graph（僅 Flow）/ 驗收 & Dry-run
+     Title / Scope / Description / Graph（僅 Codify）/ 驗收 & Dry-run
      右上：[Ask AI]（修正這一份）與 [Signoff]（送簽核與生效）
 
    原本的大 Modal 改成全頁，理由是 Graph 與 Ask AI 側欄要同時展開，
    1000px 的 Modal 塞不下這兩者。
 
    刻意拿掉的東西（資訊沒有不見，換了地方）：
-     · 「會碰到哪些系統」大區塊 → Flow 收進 Graph 節點標記，
-        Guide 收成 Scope 底下一行可展開的摘要
+     · 「會碰到哪些系統」大區塊 → Codify 收進 Graph 節點標記，
+        Skill 收成 Scope 底下一行可展開的摘要
      · 「最近一次處理紀錄」 → Chat 情境 3 就是它的活體展示，
         這裡只在測試區保留一則做為對照
    ════════════════════════════════════════ */
@@ -10609,22 +10660,22 @@ function SOPManagementPage({ p }) {
 /* ── 送簽的硬條件（回傳擋下的原因，null = 可送）──
 
    2026-07-28 PO 定案：**兩種類型的驗收方法完全不同，不共用同一套題目。**
-     · Flow＝codify graph，每個節點都是程式碼。它沒有「意圖」可測 ——
+     · Codify＝codify graph，每個節點都是程式碼。它沒有「意圖」可測 ——
        圖裡沒有的工具它根本呼叫不到，範圍是勾出來的結構化條件。
        要測的是**結果與例外**：情境試跑。
-     · Guide＝同一份指引換個問法就走不同路，沒有固定步驟可以試跑。
+     · Skill＝同一份指引換個問法就走不同路，沒有固定步驟可以試跑。
        要測的是**意圖**：驗收條件（含系統自動補的、不可刪的那幾條）。
 
-   2026-07-29 PO 定案：Guide 的「測試案例」改為「驗收」。
+   2026-07-29 PO 定案：Skill 的「測試案例」改為「驗收」。
    原因有二 ——
      (1) 「測試案例」跟 codify graph 的 test 混淆，兩者驗的東西根本不同；
-     (2) 更根本的：Guide 每次結果都不一樣，「跑一次 PASS」在邏輯上就不成立。
+     (2) 更根本的：Skill 每次結果都不一樣，「跑一次 PASS」在邏輯上就不成立。
    改成每個提問情境跑 5 次、由人看內容確認驗收條件是否成立。
    判定權因此從系統移到人身上（誠實 —— 本來也沒有東西能自動判斷 LLM 的回答對不對），
    代價是「簽核變蓋章」的風險升高。2026-07-29 PO 再定案：
    **系統與 AI 都不介入判斷**，連初判都不要 —— 那等於把責任壓在 AI 身上。
    這一區只做一件事：把每一次實際做了什麼、最後回了什麼攤開，人自己看完再勾。
-   唯一保留的硬約束是「改了 Description 就作廢先前的紀錄」（契約失效，同 Flow 的白話說明）。
+   唯一保留的硬約束是「改了 Description 就作廢先前的紀錄」（契約失效，同 Codify 的白話說明）。
 
    見 brain/concepts/agent-skill-tiering.md 決議 12、13 與「簽核驗收」 */
 function getSignoffGate(skill, calcOpened) {
@@ -10691,7 +10742,7 @@ function acceptProbes(skill)  { return (skill.acceptance || {}).probes   || []; 
 function acceptCrits(skill)   { return (skill.acceptance || {}).criteria || []; }
 
 /* 指引改過就作廢 —— 「勾完再改指引」不能繞過驗收，
-   跟 Flow 那邊「code 改了白話說明沒改＝契約失效」是同一個道理 */
+   跟 Codify 那邊「code 改了白話說明沒改＝契約失效」是同一個道理 */
 function acceptStale(skill) {
   if (!skill.acceptRun) return false;
   return (skill.acceptRun.descRev || 0) !== (skill.descRev || 0);
@@ -10717,7 +10768,7 @@ function synthSteps(skill, probe) {
   }));
   if (probe.kind === 'writereq') {
     steps.push({ kind: 'tool', tool: 'mes.create_case', label: '開立工單', allowed: false,
-      reason: '本 Skill 類型為「Guide」，不可異動系統', result: '已拒絕 → 改為建議' });
+      reason: '類型為「Skill」，不可異動系統', result: '已拒絕 → 改為建議' });
   }
   return steps;
 }
@@ -10806,7 +10857,7 @@ function SdSection({ id, title, desc, badge, extra, refreshing, flash, contentKe
 }
 
 /* ════════════════════════════════════════
-   SkillGraph — Flow 的流程圖（僅 Flow 有）
+   SkillGraph — Codify 的流程圖（僅 Codify 有）
 
    節點直接標出讀 / 寫 / 計算與「需人工確認」，
    所以不需要另開一個「會碰到哪些系統」的大區塊。
@@ -11057,7 +11108,7 @@ function ProbeModal({ skill, step, onClose, onSaveScenario }) {
     }, 800);
   }
 
-  /* 算出來的東西：Flow 的試跑資料裡若有這一步的算法就照它講，講得比通則準 */
+  /* 算出來的東西：Codify 的試跑資料裡若有這一步的算法就照它講，講得比通則準 */
   var calc = ((skill.dryRun && skill.dryRun.calculations) || []).filter(function(c) { return c.stepNum === step.num; })[0];
 
   var fields = (spec && spec.fields) || [];
@@ -11323,7 +11374,7 @@ function ScopeBlock({ skill, p, onSave }) {
       </div>
 
       {/* 工具授權摘要：一行，需要細節才展開。
-          Guide 的「不能寫入」要看得到，才知道邊界在哪。 */}
+          Skill 的「不能寫入」要看得到，才知道邊界在哪。 */}
       <div style={{ marginTop: 8 }}>
         <div
           onClick={function() { setToolsOpen(function(v) { return !v; }); }}
@@ -11351,8 +11402,8 @@ function ScopeBlock({ skill, p, onSave }) {
             })}
             {skill.tier === 'guided' && (
               <div style={{ padding: '8px 16px', borderTop: '1px solid ' + C.border, background: C.bgPanel, fontSize: fz(12), color: C.textMuted, lineHeight: 1.7 }}>
-                🔒 「Guide」不能異動系統，寫入類工具無法加入。<br />
-                需要 AI 代為執行動作，請改建一個 <span style={{ fontWeight: 600, color: C.textSub }}>Flow</span>：Flow 的每個異動步驟都會停下來等人確認。
+                🔒 「Skill」不能異動系統，寫入類工具無法加入。<br />
+                需要 AI 代為執行動作，請改建一個 <span style={{ fontWeight: 600, color: C.textSub }}>Codify</span>：Codify 的每個異動步驟都會停下來等人確認。
               </div>
             )}
           </div>
@@ -11381,7 +11432,7 @@ function ScopeBlock({ skill, p, onSave }) {
 }
 
 /* ════════════════════════════════════════
-   Description 區 — Skill 是 skill.md 風格文本，Flow 是流程敘述
+   Description 區 — Skill 是 skill.md 風格文本，Codify 是流程敘述
    簽核簽的是這一段（白話說明＝契約），不是 code
    ════════════════════════════════════════ */
 function DescriptionBlock({ skill, p }) {
@@ -11468,10 +11519,10 @@ function DescriptionBlock({ skill, p }) {
    2026-07-27：這一區分成兩層不同的東西，別再混為一談 ——
      · 驗收＝**意圖層**（使用者這樣問 → AI 該怎麼回）。驗路由、拒絕、適用範圍。
      · 情境試跑＝**資料層**（資料長這樣 → 每個節點該怎麼反應）。見 ScenarioBlock。
-   Flow 的風險不在「AI 答錯」，在節點吃到爛資料照樣算完、輸出一份看起來正常的東西。
+   Codify 的風險不在「AI 答錯」，在節點吃到爛資料照樣算完、輸出一份看起來正常的東西。
 
    2026-07-29：意圖層那邊從「測試案例」改成「驗收」。除了跟 codify graph 的 test
-   混淆之外，更根本的問題是 Guide 每次結果都不一樣 —— 跑一次得到 PASS
+   混淆之外，更根本的問題是 Skill 每次結果都不一樣 —— 跑一次得到 PASS
    在邏輯上就不成立。改成同一個提問跑 5 次，由人看內容確認條件是否成立。
    ════════════════════════════════════════ */
 /* 新增驗收條件 / 提問情境：明確的表單任務，不是對話，所以用 Modal 是對的。 */
@@ -11864,7 +11915,7 @@ function ScenarioBlock({ skill, p, onSave, onOpenCalc }) {
 }
 
 function TestBlock({ skill, p, onSave, onOpenCalc }) {
-  /* Flow 沒有「意圖」可測 —— 圖裡沒有的工具它根本呼叫不到，
+  /* Codify 沒有「意圖」可測 —— 圖裡沒有的工具它根本呼叫不到，
      範圍是勾出來的結構化條件。它只有情境試跑。 */
   if (skill.tier === 'sop') {
     return <ScenarioBlock skill={skill} p={p} onSave={onSave} onOpenCalc={onOpenCalc} />;
@@ -11873,7 +11924,7 @@ function TestBlock({ skill, p, onSave, onOpenCalc }) {
 }
 
 /* ════════════════════════════════════════
-   驗收 —— 只有 Guide 有（2026-07-29 取代「測試案例」）
+   驗收 —— 只有 Skill 有（2026-07-29 取代「測試案例」）
 
    一條條件的分母不是「跑幾次」，是「這條驗得到的那幾次」。
    前提不成立的次數畫成灰點，不進分子也不進分母。
@@ -12218,7 +12269,7 @@ function StatusBlock({ skill, p }) {
     return (
       <SdSection title="Pilot Run 紀錄"
         badge={skill.pirunRuns.length + ' 次'}
-        desc="含寫入的 Flow 才走 Pilot Run。這裡驗的不是流程跑不跑得動，是「那張確認卡上的資訊，夠不夠人做判斷」。">
+        desc="含寫入的 Codify 才走 Pilot Run。這裡驗的不是流程跑不跑得動，是「那張確認卡上的資訊，夠不夠人做判斷」。">
         <antd.List bordered size="small" dataSource={skill.pirunRuns}
           renderItem={function(r) {
             return (
@@ -12306,7 +12357,7 @@ function buildAiSuggestions(skill) {
     key: 'desc',
     prompt: '描述寫得夠讓新人看懂嗎？',
     reply: (skill.tier === 'sop'
-      ? '以 Flow 來說算清楚，但少了一句「不用這份的時候是什麼狀況」。\n\n新人最常犯的錯不是照著做錯，是在不該用的時候拿來用。建議在開頭補一段排除條件。'
+      ? '以 Codify 來說算清楚，但少了一句「不用這份的時候是什麼狀況」。\n\n新人最常犯的錯不是照著做錯，是在不該用的時候拿來用。建議在開頭補一段排除條件。'
       : '結構是對的（什麼時候用 → 判斷順序 → 要確認的數據 → 注意事項），但少了一句「不用這份的時候是什麼狀況」。\n\n順序寫得再清楚，也擋不掉一開始就不該套用的情境 —— 排除條件要寫在最前面。'),
     action: {
       target: 'description',
@@ -12319,7 +12370,7 @@ function buildAiSuggestions(skill) {
     },
   });
 
-  /* 3. 驗收條件 —— 只有 Guide 有。Flow 的驗收是情境試跑，題目由系統依節點自動出，不用人想 */
+  /* 3. 驗收條件 —— 只有 Skill 有。Codify 的驗收是情境試跑，題目由系統依節點自動出，不用人想 */
   var seedCrits = acceptCrits(skill).filter(function(c) { return c.origin === 'seed'; }).length;
   if (skill.tier !== 'sop' && seedCrits < 4) {
     list.push({
@@ -12341,8 +12392,8 @@ function buildAiSuggestions(skill) {
   /* 4. 邊界（永遠有，純討論、沒有可 take 的變更） */
   list.push({
     key: 'scopecheck',
-    prompt: '你可以順便幫我改別的 Flow 嗎？',
-    reply: '不行。我這次被綁定的只有這一份「' + skill.title + '」，改不到其他 Skill 或 Flow。\n\n這是刻意的：每一份的簽核與責任歸屬都是獨立的，如果一個對話可以連帶改動好幾份，簽核就失去意義了。\n\n要改別份，請到 Skill 管理開啟那一份，在它的頁面上按 Ask AI。',
+    prompt: '你可以順便幫我改別的 Codify 嗎？',
+    reply: '不行。我這次被綁定的只有這一份「' + skill.title + '」，改不到其他 Skill 或 Codify。\n\n這是刻意的：每一份的簽核與責任歸屬都是獨立的，如果一個對話可以連帶改動好幾份，簽核就失去意義了。\n\n要改別份，請到 Skill 管理開啟那一份，在它的頁面上按 Ask AI。',
     action: null,
   });
 
@@ -12595,7 +12646,7 @@ function AskAiPanel({ skill, onClose, onApply, intake }) {
           <antd.Button size="small" type="text" onClick={onClose} style={{ color: C.textMuted }}>✕</antd.Button>
         </div>
         <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4, lineHeight: 1.6 }}>
-          只能修改<span style={{ color: C.textSub, fontWeight: 600 }}>「{skill.title}」</span>這一份，動不到其他 Skill／Flow。
+          只能修改<span style={{ color: C.textSub, fontWeight: 600 }}>「{skill.title}」</span>這一份，動不到其他 Skill／Codify。
         </div>
       </div>
 
@@ -12654,7 +12705,7 @@ function buildFormalDescription(skill) {
       + '\n\n## 會碰到哪些系統\n目前全程只讀取資料、不異動任何系統。若之後加入會異動系統的步驟，執行到那幾步一律會停下來等人確認 —— 手動執行如此，排程執行也一樣。'
       + '\n\n## 什麼時候不用這份\n（AI 依適用範圍草擬，請補上課上實際的排除條件）';
   }
-  /* Guide 的正式格式不是「一篇說明文件」，是**agent 照著跑的操作手冊**：
+  /* Skill 的正式格式不是「一篇說明文件」，是**agent 照著跑的操作手冊**：
      要寫出呼叫哪一支工具、分支的門檻在哪、什麼時候要停下來，
      以及回答一定要帶出哪些東西 —— 最後那一段是讓研判結果可以被別人檢查的關鍵，
      沒有它，agent 產出的就只是一句看不出憑據的結論。 */
@@ -12677,8 +12728,8 @@ function buildFormalDescription(skill) {
     + '\n\n## 注意事項\n本指引產出的是**建議**，責任仍在執行者。本類型只有唯讀工具，不會異動任何系統。';
 }
 
-/* 2026-07-30 起兩個類型名都是拉丁字（Guide / Flow），夾在中文句子裡都要補空白。
-   不處理的話會出現「那就改成Flow吧」這種擠在一起的句子。
+/* 2026-07-30 起兩個類型名都是拉丁字（Skill / Codify），夾在中文句子裡都要補空白。
+   不處理的話會出現「那就改成Codify吧」這種擠在一起的句子。
    知識仍是中文，所以照舊由第一個字元判斷，不寫死。 */
 function tierWord(t) {
   var l = SKILL_TIER_CFG[t].label;
@@ -12731,12 +12782,12 @@ function buildIntakeReview(skill, p) {
       runSteps: ['讀取你填的流程描述', '比對這個類型的標準格式', '補上缺少的段落', '產生正式的 Description'],
       resultText: '整理好了。你原本寫的意思都在，只是補上了結構與缺掉的段落 —— 套用後可以再編輯。',
       before: (raw || '（未填）').slice(0, 60) + (raw.length > 60 ? '…' : ''),
-      after: isSop ? '（正式 Flow 流程敘述：流程大意 / 會碰到的系統 / 異動步驟的處理）' : '（正式判斷指引：什麼時候用 / 可以動用的工具 / 研判步驟與門檻 / 回答一定要包含 / 停下來不要硬判的情況）',
+      after: isSop ? '（正式 Codify 流程敘述：流程大意 / 會碰到的系統 / 異動步驟的處理）' : '（正式判斷指引：什麼時候用 / 可以動用的工具 / 研判步驟與門檻 / 回答一定要包含 / 停下來不要硬判的情況）',
       appliedNote: 'Description 已更新',
     },
   });
 
-  /* 3. Graph —— 只有 Flow 有，且還沒拆步驟時才提 */
+  /* 3. Graph —— 只有 Codify 有，且還沒拆步驟時才提 */
   if (isSop && (skill.plainSteps || []).length === 0) {
     findings.push('**流程圖**　還沒有。我可以依你寫的流程拆成步驟，並標出哪幾步會異動系統。');
     suggestions.push({
@@ -12758,11 +12809,11 @@ function buildIntakeReview(skill, p) {
   /* 4. 驗收 —— 不給 action，因為它要的是使用者自己去按那顆執行鈕。
      兩種類型驗收方法不同，講的話也不一樣。 */
   findings.push(isSop
-    ? '**驗收**　Flow 不測「使用者會怎麼問」——圖裡沒有的工具它呼叫不到，範圍也是勾出來的。要驗的是資料壞掉時每個節點怎麼反應，題目系統會依你的節點自動出。拆完步驟之後，記得回左邊按一次「執行情境試跑」。'
-    : '**驗收**　目前只有系統自動補的 ' + critCnt + ' 條驗收條件與 ' + probeCnt + ' 個提問情境，還沒跑過。Guide 每次結果都不一樣，所以驗收是同一個問法跑 ' + ACCEPT_RUNS + ' 次、由你看內容確認 —— 整理完內容之後，記得回左邊按一次「執行驗收」。');
+    ? '**驗收**　Codify 不測「使用者會怎麼問」——圖裡沒有的工具它呼叫不到，範圍也是勾出來的。要驗的是資料壞掉時每個節點怎麼反應，題目系統會依你的節點自動出。拆完步驟之後，記得回左邊按一次「執行情境試跑」。'
+    : '**驗收**　目前只有系統自動補的 ' + critCnt + ' 條驗收條件與 ' + probeCnt + ' 個提問情境，還沒跑過。Skill 每次結果都不一樣，所以驗收是同一個問法跑 ' + ACCEPT_RUNS + ' 次、由你看內容確認 —— 整理完內容之後，記得回左邊按一次「執行驗收」。');
 
   return {
-    runSteps: ['讀取你填的名稱與流程', '比對課上已有的 Skill 與 Flow', '檢查適用範圍圈到的機台', '判斷類型是否合適'],
+    runSteps: ['讀取你填的名稱與流程', '比對課上已有的 Skill 與 Codify', '檢查適用範圍圈到的機台', '判斷類型是否合適'],
     reply: '我看過你填的內容了。\n\n' + findings.join('\n\n') + '\n\n下面幾件事我可以幫你做，一次一件。',
     suggestions: suggestions,
   };
@@ -12804,7 +12855,7 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
         ? buildFormalDescription(skill)
         : act.after + '\n\n' + (skill.description || '');
       /* 指引是這份的契約。改了之後 AI 的行為就跟上次驗的不是同一件事，
-         所以先前的驗收結果與確認一律作廢（Guide 才有這件事）。 */
+         所以先前的驗收結果與確認一律作廢（Skill 才有這件事）。 */
       next.descRev = (skill.descRev || 0) + 1;
 
     } else if (act.target === 'scope') {
@@ -12813,8 +12864,8 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
     } else if (act.target === 'tier') {
       next.tier = act.tier;
-      /* 類型換了，驗收方法整個換掉 —— Flow 走情境試跑（系統依節點自動出，
-         不需要驗收條件），Guide 走驗收。 */
+      /* 類型換了，驗收方法整個換掉 —— Codify 走情境試跑（系統依節點自動出，
+         不需要驗收條件），Skill 走驗收。 */
       if (act.tier === 'sop') {
         next.acceptance = { criteria: [], probes: [] };
         next.acceptRun = undefined;
@@ -12958,12 +13009,12 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
             <SdSection id="sd-desc" title="Description" {...sectionProps('description')}
               desc={skill.tier === 'sop'
-                ? '這份 Flow 在做什麼、流程大意。簽核簽的是這段白話說明，不是底下的 code。'
-                : '這份 Guide 的完整指引，也是 AI 的操作手冊 —— 呼叫哪支工具、什麼門檻下走哪條分支、回答要帶出哪些依據，都寫在這裡。它寫得多明確，研判就有多穩，也才檢查得出 AI 到底做了什麼。'}>
+                ? '這份 Codify 在做什麼、流程大意。簽核簽的是這段白話說明，不是底下的 code。'
+                : '這份 Skill 的完整指引，也是 AI 的操作手冊 —— 呼叫哪支工具、什麼門檻下走哪條分支、回答要帶出哪些依據，都寫在這裡。它寫得多明確，研判就有多穩，也才檢查得出 AI 到底做了什麼。'}>
               <DescriptionBlock skill={skill} p={p} />
             </SdSection>
 
-            {/* Graph 只有 Flow 有 —— Guide 沒有固定步驟，畫不出流程圖 */}
+            {/* Graph 只有 Codify 有 —— Skill 沒有固定步驟，畫不出流程圖 */}
             {skill.tier === 'sop' && (
               <SdSection id="sd-graph" title="Graph" {...sectionProps('graph')}
                 badge={(skill.plainSteps || []).length + ' 個步驟'}
@@ -12976,7 +13027,7 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
 
             <SdSection id="sd-test" title={skill.tier === 'sop' ? 'Dry-run' : '驗收'}
               desc={skill.tier === 'sop'
-                ? 'Flow 是 codify graph，每個節點都是一段程式碼，沒有「意圖」可測 —— 圖裡沒有的工具它呼叫不到，範圍也是勾出來的結構化條件。要驗的是結果與例外：資料壞掉時每個節點怎麼反應。全部符合約定才能送簽。'
+                ? 'Codify 是 codify graph，每個節點都是一段程式碼，沒有「意圖」可測 —— 圖裡沒有的工具它呼叫不到，範圍也是勾出來的結構化條件。要驗的是結果與例外：資料壞掉時每個節點怎麼反應。全部符合約定才能送簽。'
                 : '同一份指引換個問法就會走不同路，沒有固定步驟可以試跑，而且每次結果都不一樣 —— 所以驗的是意圖，而且要跑很多次。你寫下每次回答都該成立的條件，系統把每個提問情境各跑 ' + ACCEPT_RUNS + ' 次，由你看內容確認。全數確認才能送簽。'}>
               <TestBlock skill={skill} p={p} onSave={onSave} onOpenCalc={function() { setCalcOpened(true); }} />
             </SdSection>
@@ -13902,7 +13953,7 @@ function KnowledgeTab({ p }) {
 /* ═══════════════════════════════════
    Tab 6：知識管理
    2026-07-26：知識從 Skill 管理拆出來獨立。
-   它在 Guide／Flow 執行前後都會被引用，是底料不是平行路線。
+   它在 Skill／Codify 執行前後都會被引用，是底料不是平行路線。
    ═══════════════════════════════════ */
 function KnowledgeDocTab({ p }) {
   return (
@@ -16615,7 +16666,7 @@ function SchStepTimeline({ steps, compact }) {
 /* ════════════════════════════════════════
    SchNewScheduleModal — 新增排程
 
-   排程只掛得上 Flow。Guide 每次結果都不一樣、產出的是給人看的建議，
+   排程只掛得上 Codify。Skill 每次結果都不一樣、產出的是給人看的建議，
    沒人在場就沒有意義；知識根本沒有要執行的東西。
    但不可用的類型不隱藏 —— 看得到、標明原因，Seed 才知道邊界在哪。
    見 brain/concepts/agent-skill-tiering.md「三層分界」
@@ -16626,7 +16677,7 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
   var { C, fz } = useTheme();
   var all = ((p.knowledge || {}).sopManagement) || [];
 
-  /* 可掛：Production 的 Flow。其餘全部列出來但不能選，並寫明為什麼 */
+  /* 可掛：Production 的 Codify。其餘全部列出來但不能選，並寫明為什麼 */
   function blockReason(s) {
     if (s.tier !== 'sop') {
       return SKILL_TIER_CFG[s.tier].label + ' 不能設排程：每次結果不一樣，需要有人在場看';
@@ -16658,10 +16709,10 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
       onOk={function() { if (pickedSkill) onCreate(pickedSkill, cron); }}
     >
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
-        排程只掛得上已上線的 Flow —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
+        排程只掛得上已上線的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
       </div>
 
-      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 Flow</div>
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 Codify</div>
       <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8, marginBottom: 16 }} className="scrollbar-thin">
         {options.length === 0 && (
           <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本課目前沒有任何 Skill。</div>
@@ -16707,13 +16758,13 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
           ? <antd.Alert
               type="warning"
               showIcon
-              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Flow 含 {confirmSteps} 個需確認步驟</span>}
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 含 {confirmSteps} 個需確認步驟</span>}
               description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，確認後才會繼續。不是設好就完全不用管。</span>}
             />
           : <antd.Alert
               type="success"
               showIcon
-              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Flow 只讀取資料，可以完全自動執行</span>}
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 只讀取資料，可以完全自動執行</span>}
               description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>不會異動任何系統，時間到就有產出。</span>}
             />
       )}
@@ -17059,7 +17110,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
                 {typeof selectedItem.confirmSteps === 'number' && (
                   <div style={{ fontSize: fz(12), color: selectedItem.confirmSteps > 0 ? '#F59E0B' : '#22C55E', marginTop: 4, fontWeight: 600 }}>
                     {selectedItem.confirmSteps > 0
-                      ? '⚠️ 本 Flow 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
+                      ? '⚠️ 本 Codify 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
                       : '只讀取資料，時間到就有產出，不會異動任何系統'}
                   </div>
                 )}
@@ -17103,7 +17154,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
 
       </div>
 
-      {/* 新增排程：只選得到已上線的 Flow */}
+      {/* 新增排程：只選得到已上線的 Codify */}
       {showNew && (
         <SchNewScheduleModal
           p={p}
