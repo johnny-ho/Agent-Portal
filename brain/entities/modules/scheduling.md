@@ -184,6 +184,12 @@ PO 看了實機後指出「已經新增過的不用出現、不能新增進去�
 
 **實作狀態（2026-08-01 完成）**：`SchScheduleModal` 的 options 改為只留 `!schBlockReason()` 者。`schBlockReason()` **保留不動**——它仍是「能不能掛」的單一真相，供過濾與計數使用，只是不再逐列渲染理由。**瀏覽器實測 15 項全過**（無鎖頭、三種死列都不出現、常駐提示在、搜尋框已移除、清單由 5 列降為 1 列、仍選得動建得起來、建完後＋新增自動轉停用），無 console error。
 
+### 沒有任何 Codify 可選時（2026-08-01 釐清）
+
+**空清單的 Modal 進不去**，三個入口都擋住了：「＋ 新增」在 0 份時停用、下方副標只在 >0 時可點、Codify 詳情的「設為定期執行」只在 `stage === 'production'` 分支渲染（Production 且未掛排程 ⇒ 必然 >0 份）。所以 0 份時的展示就是**停用的按鈕＋一行副標「本課已生效的 Codify 都掛上排程了」**；Modal 內的空清單文案是防禦性的，目前跑不到。
+
+⚠️ 追這條路徑時抓到一個 **pre-existing bug**：`SettingPage` 的 `KnowledgeTab({ p })` 用了 `schedMounts` 與 `onScheduleSkill` 卻沒收進參數，一點 Skill 管理就 `ReferenceError` 白畫面。來源是 Phase D（ddf9c21）接單一真相時漏了最後一跳，而**該輪沒有瀏覽器實測**——這是實測封鎖直接漏掉的第一個真 bug。已修（補收 prop、呼叫處補傳）。
+
 ## 專屬 OQ
 
 ~~SCH-OQ-1 Claim timeout 機制~~ **作廢**（2026-08-01：不再有認領鎖）→ 改為新題 **SCH-OQ-7 決策等待逾時策略**（升級通知門檻、是否自動終止）；SCH-OQ-2 Skill 編寫介面與 MCP tool 授權（高）；SCH-OQ-3 執行 context 持久化規格（高）；~~SCH-OQ-4 延伸討論結果是否回寫執行紀錄~~ **作廢**（延伸討論已移除）；SCH-OQ-5 失敗重試策略；SCH-OQ-6 排程建立/編輯 UI。彙整見 [open-questions](../../open-questions.md)。

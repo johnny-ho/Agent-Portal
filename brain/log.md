@@ -516,3 +516,16 @@ PO 看實機後指出「已經新增過的不用出現、不能新增進去的�
 瀏覽器實測 **15 項全過**（無鎖頭、三種死列都不出現、常駐提示在、搜尋框已移除、清單由 5 列降為 1 列、仍選得動建得起來、建完後＋新增自動轉停用），無 console error。build 1,046,769 bytes。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（新增決議 20 段）、[decisions.md](decisions.md)、index.md。
+
+
+## [2026-08-01] fix | Skill 管理 tab 開不起來（pre-existing ReferenceError）
+
+PO 問「沒有任何 Codify 可選時怎麼展示」，我要實測那條路徑（Codify 詳情的「設為定期執行」→ 排程 Modal），結果一點 Setting ／ Skill 管理就噴 `schedMounts is not defined`，整個 tab 白畫面。
+
+**是 pre-existing，不是決議 19／20 帶進來的**：`git log` 指向 ddf9c21（Phase D+E），`KnowledgeTab({ p })` 用了 `schedMounts` 與 `onScheduleSkill` 卻沒把它們列進參數，App → SettingPage 那一段其實有傳。等於 Phase D 那輪把「Skill 管理的已掛排程徽章」接上單一真相時，只接了 SettingPage 這一層，漏了最後一跳。**Phase D 當時沒有瀏覽器實測**（實測封鎖 2026-08-01 才解除），所以這個 ReferenceError 一直沒被看到——這是「無法實測」直接漏掉的第一個真 bug。
+
+修法：`KnowledgeTab` 補收兩個 prop，呼叫處補傳。
+
+**順帶釐清 PO 的問題**：空清單的 Modal **進不去**。三個入口——「＋ 新增」在 0 份時已停用、下面那行副標只在 >0 時可點、Codify 詳情的「設為定期執行」按鈕只在 `stage === 'production'` 的分支裡渲染（我一開始誤讀成不看階段），而 Production 且未掛＝必然 >0 份。所以 0 份時的展示就是**停用的按鈕＋一行副標「本課已生效的 Codify 都掛上排程了」**，Modal 內那句空清單文案目前是防禦性的死路。實測 4 項確認（按鈕停用、副標在、強制點按鈕不開 Modal、點副標不開 Modal）。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、log.md。

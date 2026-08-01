@@ -14515,7 +14515,7 @@ function ApplicationSettingTab({ p}) {
 /* ═══════════════════════════════════
    Tab 5：知識管理
    ═══════════════════════════════════ */
-function KnowledgeTab({ p }) {
+function KnowledgeTab({ p, schedMounts, onScheduleSkill }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
       <SOPManagementPage p={p} schedMounts={schedMounts} onScheduleSkill={onScheduleSkill} />  {/* SOPManagementPage 已重構為 SkillManagementPage，函式名稱向後相容 */}
@@ -16182,7 +16182,7 @@ function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser,
         {activeTab === 'permissions'    && <PermissionsTab p={p} />}
         {activeTab === 'kpi-report'     && <KpiReportSettingTab p={p} isSeedUser={isSeedUser} />}
         {activeTab === 'home'           && <HomeLayoutTab p={p} homeLayout={homeLayout} onHomeLayoutChange={onHomeLayoutChange} onNavigateToTab={setActiveTab} jumpSlot={jumpSlot} onJumpSlotConsumed={function() { setJumpSlot(null); }} kpiConfig={kpiConfig} onKpiConfigChange={onKpiConfigChange} jumpWidgetType={jumpWidgetType} onJumpWidgetTypeConsumed={function() { setJumpWidgetType(null); }} />}
-        {activeTab === 'knowledge'      && <KnowledgeTab p={p} />}
+        {activeTab === 'knowledge'      && <KnowledgeTab p={p} schedMounts={schedMounts} onScheduleSkill={onScheduleSkill} />}
         {activeTab === 'knowledge-doc' && <KnowledgeDocTab p={p} />}
         {activeTab === 'qna'            && <WIPSettingTab title="Q&A 管理" />}
         {activeTab === 'app-management' && (
