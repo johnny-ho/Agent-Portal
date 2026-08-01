@@ -1590,7 +1590,7 @@ function AcceptanceBlock({ skill, p, onSave }) {
 /* ════════════════════════════════════════
    管理狀態（簽核 / 生效資訊）
    ════════════════════════════════════════ */
-function StatusBlock({ skill, p }) {
+function StatusBlock({ skill, p, mount, onScheduleSkill }) {
   var { C, fz } = useTheme();
 
   if (skill.stage === 'approving') {
@@ -1652,11 +1652,20 @@ function StatusBlock({ skill, p }) {
     ];
     if (skill.productionDate) items.push({ key: 'date', label: '生效日期', children: skill.productionDate });
     if (skill.approvedBy)     items.push({ key: 'by',   label: '核准人',   children: skill.approvedBy });
-    if (skill.consumedBy && skill.consumedBy.scheduleId) {
-      items.push({ key: 'sch', label: '已掛排程', children: skill.consumedBy.scheduleId });
+    /* 排程狀態以排程清單為準（mount），不看 skill.consumedBy —— 只留一個真相來源 */
+    var isCodify = skill.tier === 'sop';
+    if (mount) {
+      items.push({ key: 'sch', label: '已掛排程', children: mount.scheduleName + '（' + mount.cronLabel + '）' });
+    } else if (isCodify) {
+      items.push({ key: 'sch', label: '已掛排程', children: <span style={{ color: C.textMuted }}>尚未設定</span> });
     }
     return (
-      <SdSection title="生效資訊">
+      <SdSection
+        title="生效資訊"
+        extra={isCodify && !mount && onScheduleSkill
+          ? <antd.Button size="small" type="primary" onClick={function() { onScheduleSkill(skill); }}>設為定期執行</antd.Button>
+          : null}
+      >
         <antd.Descriptions bordered size="small" column={1} items={items}
           labelStyle={{ fontSize: fz(12), color: C.textMuted, width: 96 }}
           contentStyle={{ fontSize: fz(14), color: C.text }}
@@ -2180,7 +2189,7 @@ function buildIntakeReview(skill, p) {
 /* ════════════════════════════════════════
    主元件
    ════════════════════════════════════════ */
-function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
+function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onScheduleSkill }) {
   var { C, fz } = useTheme();
   var [calcOpened, setCalcOpened] = React.useState(false);
   /* 剛建立的 Skill：右側自動展開並開始體檢 */
@@ -2390,7 +2399,7 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance }) {
               <TestBlock skill={skill} p={p} onSave={onSave} onOpenCalc={function() { setCalcOpened(true); }} />
             </SdSection>
 
-            <StatusBlock skill={skill} p={p} />
+            <StatusBlock skill={skill} p={p} mount={mount} onScheduleSkill={onScheduleSkill} />
 
             {/* 送簽條件沒過時，把原因寫在頁尾，不要只藏在 tooltip 裡 */}
             {gate && (

@@ -121,8 +121,11 @@ function DryRunOutput({ output }) {
    列上只有刪除；其餘行為進詳情頁再做。
    類型不再入欄：清單永遠只裝當前分頁那一種。
    ════════════════════════════════════════ */
-function useSkillColumns({ onDelete }) {
+function useSkillColumns({ onDelete, mounts }) {
   var { C, fz } = useTheme();
+  /* 這份 Codify 掛在哪個排程；以排程清單為準（含本 session 新建的），
+     不看 skill.consumedBy —— 兩邊只留一個真相來源 */
+  function mountOf(s) { return (mounts || {})[s.id] || null; }
 
   return [
     {
@@ -149,8 +152,8 @@ function useSkillColumns({ onDelete }) {
               {confirmCnt > 0 && (
                 <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>🔒 {confirmCnt} 步需確認</antd.Tag>
               )}
-              {r.consumedBy && r.consumedBy.scheduleId && (
-                <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>已掛排程</antd.Tag>
+              {mountOf(r) && (
+                <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>已掛排程：{mountOf(r).scheduleName}</antd.Tag>
               )}
               {(r.knowledgeRefs || []).length > 0 && (
                 <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>引用 {r.knowledgeRefs.length} 份知識</antd.Tag>
@@ -175,7 +178,7 @@ function useSkillColumns({ onDelete }) {
           <span onClick={function(e) { e.stopPropagation(); }}>
             <antd.Popconfirm
               title="確定刪除此 Skill？"
-              description={r.consumedBy && r.consumedBy.scheduleId ? '它目前掛在排程 ' + r.consumedBy.scheduleId + ' 上。' : null}
+              description={mountOf(r) ? '它目前掛在排程「' + mountOf(r).scheduleName + '」上，刪除後該排程會失去依據。' : null}
               okText="刪除"
               okButtonProps={{ danger: true }}
               cancelText="取消"
@@ -193,7 +196,7 @@ function useSkillColumns({ onDelete }) {
 /* ════════════════════════════════════════
    主頁面（函式名稱維持 SOPManagementPage 以相容 SettingPage）
    ════════════════════════════════════════ */
-function SOPManagementPage({ p }) {
+function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
   var { C, fz } = useTheme();
   var [filter, setFilter]         = React.useState('all');
   var [activeTier, setActiveTier] = React.useState(SKILL_DEFAULT_TIER);
@@ -234,7 +237,7 @@ function SOPManagementPage({ p }) {
     });
   }
 
-  var columns = useSkillColumns({ onDelete: deleteSkill });
+  var columns = useSkillColumns({ onDelete: deleteSkill, mounts: schedMounts });
 
   /* 分頁先切，階段筆數才算 —— 徽章上的數字必須跟人眼前這份清單對得上 */
   var tierCounts = {};
@@ -270,6 +273,8 @@ function SOPManagementPage({ p }) {
         key={detailSkill.id}
         skill={detailSkill}
         p={p}
+        mount={(schedMounts || {})[detailSkill.id] || null}
+        onScheduleSkill={onScheduleSkill}
         onBack={function() { setDetailId(null); }}
         onSave={saveSkill}
         onAdvance={function(nextStage) { advanceStage(detailSkill.id, nextStage); }}

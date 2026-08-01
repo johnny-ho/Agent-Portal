@@ -27,7 +27,7 @@ status: current
 ## 模組專屬
 
 - **Task**（TM-OQ-1~5）：AI 標記閾值（高）、Case 關聯、成員視角、逾期通知、三課欄位 → [task-management](entities/modules/task-management.md)
-- **Scheduling**（SCH-OQ-1~6）：Claim timeout（高）、~~Skill 編寫與 tool 授權（高）~~ **✅ 已有解方待實作** → [agent-skill-tiering](concepts/agent-skill-tiering.md)、context 持久化（高）、延伸討論回寫、失敗重試、建立/編輯 UI → [scheduling](entities/modules/scheduling.md)
+- **Scheduling**（SCH-OQ-1~7）：~~Claim timeout~~ **作廢（2026-08-01 取消認領鎖）** → 新題 **SCH-OQ-7 決策等待逾時策略**（PO 指示先做「持續等待」，升級通知與自動終止後期再補）、~~Skill 編寫與 tool 授權（高）~~ **✅ 已有解方待實作** → [agent-skill-tiering](concepts/agent-skill-tiering.md)、context 持久化（高）、~~延伸討論回寫~~ **作廢（延伸討論已移除）**、失敗重試、建立/編輯 UI → [scheduling](entities/modules/scheduling.md)
 
 ## Wiki 追蹤中的新缺口（ingest 時發現，baseline 尚未收錄）
 

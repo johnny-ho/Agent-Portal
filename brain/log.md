@@ -400,3 +400,58 @@ PO 帶著使用者回饋回來：「使用者認為 Skill 是一個 Agentic AI �
 build 987,628 bytes。**本輪有做瀏覽器實測**（上一輪因 CDN 被擋只能靠 Babel 編譯等價驗證）：預設落 Skill 分頁 3 筆、小標題正確；切 Codify → 4 筆、小標題與階段徽章（Draft 0／Testing 1／Approving 0／Pilot 1／Production 2）全部重算；詳情頁徽章與說明同步；建立 Modal 兩張卡為 Skill／Codify；console 僅既有 Babel 500KB 提示，零 error。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 16，頁首改名對照表補成兩輪）、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-01] decision + build | Schedule 六目標評估，介入機制改寫（Phase A + B）
+
+PO 帶著六個目標來要評估：①可加入排程的 Codify 好不好找 ②每次執行有沒有紀錄 ③異常好不好查 ④需要人介入時感不感知得到 ⑤介入有沒有記下誰在何時 ⑥跑完看不看得到每個節點與結果。
+
+**評估結論**：④最完整（通知＋Nav 紅點＋左欄紅框＋Alert 四層都在）；⑤表面有、**互動後反而消失**——`handleConfirm` 只把 runId 丟進 `resolvedRuns`，而摘要列的介入者那一行條件是 `run.result !== 'success' && !isResolved`，一按確認就整段不渲染，下面的 `stepActors` 又要求 `result === 'success'`（原始資料仍是 `pending`），兩邊都不顯示 → 按完只剩「完成（人工確認）」，看不出是誰、幾點、為什麼；②③⑥只在「單一排程」尺度成立，缺跨排程視角；③最大的洞是**排程失敗完全沒有通知**（N1/N2/N3 不涵蓋，兩筆 error run 在 notifications.js 一則都沒有）；①的洞是 `blockReason()` 只看 tier/stage，**不排除已掛排程的 Codify**（`sm-eq-008` 已掛 `sch-eq-001` 仍可再選一次），且建立後不回寫 `consumedBy`。
+
+**PO 的關鍵修正**（決議 17，完整表格見 [scheduling](entities/modules/scheduling.md)）：舊設計「按了介入就啟動 AI 對話」——**未來這一段不打算引入 AI 對話**；而且**不需要舉手**，該做的是把選項直接展示在介入畫面裡，誰點了就記下他的決定與時間；同時**要卡控 A 的決定被 B 推翻**。五題拍板：選項含「略過此步驟」／逾時先不做只做持續等待／拒絕理由必填／連產出物的「針對這份問 AI」也一併移除讓情境單純／Seed 與 member 都可以決定。
+
+**實作**：`scheduling.js` 全檔重寫資料模型（`run.interventions[]` 取代 `handler`＋`decisionBy`；步驟最終狀態改由 `getRunView()` 從介入紀錄推導，不寫死；新增 `SCH_DECISION_CFG`、`getPendingDecisions()`）；`SchedulingPage.jsx` 決策點面板攤開三選項（確認單擊、略過／拒絕走 `SchDecisionReasonModal`）、`SchInterventionLine` 讓痕跡固定顯示、左欄「本課有 N 件待人工決定」匯總、移除 `handleDiscuss`／`handleAskAboutOutput`／`lockedRun`／`resolvedRuns`／`SchActorLine`；`App.jsx` 把決定狀態提升成 `schedDecisions` 並在 `decideSchedulingStep` 實作 first-write-wins（同一決策點只收第一筆，之後回 `false`），Nav 紅點改綁 `getPendingDecisions`。順手修兩個 bug：`extraItems` 跨課殘留、切課後右欄空白（加 `key={persona}`）。
+
+build 1,007,758 bytes。⚠️ **無法瀏覽器實測**——`shell.html` 依賴 unpkg CDN，本 session proxy 政策擋住外連（`CONNECT tunnel failed 403`），連本地 vendor 化都下載不到。改以 Babel 本地編譯（等價於瀏覽器內 `@babel/standalone`）＋ vm 宣告階段執行＋對 `getRunView`／`getPendingDecisions` 的 23 項行為驗證（決策點推進、略過流程續走、拒絕終止後續、歷史介入留痕、待決定匯總歸零、交接報告未被破壞）全數通過。**下次有網路時要補的實測**：三顆按鈕的視覺與間距、理由 Modal 的必填禁用、決定後左欄狀態與 Nav 紅點同步。
+
+**未做，留給後續 Phase**：C 跨排程總覽／只看異常／失敗通知（N4）／重跑；D 已掛排程的 Codify 鎖住＋雙向回寫＋搜尋＋Codify 詳情「設為定期執行」入口；E 節點明細（tool／參數／耗時／來源欄位已進資料層但畫面未用）與 Graph 實走路徑。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（＋決議 17 與實作狀態、SCH-OQ-1/4 作廢、新增 SCH-OQ-7）、[notification](entities/modules/notification.md)（Nav 紅點真相來源更正、N2 文案、失敗無通知列待補）、[decisions.md](decisions.md)、[open-questions.md](open-questions.md)、index.md。
+
+## [2026-08-01] build | Schedule Phase C：執行總覽、異常、失敗通知、重跑
+
+接續同日 Phase A + B。PO 說「做」，並同意先做失敗通知那塊（比總覽更急）。
+
+**總覽放哪，改了原本的計畫**：評估時提的是「右欄膠囊 Tabs（總覽／執行紀錄／設定）」，實作時換成**左欄虛擬項目 `SCH_ALL`「執行總覽」**。理由：總覽是**跨排程**的，把它塞進「某一個排程的詳情」裡語意就錯了——你選著 A 排程，右欄卻在講全課的事。左欄項目的作法讓「列表 → 詳情」維持一對一，三欄式佈局也不必動。原計畫本來就把這個當備選（「左欄最上方一列『全部排程』，或右欄總覽 tab」），這次選了前者。
+
+**做了什麼**：
+- `getAllRuns()` 跨排程攤平＋時間倒序；`getRunTs()` 從 `startedAt` 推導時間戳（吃 `今日`／`昨日`／`MM/DD` 三種寫法，`SCH_TODAY` 定義 mock 今日為 2026-04-21）——不在 20 筆 mock 上各補一個 `ts` 欄位。
+- 篩選膠囊四項：全部／執行失敗／待決定／**有人介入**。最後一項是稽核視角，一鍵查得到哪幾次是人做的決定，接目標 5。
+- **N4 執行失敗通知**：站內＋Teams 皆開。這是評估時抓到的最大的洞——`run-eq-004-3`（昨日 23:30 交接報告 timeout）與 `run-pr-002-1`（Recipe 週報 timeout）在 `notifications.js` **一則通知都沒有**，排程半夜掛掉沒有任何人會知道。順手把 `SettingPage.NOTIF_TYPE_LIST` 與 `App` 的偏好初始化改成從 `DEFAULT_NOTIF_PREFS` 推導，之後再加類型不必回頭改三個地方。
+- 失敗改結構化：`SCH_FAILURE_KIND_CFG`（逾時／權限／資料缺／未知，各帶一句白話 hint）＋卡在第幾步＋工具＋原始訊息。
+- **重跑**：`buildRetryRun()` 產生 `trigger:'retry'` 的新執行，記 `triggeredBy` 與 `retryOf`，**原本那筆失敗永遠保留**（重跑是新增一筆，不是覆蓋——覆蓋等於把異常紀錄洗掉）。重跑結果由資料層的 `retry` 樣板定義：交接報告補跑帶產出物並在文案寫明「本份為事後補跑，交接當下並未產出」，Recipe 週報補跑走完四步。
+- 左欄每個排程顯示「近 7 次：N 次失敗」，不穩定的排程自己浮出來。
+- `getPendingDecisions()` 簽章由 `(personaKey, ivs)` 改為 `(items, ivs)`，配合新的 `getScheduleItems(personaKey, extraRuns)`——重跑產生的執行也要納入待決定計算，不能只看 `SCHEDULING_DATA`。
+
+build 1,025,260 bytes。⚠️ **仍無法瀏覽器實測**（unpkg 被 proxy 擋，同上一輪）。Babel 本地編譯通過，行為驗證從 23 項擴充到 **53 項全過**：時間戳三種寫法解析、排序遞減、四種篩選筆數、近 7 次健康度、重跑的 trigger/triggeredBy/retryOf/產出物、重跑併入後原始資料未被汙染、**每一筆 error run 都有對應的 N4 通知**（用交叉比對而非逐筆寫死）。**下次有網路要補的實測**：膠囊選中色與 8px 間距、總覽列的排程名連結、重跑按鈕在 Collapse header 的 `stopPropagation` 是否真的沒有連帶展開。
+
+**未做**：D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、Codify 詳情無「設為定期執行」入口）；E 節點明細與 Graph 實走路徑（欄位已在資料層，畫面未用）；結果異常偵測與定期自動重跑 dry run。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[notification](entities/modules/notification.md)（N4 進表、「明確不做」劃掉失敗通知）、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-01] build | Schedule Phase D + E：可加入的 Codify、節點明細與實走路徑
+
+PO 說「依序處理」，把剩下的 D 與 E 一次做完。至此 A~E 五階段全數完成。
+
+**Phase D（可加入的 Codify）**——修掉評估時抓到的真 bug：舊版 `blockReason()` 只看 tier/stage，`sm-eq-008` 已掛 `sch-eq-001` 卻仍可再選一次，會建出重複排程。作法不是在 Modal 裡多加一個判斷，而是**立一份單一真相** `getSkillScheduleMap(personaKey, extraItems)`：Schedule 的「不能重複掛」、Skill 管理清單的「已掛排程」徽章、刪除警語、詳情頁「生效資訊」全部改讀它，**一律不再讀 `skill.consumedBy`**。原本兩邊各有一份資料，新建排程後就會講不一樣的話。為此把新建的排程從 `SchedulingPage` local state 提升到 App（`schedExtraItems`，per-persona），並把 `schedMounts` / `onScheduleSkill` 透過 App → SettingPage → SOPManagementPage → SkillDetailPage 三層傳下去。
+
+其餘：Modal 加搜尋與選中後的步驟預覽（含哪幾步標「需人工決定」）、左欄常駐「還有 N 份 Codify 可加入排程」、補上 **Codify 詳情的「設為定期執行」入口**（brain 自 2026-07-25 起掛在未實作清單上）。該入口的 deep-link **用完即清**（`onNewScheduleHandled`），否則之後每次回排程頁都會再彈一次 Modal。
+
+**Phase E（節點與最終結果）**——節點明細補齊 `tool(params)`／來源系統／筆數／耗時；判準是「**試跑畫面本來就看得到工具與資料來源，正式執行沒理由看得比試跑少**」。新增 `getRunPath()` 產出本次實走路徑，並把三種「沒走」分開：分支未成立（引擎沒到）／人工略過（人到了、決定不做，算走過但另外標記）／已拒絕後不執行。`skip` 這個狀態同時涵蓋前兩者，得靠有沒有介入紀錄才分得出來。
+
+⚠️ **Graph 視角刻意不做**（原計畫 Phase E 有列）。查了資料才發現 `sm-eq-008` 是唯一有 `graph.edges` 的 Codify，用既有的 `buildGraphLevels()` 分層後**是線性的**（分支是 `2→end`），畫出來與 Timeline 一模一樣。為單一個案做一套 run 版 graph renderer 不划算；路徑摘要用同樣的成本涵蓋全部八個排程。要做 graph 的前提是先有真正會分岔的 Codify 資料。
+
+build 1,037,341 bytes。⚠️ 仍無法瀏覽器實測（unpkg 被 proxy 擋，同前兩輪）。行為驗證由 53 項擴充到 **91 項全過**，D/E 新增的包含：對照表認得已掛的 Codify、鎖住原因寫出排程名稱、沒有對照表時不會誤鎖、新建排程立刻寫進對照表且該 Codify 不能再被選一次、「無 OOC」那次走 1→2→4 且 Step 3 標為非人為未走、人工略過仍算走到但另外標記、拒絕後 Step 4 未執行、節點明細欄位真的有資料（工具步驟都有參數與耗時、讀取型步驟都有筆數）。
+
+**六個目標的收斂狀態**：①②③④⑤⑥ 全部有落點。仍未做：結果異常偵測（與前 N 次比較）、定期自動重跑 dry run、決策等待逾時（SCH-OQ-7，PO 指示先做持續等待）、「編輯排程」與「停用」仍是 placeholder。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（Phase D/E 實作狀態；順手更新「頁面」與「現況與缺口」兩段——原本還寫著「延伸討論跳轉 AI Chat」與「Claim 鎖定」）、[decisions.md](decisions.md)、index.md。
