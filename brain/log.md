@@ -455,3 +455,21 @@ build 1,037,341 bytes。⚠️ 仍無法瀏覽器實測（unpkg 被 proxy 擋，
 **六個目標的收斂狀態**：①②③④⑤⑥ 全部有落點。仍未做：結果異常偵測（與前 N 次比較）、定期自動重跑 dry run、決策等待逾時（SCH-OQ-7，PO 指示先做持續等待）、「編輯排程」與「停用」仍是 placeholder。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（Phase D/E 實作狀態；順手更新「頁面」與「現況與缺口」兩段——原本還寫著「延伸討論跳轉 AI Chat」與「Claim 鎖定」）、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-01] build | Schedule 決議 18：資訊層級收斂（總覽升為主畫面、左欄瘦身）
+
+本 session 先做**現況盤點**（PO 問「完成度跟待開發項目」），再因 PO 用手機看不到畫面而**解掉了纏了三輪的實測封鎖**，最後由實機截圖引出決議 18。
+
+**① 實測封鎖解除（方法要記住）**：unpkg / cdn.tailwindcss.com 仍被 proxy 擋（403），但 **`registry.npmjs.org` 在 noProxy 名單內**——改從 npm 抓同版本依賴 vendor 到本地，build 到暫存目錄後改寫 script src，Playwright 實跑。**`src/shell.html` 沒有動**，repo 保持 CDN 版。Chromium 用 `/opt/pw-browsers/chromium-1194/...`，npm 版 playwright 的預期 build 對不上內建的，要指定 `executablePath`。
+
+**② 實測確認的事**：「編輯排程」「停用」確實是死按鈕（點下去無 Modal／Drawer，DOM 只有 AntD wave 漣漪的位移）。順帶補驗了三顆決策按鈕與篩選膠囊的視覺、節點明細、左欄健康度。另抓到兩個新缺口：`shell.html` 的 `data-theme="dark"` 是死屬性；Codify 全掛滿時「＋新增」仍打得開但進去什麼都選不了。
+
+**③ 決議 18（PO 提，我同意並補一處）**：PO 指出「有東西卡住」被重複溝通到疲勞，且左欄把三種高度疊在一起。清點後實際有 7 個表面在講同一件事。立的分界是**通知（推播）／狀態（現況）／頁內提示（定位）三者不同層，但同一畫面裡講兩次就是重複**——刪左欄橫幅，留 Nav 紅點、鈴鐺、卡片紅點、總覽置頂區塊。
+
+結構改為：**總覽＝進入預設主畫面**、**左欄＝只有排程清單**、**回總覽走右欄麵包屑**（PO 原提案是「左側要有合適方式跳回主頁」，我改成麵包屑——「我現在在哪」屬於詳情欄層級，塞在清單上方不對）。我另補了麵包屑旁的 `其他排程還有 N 件待決定`，補回橫幅拿掉後失去的觸達，且**只算別的排程**（本排程的決策點就在下方）。
+
+⚠️ 明講的取捨：看 A 排程細節時不會被主動告知 B 剛卡住。依據是排程卡住是分鐘～小時級、不是秒級。三欄式佈局未違反（只是詳情欄預設內容換人）。
+
+八項行為驗證全過（預設落點、橫幅已移除、「執行總覽」全頁只剩 1 處、總覽置頂仍在、麵包屑出現、其他排程提示、本身卡住的不重複提示、麵包屑回得去），無 console error。build 1,037,414 bytes。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（新增「決議 18」段、改寫「頁面」段、實測方法與新缺口回填）、[decisions.md](decisions.md)、index.md。

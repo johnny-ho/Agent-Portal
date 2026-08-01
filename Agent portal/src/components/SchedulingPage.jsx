@@ -413,7 +413,9 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
 
   const [showNew, setShowNew]       = React.useState(false);
   const [presetSkillId, setPreset]  = React.useState(null);
-  const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
+  /* 預設停在執行總覽 —— 進門先看「全課昨晚跑了什麼」，
+     而不是一進來就鑽進第一個排程的細節 */
+  const [selectedId, setSelectedId] = React.useState(SCH_ALL);
   const [runFilter, setRunFilter]   = React.useState('all');
   const [reasonModal, setReasonModal] = React.useState(null);   // { action, run, step }
   const [conflict, setConflict]     = React.useState(null);     // 決定被搶先時的提示
@@ -460,6 +462,11 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
   const activeDecision = pendingDecisions.filter(function (d) {
     return selectedItem && d.item.id === selectedItem.id;
   })[0] || null;
+
+  /* 別的排程還卡著幾件 —— 本排程自己的決策點就在畫面下方，不重複計入 */
+  const othersPending = pendingDecisions.filter(function (d) {
+    return !selectedItem || d.item.id !== selectedItem.id;
+  }).length;
 
   /* ── 送出決定 ──
      先送出者定案：onDecide 回 false 代表這個決策點已經被別人決定了，
@@ -791,40 +798,9 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
           background: C.bg, borderRight: '1px solid ' + C.border,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-          {/* 全課待決定匯總：不必逐一點排程才發現有東西卡住 */}
-          {pendingDecisions.length > 0 && (
-            <div
-              onClick={function () { setSelectedId(pendingDecisions[0].item.id); }}
-              style={{
-                padding: '8px 16px', borderBottom: '1px solid ' + C.border,
-                background: 'rgba(239,68,68,0.06)', cursor: 'pointer',
-              }}
-            >
-              <div style={{ fontSize: fz(12), fontWeight: 600, color: '#DC2626' }}>
-                ⚠ 本課有 {pendingDecisions.length} 件待人工決定
-              </div>
-              <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
-                {pendingDecisions.map(function (d) { return d.item.name; }).join('、')}
-              </div>
-            </div>
-          )}
-
-          {/* 執行總覽入口：不必逐一點排程才知道全課跑了什麼、哪幾次掛了 */}
-          <div
-            onClick={function () { setSelectedId(SCH_ALL); }}
-            style={{
-              padding: '12px 16px', borderBottom: '1px solid ' + C.border, cursor: 'pointer',
-              background: isOverview ? 'rgba(37,99,235,0.08)' : 'transparent',
-              borderLeft: '3px solid ' + (isOverview ? '#2563EB' : 'transparent'),
-            }}
-          >
-            <div style={{ fontSize: fz(13), fontWeight: 600, color: isOverview ? '#2563EB' : C.text }}>執行總覽</div>
-            <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
-              全課 {allRuns.length} 次執行
-              {errorRuns.length > 0 && <span style={{ color: '#DC2626' }}>　·　{errorRuns.length} 次失敗</span>}
-            </div>
-          </div>
-
+          {/* 左欄只做一件事：切換單一排程。
+              跨排程的警示與入口都在總覽（右欄主頁），不在這裡重複講一次 ——
+              原本的「本課有 N 件待人工決定」橫幅與「執行總覽」入口已移除。 */}
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
@@ -905,6 +881,24 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
               display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0,
             }}>
               <div>
+                {/* 回總覽的路。左欄不再有總覽入口，「我現在在哪」屬於詳情欄的層級。
+                    帶上「其他排程還有 N 件待決定」——補回左欄橫幅拿掉後失去的那一點觸達，
+                    但只算別的排程（本排程的決策點就在下面，不必再講一次），且不另開警示區塊。 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <antd.Breadcrumb
+                    items={[
+                      { title: <a onClick={function () { setSelectedId(SCH_ALL); }}>排程中心</a> },
+                      { title: <span style={{ color: C.textSub }}>{selectedItem.name}</span> },
+                    ]}
+                    style={{ fontSize: fz(12) }}
+                  />
+                  {othersPending > 0 && (
+                    <a
+                      onClick={function () { setSelectedId(SCH_ALL); }}
+                      style={{ fontSize: fz(12), color: '#DC2626' }}
+                    >其他排程還有 {othersPending} 件待決定</a>
+                  )}
+                </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{selectedItem.name}</span>
                   <SkillTierTag tier="sop" />
