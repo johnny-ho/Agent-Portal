@@ -894,6 +894,50 @@ function buildRetryRun(run, actorName, atLabel) {
   };
 }
 
+/* ── 本次實際走過的路徑 ──
+   目標 6 的「哪個分支沒走」。分成三種沒走：
+   · 分支未成立（條件不符，引擎根本沒到那個節點）
+   · 人工略過（人到了、決定不做 —— 這算走過，只是沒執行工具）
+   · 已拒絕後不執行（流程被中止）
+   注意：`skip` 這個狀態同時涵蓋前兩者，得靠有沒有介入紀錄才分得出來。 */
+function getRunPath(view) {
+  var taken = [];
+  var notTaken = [];
+  (view.steps || []).forEach(function (s) {
+    var iv = null;
+    (view.interventions || []).forEach(function (i) { if (i.stepNum === s.num) iv = i; });
+
+    if (s.status === 'done' || s.status === 'error' || s.status === 'rejected' || s.status === 'waiting') {
+      taken.push(s.num);
+      return;
+    }
+    if (s.status === 'skip' && iv && iv.action === 'skip') {
+      taken.push(s.num);                       /* 人到了，只是決定不執行 */
+      notTaken.push({ num: s.num, title: s.title, why: '人工略過', byHuman: true });
+      return;
+    }
+    notTaken.push({
+      num: s.num, title: s.title, byHuman: false,
+      why: s.status === 'pending' ? '尚未執行到' : (s.result || '分支未成立'),
+    });
+  });
+  return { taken: taken, notTaken: notTaken };
+}
+
+/* ── Codify → 它掛在哪個排程 ──
+   Schedule 的「不能重複掛」與 Skill 管理的「已掛排程」共用這一份，
+   兩邊才不會講不一樣的話。含本 session 新建的排程。 */
+function getSkillScheduleMap(personaKey, extraItems) {
+  var list = (extraItems || []).concat((SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || []);
+  var map = {};
+  list.forEach(function (item) {
+    if (item.skillId && !map[item.skillId]) {
+      map[item.skillId] = { scheduleId: item.id, scheduleName: item.name, cronLabel: item.cronLabel };
+    }
+  });
+  return map;
+}
+
 /* 全課待決定清單 —— Nav 紅點與待決定匯總共用同一份真相 */
 function getPendingDecisions(items, sessionIvsByRun) {
   var out = [];

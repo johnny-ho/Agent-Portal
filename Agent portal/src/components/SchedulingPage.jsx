@@ -109,6 +109,24 @@ function SchStepBody({ s, compact, interventions }) {
           {s.result}
         </div>
       )}
+      {/* 節點明細：這一步實際做了什麼。
+          試跑畫面本來就看得到工具與資料來源，正式執行沒理由看得比試跑少。 */}
+      {(s.tool || s.system || s.rows != null || s.durationLabel) && (
+        <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4, lineHeight: 1.7 }}>
+          {s.tool && (
+            <span style={{ fontFamily: 'monospace' }}>
+              {s.tool}{s.params ? '(' + s.params + ')' : '()'}
+            </span>
+          )}
+          {s.system   && <span>{s.tool ? '　·　' : ''}{s.system}</span>}
+          {s.rows != null && <span>　·　{s.rows} 筆</span>}
+          {s.durationLabel && <span>　·　{s.durationLabel}</span>}
+        </div>
+      )}
+      {/* 沒有工具、但屬於本課自訂的計算步驟，也要說得出它憑什麼算 */}
+      {s.note && !s.tool && (
+        <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>{s.note}</div>
+      )}
       {/* 待決定步驟的細節卡 */}
       {!compact && s.detail && s.status === 'waiting' && (
         <antd.Card size="small" style={{ marginTop: 8 }}
@@ -206,28 +224,53 @@ function SchDecisionReasonModal({ action, step, onCancel, onSubmit }) {
    ════════════════════════════════════════ */
 const SCH_CRON_OPTIONS = ['每日 07:00', '每日 07:50', '每日 15:30', '每班結束前 30 分鐘', '每週一 09:00', '每小時整點'];
 
-function SchNewScheduleModal({ p, onClose, onCreate }) {
+/* 一份 Codify 現在能不能掛排程；不能的話回一句話說明為什麼。
+   mounts 來自 getSkillScheduleMap()，與 Skill 管理共用同一份對照。 */
+function schBlockReason(s, mounts) {
+  if (s.tier !== 'sop') {
+    return { text: SKILL_TIER_CFG[s.tier].label + ' 不能設排程：每次結果不一樣，需要有人在場看' };
+  }
+  if (s.stage !== 'production') {
+    return { text: '尚未上線（目前在 ' + SKILL_STAGE_CFG[s.stage].label + '），簽核通過才能排程' };
+  }
+  var m = (mounts || {})[s.id];
+  if (m) {
+    return { text: '已掛在排程「' + m.scheduleName + '」（' + m.cronLabel + '）', jumpTo: m.scheduleId };
+  }
+  return null;
+}
+
+/* 本課還有幾份 Codify 可以加入排程 —— 讓人不必打開 Modal 才知道 */
+function countSchedulableSkills(p, mounts) {
+  return (((p.knowledge || {}).sopManagement) || [])
+    .filter(function (s) { return !schBlockReason(s, mounts); }).length;
+}
+
+function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJumpSchedule }) {
   var { C, fz } = useTheme();
   var all = ((p.knowledge || {}).sopManagement) || [];
 
-  /* 可掛：Production 的 Codify。其餘全部列出來但不能選，並寫明為什麼 */
-  function blockReason(s) {
-    if (s.tier !== 'sop') {
-      return SKILL_TIER_CFG[s.tier].label + ' 不能設排程：每次結果不一樣，需要有人在場看';
-    }
-    if (s.stage !== 'production') {
-      return '尚未上線（目前在 ' + SKILL_STAGE_CFG[s.stage].label + '），簽核通過才能排程';
-    }
-    return null;
-  }
-
-  var options = all.map(function(s) { return { skill: s, reason: blockReason(s) }; })
-    .sort(function(a, b) { return (a.reason ? 1 : 0) - (b.reason ? 1 : 0); });
-
-  var [picked, setPicked] = React.useState(null);
+  var [query, setQuery]   = React.useState('');
+  var [picked, setPicked] = React.useState(presetSkillId || null);
   var [cron, setCron]     = React.useState(SCH_CRON_OPTIONS[2]);
+
+  /* 可掛：Production 且尚未掛上排程的 Codify。
+     其餘全部列出來但不能選，並寫明為什麼 —— 看得到邊界，Seed 才知道界線在哪 */
+  var options = all.map(function(s) { return { skill: s, block: schBlockReason(s, mounts) }; })
+    .filter(function(o) {
+      if (!query.trim()) return true;
+      var q = query.trim().toLowerCase();
+      return (o.skill.title || '').toLowerCase().indexOf(q) >= 0
+          || (o.skill.purpose || '').toLowerCase().indexOf(q) >= 0
+          || (o.skill.tags || []).some(function(t) { return t.toLowerCase().indexOf(q) >= 0; });
+    })
+    .sort(function(a, b) { return (a.block ? 1 : 0) - (b.block ? 1 : 0); });
+
+  var available = all.filter(function(s) { return !schBlockReason(s, mounts); }).length;
   var pickedSkill = picked ? all.find(function(s) { return s.id === picked; }) : null;
-  var confirmSteps = pickedSkill ? (pickedSkill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length : 0;
+  if (pickedSkill && schBlockReason(pickedSkill, mounts)) pickedSkill = null;
+  var pickedSteps  = pickedSkill ? (pickedSkill.plainSteps || []) : [];
+  var confirmSteps = pickedSteps.filter(function(st) { return st.needsConfirm; }).length;
 
   return (
     <antd.Modal
@@ -242,16 +285,31 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
       onOk={function() { if (pickedSkill) onCreate(pickedSkill, cron); }}
     >
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
-        排程只掛得上已上線的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
+        排程只掛得上已上線、且還沒被掛走的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
       </div>
 
-      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>選一個 Codify</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub }}>
+          選一個 Codify（可加入 {available} 份）
+        </span>
+        <div style={{ flex: 1 }} />
+        <antd.Input
+          allowClear
+          size="small"
+          placeholder="搜尋名稱、用途或標籤"
+          value={query}
+          onChange={function(e) { setQuery(e.target.value); }}
+          style={{ width: 224 }}
+        />
+      </div>
       <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8, marginBottom: 16 }} className="scrollbar-thin">
         {options.length === 0 && (
-          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>本課目前沒有任何 Skill。</div>
+          <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>
+            {query.trim() ? '沒有符合「' + query.trim() + '」的項目。' : '本課目前沒有任何 Skill。'}
+          </div>
         )}
         {options.map(function(o) {
-          var disabled = !!o.reason;
+          var disabled = !!o.block;
           var active   = picked === o.skill.id;
           return (
             <div
@@ -272,13 +330,46 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
                   : <StatusTag stage={o.skill.stage} />
                 }
               </div>
-              {o.reason && (
-                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>{o.reason}</div>
+              {o.block && (
+                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>
+                  {o.block.text}
+                  {o.block.jumpTo && onJumpSchedule && (
+                    <a
+                      onClick={function(e) { e.stopPropagation(); onJumpSchedule(o.block.jumpTo); }}
+                      style={{ marginLeft: 8 }}
+                    >去看那個排程</a>
+                  )}
+                </div>
               )}
             </div>
           );
         })}
       </div>
+
+      {/* 選了之後直接看得到它會做哪幾步，不必跳回 Skill 管理 */}
+      {pickedSkill && pickedSteps.length > 0 && (
+        <div style={{ marginBottom: 16, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ padding: '8px 16px', background: C.bgPanel, fontSize: fz(12), fontWeight: 600, color: C.textSub }}>
+            這份 Codify 會做這 {pickedSteps.length} 步
+          </div>
+          <div style={{ padding: '8px 16px', background: C.bg }}>
+            {pickedSteps.map(function(st) {
+              return (
+                <div key={st.num} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '4px 0' }}>
+                  <span style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', flexShrink: 0 }}>{st.num}</span>
+                  <span style={{ fontSize: fz(12), color: C.text, flex: 1, minWidth: 0 }}>
+                    {st.label}
+                    {st.tool && <span style={{ color: C.textMuted, fontFamily: 'monospace' }}>　{st.tool}</span>}
+                  </span>
+                  {st.needsConfirm && (
+                    <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>需人工決定</antd.Tag>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>執行時間</div>
       <antd.Select value={cron} onChange={setCron} style={{ width: '100%', marginBottom: 16 }}
@@ -292,7 +383,7 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
               type="warning"
               showIcon
               message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 含 {confirmSteps} 個需確認步驟</span>}
-              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，任何課員都可以決定，確認後才會繼續。不是設好就完全不用管。</span>}
+              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知，任何課員都可以決定，決定後才會繼續。不是設好就完全不用管。</span>}
             />
           : <antd.Alert
               type="success"
@@ -310,14 +401,18 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
    ════════════════════════════════════════ */
 const SCH_ALL = '__all__';   /* 左欄「執行總覽」的虛擬選取 id */
 
-function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRetry }) {
+function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRetry, extraItems, onCreateSchedule, newScheduleReq, onNewScheduleHandled }) {
   var { C, fz } = useTheme();
   const baseItems = getScheduleItems(p.key, extraRuns);
-  const [extraItems, setExtraItems] = React.useState([]);
-  const items = extraItems.concat(baseItems);
+  const items = (extraItems || []).concat(baseItems);
   const ivsByRun = decisions || {};
 
+  /* Codify → 已掛在哪個排程；與 Skill 管理共用同一份對照 */
+  const mounts = getSkillScheduleMap(p.key, extraItems);
+  const schedulableCount = countSchedulableSkills(p, mounts);
+
   const [showNew, setShowNew]       = React.useState(false);
+  const [presetSkillId, setPreset]  = React.useState(null);
   const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
   const [runFilter, setRunFilter]   = React.useState('all');
   const [reasonModal, setReasonModal] = React.useState(null);   // { action, run, step }
@@ -340,6 +435,16 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
     setSelectedId(owner.id);
     setExpandedRuns(function (prev) { const n = new Set(prev); n.add(runId); return n; });
   }, [expandRunReq && expandRunReq.nonce]);
+
+  /* ── Codify 詳情「設為定期執行」deep-link：開新增 Modal 並預選那份 Codify ── */
+  React.useEffect(function () {
+    const skillId = newScheduleReq && newScheduleReq.skillId;
+    if (!skillId || !newScheduleReq.nonce) return;
+    setPreset(skillId);
+    setShowNew(true);
+    /* 用完就清掉，不然之後每次回到排程頁都會再彈一次 */
+    if (onNewScheduleHandled) onNewScheduleHandled();
+  }, [newScheduleReq && newScheduleReq.nonce]);
 
   const isOverview   = selectedId === SCH_ALL;
   const selectedItem = isOverview ? null : items.find(i => i.id === selectedId);
@@ -566,6 +671,28 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
                 </div>
               </div>
             )}
+            {/* 本次實走路徑：哪幾步真的跑了、哪幾步沒走、為什麼沒走 */}
+            {(function () {
+              const path = getRunPath(view);
+              if (!path.taken.length && !path.notTaken.length) return null;
+              return (
+                <div style={{ marginBottom: 8, padding: '8px 16px', background: C.bgPanel, borderRadius: 6 }}>
+                  <div style={{ fontSize: fz(12), color: C.textSub }}>
+                    <span style={{ fontWeight: 600 }}>本次路徑：</span>
+                    <span style={{ fontFamily: 'monospace' }}>
+                      {path.taken.length ? path.taken.map(n => 'Step ' + n).join(' → ') : '無'}
+                    </span>
+                  </div>
+                  {path.notTaken.map(function (n) {
+                    return (
+                      <div key={n.num} style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>
+                        {n.byHuman ? '⏭' : '—'} Step {n.num}「{n.title}」未執行：{n.why}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
             <SchStepTimeline steps={view.steps} compact={true} interventions={view.interventions} />
           </div>
         ),
@@ -698,9 +825,24 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
             </div>
           </div>
 
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
-            <antd.Button type="primary" size="small" onClick={function() { setShowNew(true); }}>＋ 新增</antd.Button>
+          <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
+              <antd.Button type="primary" size="small" onClick={function() { setPreset(null); setShowNew(true); }}>＋ 新增</antd.Button>
+            </div>
+            {/* 不必打開 Modal 才知道還有東西可以加 */}
+            <div
+              onClick={function() { if (schedulableCount > 0) { setPreset(null); setShowNew(true); } }}
+              style={{
+                fontSize: fz(11), marginTop: 8,
+                color: schedulableCount > 0 ? '#2563EB' : C.textMuted,
+                cursor: schedulableCount > 0 ? 'pointer' : 'default',
+              }}
+            >
+              {schedulableCount > 0
+                ? '還有 ' + schedulableCount + ' 份 Codify 可加入排程'
+                : '本課已上線的 Codify 都掛上排程了'}
+            </div>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
             <antd.List
@@ -850,7 +992,10 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
       {showNew && (
         <SchNewScheduleModal
           p={p}
-          onClose={function() { setShowNew(false); }}
+          mounts={mounts}
+          presetSkillId={presetSkillId}
+          onClose={function() { setShowNew(false); setPreset(null); }}
+          onJumpSchedule={function(scheduleId) { setShowNew(false); setPreset(null); setSelectedId(scheduleId); }}
           onCreate={function(skill, cron) {
             var confirmSteps = (skill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length;
             var newItem = {
@@ -866,9 +1011,10 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
               lastRun: '尚未執行',
               runs: [],
             };
-            setExtraItems(function(prev) { return [newItem].concat(prev); });
+            onCreateSchedule(newItem);
             setSelectedId(newItem.id);
             setShowNew(false);
+            setPreset(null);
           }}
         />
       )}

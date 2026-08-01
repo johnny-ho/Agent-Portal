@@ -44,4 +44,6 @@ status: current
 
 | — | 2026-08-01 | **Schedule 執行總覽與異常（Phase C）**：跨排程總覽走**左欄虛擬項目**而非右欄 Tabs——總覽是跨排程的，塞進「某一個排程的詳情」裡語意不對，三欄式佈局也保住了。篩選膠囊四項：全部／執行失敗／待決定／**有人介入**（稽核視角）。**補上 N4 執行失敗通知**（站內＋Teams 皆開，跟 N2 同級）——原本 N1 只涵蓋完成、N2 只涵蓋待決定，**排程半夜掛掉沒有任何人會知道**。失敗改結構化（分類／卡在第幾步／工具／原始訊息），`retryable` 者可重跑，**重跑是新增一筆、原本那筆失敗永遠保留** | [scheduling](entities/modules/scheduling.md)、[notification](entities/modules/notification.md) |
 
+| — | 2026-08-01 | **Schedule 可加入的 Codify 與節點明細（Phase D+E）**：`getSkillScheduleMap()` 成為 Codify↔排程的**單一真相**，Schedule 的「不能重複掛」與 Skill 管理的徽章／刪除警語／生效資訊全部改讀它，**不再讀 `skill.consumedBy`**——舊版 `blockReason()` 只看 tier/stage，已掛排程的 Codify 仍可再選一次，會建出重複排程。補上 Codify 詳情的「**設為定期執行**」入口（2026-07-25 起列為未實作）。節點明細補齊工具／參數／來源／筆數／耗時——**試跑本來就看得到，正式執行沒理由看得比試跑少**。**Graph 視角刻意不做**：唯一有 `graph.edges` 的 Codify 分層後是線性的，畫出來與 Timeline 一樣，改用實走路徑摘要涵蓋全部八個排程 | [scheduling](entities/modules/scheduling.md)、[agent-skill-tiering](concepts/agent-skill-tiering.md) |
+
 **模式觀察**（PM 視角）：決議多次走「先做 → 發現雙頭管理/定位混淆 → 收斂單一入口」路徑（v2.8 釘選、v3.6 Nav）；引用舊版行為時務必先查本表確認未被推翻。

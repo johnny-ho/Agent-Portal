@@ -33,7 +33,7 @@
 | [app-center](entities/modules/app-center.md) | 內部應用目錄 + 釘選 + Function Tree（Dropdown+Tree）；AntD Phase 5 已遷移 | 3 |
 | [task-management](entities/modules/task-management.md) | 課長派工；P1 缺口 AI 自動標記；AntD Phase 2 已遷移 | 4 |
 | [ai-chat](entities/modules/ai-chat.md) | 被動查詢原則 + 四個 Ask AI 入口；**2026-07-26 四輪 + 2026-07-27 第五輪**：當代對話版面＋五情境 → 兩種互動模態＋逐步播放 → 右側面板＋決策留痕＋**三態徽章移除（責任轉到 F-AI-01 ⚠️）** → **左右職責互換：步驟明細全回對話流（含未跑到、分支未走、失敗細節），面板只剩計畫一層，三區改名任務／產出／來源** | 5 |
-| [scheduling](entities/modules/scheduling.md) | 唯一 AI 主動場景，HITL 三重約束；只掛 Codify＋展示產出物；**2026-08-01 決議 17 介入機制改寫**：取消認領與延伸討論（本頁不再有 AI 對話出口）→ 選項直接攤開（確認／略過／拒絕）、全課皆可決定、**先送出者定案不可撤回**、拒絕必填理由、`interventions[]` 成為唯一稽核序列（舊 UI 按下確認後介入痕跡反而消失）、Nav 紅點改綁實際未決定的決策點。已做 Phase A（資料層）+ B（介入層）+ **C（左欄「執行總覽」跨排程時間軸、只看異常／有人介入篩選膠囊、**N4 執行失敗通知**、結構化失敗分類、失敗重跑新增一筆不覆蓋、左欄近 7 次失敗數）；**未做 D 可加入的 Codify／E 節點明細** | 6 |
+| [scheduling](entities/modules/scheduling.md) | 唯一 AI 主動場景，HITL 三重約束；只掛 Codify＋展示產出物；**2026-08-01 決議 17 介入機制改寫**：取消認領與延伸討論（本頁不再有 AI 對話出口）→ 選項直接攤開（確認／略過／拒絕）、全課皆可決定、**先送出者定案不可撤回**、拒絕必填理由、`interventions[]` 成為唯一稽核序列（舊 UI 按下確認後介入痕跡反而消失）、Nav 紅點改綁實際未決定的決策點。**A~E 五階段全數完成**：A 資料層／B 介入層／C 執行總覽與異常（N4 失敗通知、只看異常、重跑）／D 可加入的 Codify（已掛的鎖住、搜尋、步驟預覽、Codify 詳情「設為定期執行」入口、`getSkillScheduleMap` 成為兩邊的單一真相）／E 節點明細與實走路徑（Graph 視角刻意不做，理由見模組頁）。仍未做：結果異常偵測、定期自動重跑 dry run、決策等待逾時 | 6 |
 | [handover](entities/modules/handover.md) | ❌ **已廢除、`HandoverPage.jsx` 已刪（2026-07-25）**；交班改為 SOP 排程產出，Schedule 檢視＋Home 佈告欄觸達；`ShiftHandoverModal` 入口已改掛佈告欄那則 SOP 產出 | — |
 | [knowledge-base](entities/modules/knowledge-base.md) | **知識管理：2026-07-26 從 Skill 管理拆出獨立**（Setting 新 tab）；Vector/RAG/知識圖譜為後續方向 | — |
 | [setting](entities/modules/setting.md) | 後台：Personal + Seed 八 tabs（含新的知識管理）+ IT 區 | 底部 |

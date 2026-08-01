@@ -437,3 +437,21 @@ build 1,025,260 bytes。⚠️ **仍無法瀏覽器實測**（unpkg 被 proxy �
 **未做**：D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、Codify 詳情無「設為定期執行」入口）；E 節點明細與 Graph 實走路徑（欄位已在資料層，畫面未用）；結果異常偵測與定期自動重跑 dry run。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[notification](entities/modules/notification.md)（N4 進表、「明確不做」劃掉失敗通知）、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-01] build | Schedule Phase D + E：可加入的 Codify、節點明細與實走路徑
+
+PO 說「依序處理」，把剩下的 D 與 E 一次做完。至此 A~E 五階段全數完成。
+
+**Phase D（可加入的 Codify）**——修掉評估時抓到的真 bug：舊版 `blockReason()` 只看 tier/stage，`sm-eq-008` 已掛 `sch-eq-001` 卻仍可再選一次，會建出重複排程。作法不是在 Modal 裡多加一個判斷，而是**立一份單一真相** `getSkillScheduleMap(personaKey, extraItems)`：Schedule 的「不能重複掛」、Skill 管理清單的「已掛排程」徽章、刪除警語、詳情頁「生效資訊」全部改讀它，**一律不再讀 `skill.consumedBy`**。原本兩邊各有一份資料，新建排程後就會講不一樣的話。為此把新建的排程從 `SchedulingPage` local state 提升到 App（`schedExtraItems`，per-persona），並把 `schedMounts` / `onScheduleSkill` 透過 App → SettingPage → SOPManagementPage → SkillDetailPage 三層傳下去。
+
+其餘：Modal 加搜尋與選中後的步驟預覽（含哪幾步標「需人工決定」）、左欄常駐「還有 N 份 Codify 可加入排程」、補上 **Codify 詳情的「設為定期執行」入口**（brain 自 2026-07-25 起掛在未實作清單上）。該入口的 deep-link **用完即清**（`onNewScheduleHandled`），否則之後每次回排程頁都會再彈一次 Modal。
+
+**Phase E（節點與最終結果）**——節點明細補齊 `tool(params)`／來源系統／筆數／耗時；判準是「**試跑畫面本來就看得到工具與資料來源，正式執行沒理由看得比試跑少**」。新增 `getRunPath()` 產出本次實走路徑，並把三種「沒走」分開：分支未成立（引擎沒到）／人工略過（人到了、決定不做，算走過但另外標記）／已拒絕後不執行。`skip` 這個狀態同時涵蓋前兩者，得靠有沒有介入紀錄才分得出來。
+
+⚠️ **Graph 視角刻意不做**（原計畫 Phase E 有列）。查了資料才發現 `sm-eq-008` 是唯一有 `graph.edges` 的 Codify，用既有的 `buildGraphLevels()` 分層後**是線性的**（分支是 `2→end`），畫出來與 Timeline 一模一樣。為單一個案做一套 run 版 graph renderer 不划算；路徑摘要用同樣的成本涵蓋全部八個排程。要做 graph 的前提是先有真正會分岔的 Codify 資料。
+
+build 1,037,341 bytes。⚠️ 仍無法瀏覽器實測（unpkg 被 proxy 擋，同前兩輪）。行為驗證由 53 項擴充到 **91 項全過**，D/E 新增的包含：對照表認得已掛的 Codify、鎖住原因寫出排程名稱、沒有對照表時不會誤鎖、新建排程立刻寫進對照表且該 Codify 不能再被選一次、「無 OOC」那次走 1→2→4 且 Step 3 標為非人為未走、人工略過仍算走到但另外標記、拒絕後 Step 4 未執行、節點明細欄位真的有資料（工具步驟都有參數與耗時、讀取型步驟都有筆數）。
+
+**六個目標的收斂狀態**：①②③④⑤⑥ 全部有落點。仍未做：結果異常偵測（與前 N 次比較）、定期自動重跑 dry run、決策等待逾時（SCH-OQ-7，PO 指示先做持續等待）、「編輯排程」與「停用」仍是 placeholder。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（Phase D/E 實作狀態；順手更新「頁面」與「現況與缺口」兩段——原本還寫著「延伸討論跳轉 AI Chat」與「Claim 鎖定」）、[decisions.md](decisions.md)、index.md。

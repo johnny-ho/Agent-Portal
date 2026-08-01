@@ -356,6 +356,30 @@ function App() {
       return Object.assign({}, prev, { [scheduleId]: [newRun].concat(prev[scheduleId] || []) });
     });
   }, []);
+
+  /* ── 本 session 新建的排程：{ [personaKey]: [item, ...] } ──
+     放在 App 而不是 SchedulingPage，因為 Skill 管理那邊也要知道「這份 Codify 已經掛上排程了」。 */
+  const [schedExtraItems, setSchedExtraItems] = React.useState({});
+  const handleCreateSchedule = React.useCallback(function (newItem) {
+    setSchedExtraItems(function (prev) {
+      return Object.assign({}, prev, { [persona]: [newItem].concat(prev[persona] || []) });
+    });
+  }, [persona]);
+
+  /* Codify → 它掛在哪個排程。Schedule 與 Skill 管理共用同一份對照，不會兩邊講不一樣的話 */
+  const schedMounts = React.useMemo(function () {
+    return getSkillScheduleMap(persona, schedExtraItems[persona]);
+  }, [persona, schedExtraItems]);
+
+  /* Codify 詳情「設為定期執行」→ 跳排程頁並預開新增 Modal（nonce 每次遞增以重觸發）*/
+  const [newScheduleReq, setNewScheduleReq] = React.useState({ skillId: null, nonce: 0 });
+  const handleScheduleSkill = React.useCallback(function (skill) {
+    setNewScheduleReq(function (prev) { return { skillId: skill.id, nonce: prev.nonce + 1 }; });
+    setNav('scheduling');
+  }, []);
+  const clearNewScheduleReq = React.useCallback(function () {
+    setNewScheduleReq({ skillId: null, nonce: 0 });
+  }, []);
   const decideSchedulingStep = React.useCallback(function (runId, iv) {
     var existing = schedDecisions[runId] || [];
     var taken = existing.some(function (x) { return x.stepNum === iv.stepNum; });
@@ -483,6 +507,8 @@ function App() {
   const schedulingHasPending = React.useMemo(function () {
     return getPendingDecisions(getScheduleItems(persona, schedExtraRuns), schedDecisions).length > 0;
   }, [persona, schedDecisions, schedExtraRuns]);
+
+  const schedulingExtraItems = schedExtraItems[persona] || [];
 
   const handleAskAI = React.useCallback(({ text, label }) => {
     setAiDraft({ text, label });
@@ -705,7 +731,7 @@ function App() {
         {nav === 'apps'       && <AppCenterPage p={p} pinnedAppIds={pinnedAppIds} onTogglePin={handleTogglePin} functionTree={functionTree} legacyMode={legacyMode} />}
         {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} />}
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
-        {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} />}
+        {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} schedMounts={schedMounts} onScheduleSkill={handleScheduleSkill} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}
         {/* key={persona} 讓切課時重置頁內狀態：新增的排程不會殘留到別的課，選取項目也會歸位 */}
         {nav === 'scheduling' && (
@@ -717,6 +743,10 @@ function App() {
             onDecide={decideSchedulingStep}
             extraRuns={schedExtraRuns}
             onRetry={handleSchedRetry}
+            extraItems={schedulingExtraItems}
+            onCreateSchedule={handleCreateSchedule}
+            newScheduleReq={newScheduleReq}
+            onNewScheduleHandled={clearNewScheduleReq}
           />
         )}
       </div>

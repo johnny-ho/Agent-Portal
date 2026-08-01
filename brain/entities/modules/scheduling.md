@@ -3,7 +3,7 @@ type: entity
 title: Schedule 排程中心
 description: 課級 Skill 定時執行 — 唯一允許 AI 主動的場景，受 Human-in-the-loop 三重約束
 tags: [module, scheduling, ai]
-updated: 2026-07-25
+updated: 2026-08-01
 sources: [PRODUCT_BASELINE.md §8.1, §13.7, scrum_teaming.md F-AI-04]
 status: current
 ---
@@ -12,13 +12,15 @@ status: current
 
 **定位**：課級 Skill 定時執行（Nav 第 6 位，獨立 Tab）。是[被動查詢原則](ai-chat.md)的**唯一例外**，主動性受三重約束：(1) 執行的是課員預設的 Skill 與排程，非 AI 自主判斷；(2) 所有 MCP tool 呼叫需人工確認（Human-in-the-loop）；(3) 執行紀錄對全課公開，任何課員可查閱介入。
 
-## 頁面
+## 頁面（2026-08-01 起）
 
-排程清單 / 執行紀錄（可展開步驟）/ HITL Banner / 延伸討論跳轉 AI Chat。
+左欄：**執行總覽**（跨排程）＋待決定匯總＋排程清單（含近 7 次失敗數）。
+右欄：選總覽 → 全課執行時間軸＋篩選膠囊；選單一排程 → 決策點面板＋該排程的執行紀錄（產出物／實走路徑／節點明細／介入紀錄）。
+**本頁沒有任何 AI 對話出口**（2026-08-01 決議 17）。
 
 ## 現況與缺口
 
-UI ✅、後端未實作。F-AI-04：cron 觸發、**Claim 鎖定**（first-write-wins，建議 15 分鐘 timeout 自動釋放）、執行歷史持久化、失敗通知。「＋新增」與「編輯排程」為 placeholder，待 F-AI-03 Skill 管理 UI（含 MCP tool 授權選用介面）。
+UI ✅、後端未實作。F-AI-04 待做：cron 觸發、執行歷史持久化、**決定的併發控制**（前端已是 first-write-wins，需後端落實；~~Claim 鎖定~~ 已不需要，認領機制取消）、通知實際送達。「編輯排程」與「停用」仍為 placeholder（「＋新增」已可用）。
 
 ## AntD 遷移
 
@@ -55,7 +57,7 @@ PO 指出兩件事：**未來這一段不打算引入 AI 對話**，而且**「�
 | 逾時 | SCH-OQ-1 Claim timeout（建議 15 分鐘） | **不做**。決策點持續等待直到有人決定；升級通知與自動終止後期再補 |
 | 理由 | 無輸入 | **拒絕必填**、略過選填 |
 
-**資料模型**：`run.interventions[]` 成為唯一的介入稽核序列，取代舊的 `run.handler` 與 `steps[].decisionBy`（兩者語意重疊、且舊 UI 在決定完成後反而不顯示）。每筆記 `{ actor, action, stepNum, at, reason, toolCall }`，`toolCall` 記下「因為誰的確認，AI 呼叫了哪個 tool、帶什麼參數、回什麼」。**步驟的最終狀態不寫死在資料裡**，改由 `getRunView(run, sessionIvs)` 從介入紀錄推導（拒絕 → 其後全部不執行；略過 → 流程繼續；未決定的第一個需確認步驟＝當前決策點）。`getPendingDecisions(personaKey, decisions)` 是 Nav 紅點與左欄待決定匯總的單一真相。
+**資料模型**：`run.interventions[]` 成為唯一的介入稽核序列，取代舊的 `run.handler` 與 `steps[].decisionBy`（兩者語意重疊、且舊 UI 在決定完成後反而不顯示）。每筆記 `{ actor, action, stepNum, at, reason, toolCall }`，`toolCall` 記下「因為誰的確認，AI 呼叫了哪個 tool、帶什麼參數、回什麼」。**步驟的最終狀態不寫死在資料裡**，改由 `getRunView(run, sessionIvs)` 從介入紀錄推導（拒絕 → 其後全部不執行；略過 → 流程繼續；未決定的第一個需確認步驟＝當前決策點）。`getPendingDecisions(items, decisions)` 是 Nav 紅點與左欄待決定匯總的單一真相。
 
 ### 實作狀態（2026-08-01 完成，Phase A + B）
 
@@ -70,9 +72,20 @@ PO 指出兩件事：**未來這一段不打算引入 AI 對話**，而且**「�
   - **重跑**：`retryable` 的失敗給「↻ 重跑」，`buildRetryRun()` **新增一筆** `trigger:'retry'` 的執行並記下觸發者與 `retryOf`，**原本那筆失敗永遠保留**。重跑結果由資料層的 `retry` 樣板定義（交接報告補跑帶產出物、Recipe 週報補跑）。
   - **左欄近 7 次失敗數**：不穩定的排程自己浮出來。
   - 時間排序用 `getRunTs()` 從 `startedAt` 推導（`今日`／`昨日`／`MM/DD` 三種寫法），不在 20 筆 mock 上各補一個 `ts` 欄位。`SCH_TODAY` 定義 mock 的今日為 2026-04-21。
-- **未做（留給後續 Phase）**：D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、無反向入口）；E 節點明細呈現與 Graph 實走路徑（`tool`／`params`／`durationLabel`／`rows` 欄位已進資料層，畫面尚未用上）。另仍未做：結果異常偵測（與前 N 次比較）、定期自動重跑 dry run。
+- **Phase D 可加入的 Codify（2026-08-01 同日完成）**：
+  - **已掛排程的 Codify 在選單中鎖住**並寫明「已掛在排程『XX』（時間）」＋「去看那個排程」連結。這是評估時抓到的真 bug——舊版 `blockReason()` 只看 tier/stage，`sm-eq-008` 已掛 `sch-eq-001` 仍可再選一次，會建出重複排程。
+  - **`getSkillScheduleMap()` 成為 Codify↔排程的單一真相**（含本 session 新建的排程）。Schedule 的「不能重複掛」與 Skill 管理的「已掛排程」徽章、刪除警語、詳情「生效資訊」全部改讀這一份，**不再讀 `skill.consumedBy`**——兩邊才不會講不一樣的話。
+  - 左欄「＋新增」下方常駐「還有 N 份 Codify 可加入排程」（可點，全掛滿時改顯示「都掛上了」），不必打開 Modal 才知道。
+  - Modal 加**搜尋**（名稱／用途／標籤）與**選中後的步驟預覽**（步驟號、名稱、工具、哪幾步標「需人工決定」），不必跳回 Skill 管理。
+  - **Codify 詳情「設為定期執行」入口**（brain 自 2026-07-25 起列為未實作）：`onScheduleSkill` → App 設 `newScheduleReq` → 跳排程頁並預開 Modal 且預選那份 Codify；**用完即清**（`onNewScheduleHandled`），否則之後每次回排程頁都會再彈一次。
+  - 新建的排程從 `SchedulingPage` local state 提升到 App（`schedExtraItems`，per-persona），Skill 端才看得到剛掛上的排程。
+- **Phase E 節點與最終結果（2026-08-01 同日完成）**：
+  - **節點明細**：每一步顯示 `tool(params)`／來源系統／資料筆數／耗時；自訂計算步驟顯示它憑什麼算。理由是**試跑畫面本來就看得到工具與資料來源，正式執行沒理由看得比試跑少**。
+  - **本次實走路徑**：`getRunPath()` 產出「Step 1 → 2 → 4」＋逐條列出沒走的節點與原因。三種「沒走」分得開：**分支未成立**（引擎沒到）／**人工略過**（人到了、決定不做，算走過但標記出來）／**已拒絕後不執行**。`skip` 這個狀態同時涵蓋前兩者，得靠有沒有介入紀錄才分得出來。
+  - ⚠️ **Graph 視角沒有做，改成路徑摘要**。原因：`sm-eq-008` 是唯一有 `graph.edges` 的 Codify，用 `buildGraphLevels()` 分層後是**線性的**（分支是 `2→end`），畫出來與 Timeline 一模一樣；為單一個案做一套 run 版 graph renderer 不划算。路徑摘要用同樣的成本涵蓋全部八個排程。要做 graph 的前提是先有真正會分岔的 Codify 資料。
+- **仍未做**：結果異常偵測（與前 N 次比較）、定期自動重跑 dry run、決策等待逾時（SCH-OQ-7，PO 指示先做持續等待）。
 
-⚠️ 本輪**無法做瀏覽器實測**——`shell.html` 依賴 unpkg CDN，本 session 網路政策擋住外連。改以 Babel 本地編譯（等價於瀏覽器內 `@babel/standalone`）＋ 對 `getRunView`／`getPendingDecisions` 的 23 項行為驗證通過。
+⚠️ 本輪**無法做瀏覽器實測**——`shell.html` 依賴 unpkg CDN，本 session 的 proxy 政策擋住外連（`CONNECT tunnel failed 403`），連把依賴下載到本地 vendor 化都不行。改以 Babel 本地編譯（等價於瀏覽器內 `@babel/standalone`）＋ vm 宣告階段執行＋**91 項行為驗證**（介入推導、時間戳與排序、四種篩選、健康度、重跑不覆蓋、每筆失敗都有通知、Codify 鎖定與對照表、實走路徑三種「沒走」）全數通過。**下次有網路要補的實測**：三顆決策按鈕與篩選膠囊的視覺與 8px 間距、理由 Modal 的必填禁用、重跑按鈕在 Collapse header 的 `stopPropagation`、「設為定期執行」跳轉後 Modal 是否正確預選。
 
 ## 專屬 OQ
 

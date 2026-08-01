@@ -883,7 +883,7 @@ function ApplicationSettingTab({ p}) {
 function KnowledgeTab({ p }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <SOPManagementPage p={p} />  {/* SOPManagementPage 已重構為 SkillManagementPage，函式名稱向後相容 */}
+      <SOPManagementPage p={p} schedMounts={schedMounts} onScheduleSkill={onScheduleSkill} />  {/* SOPManagementPage 已重構為 SkillManagementPage，函式名稱向後相容 */}
     </div>
   );
 }
@@ -2427,7 +2427,7 @@ function KpiReportSettingTab({ p, isSeedUser }) {
   );
 }
 
-function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser, isITUser, functionTree, onFunctionTreeChange, homeLayout, onHomeLayoutChange, notifPrefs, onNotifPrefChange }) {
+function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser, isITUser, functionTree, onFunctionTreeChange, homeLayout, onHomeLayoutChange, notifPrefs, onNotifPrefChange, schedMounts, onScheduleSkill }) {
   var { C, fz } = useTheme();
   var [activeTab, setActiveTab] = React.useState('personal');
   /* jumpSlot: { rowId, slotId } | null — 告知 HomeLayoutTab 自動展開哪個 widget 的設定面板 */
