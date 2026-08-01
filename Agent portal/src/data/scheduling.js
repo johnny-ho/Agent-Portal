@@ -68,6 +68,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 2,           /* 執行到這幾步會暫停等人決定 */
       cronLabel: '每日 07:50',
       createdBy: '陳育民',
+      lastChange: { by: '陳育民', at: '04/18 09:12', summary: '執行時間 每日 07:00 → 每日 07:50' },
       status: 'pending',
       lastRun: '今日 07:50',
       runs: [
@@ -240,6 +241,7 @@ const SCHEDULING_DATA = {
       producesHandover: true,
       cronLabel: '每日 15:30 / 23:30 / 07:30',
       createdBy: '王志明',
+      lastChange: { by: '王志明', at: '04/09 16:40', summary: '建立排程' },
       status: 'ok',
       lastRun: '今日 15:30',
       runs: [
@@ -377,6 +379,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 0,
       cronLabel: '每日 08:00',
       createdBy: '王志明',
+      lastChange: { by: '王志明', at: '03/30 11:05', summary: '建立排程' },
       status: 'ok',
       lastRun: '今日 08:01',
       runs: [
@@ -428,6 +431,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 0,
       cronLabel: '每日 07:00',
       createdBy: '吳志豪',
+      lastChange: { by: '吳志豪', at: '04/15 08:20', summary: '名稱 PM 提醒 → PM 到期提醒' },
       status: 'ok',
       lastRun: '今日 07:01',
       runs: [
@@ -463,6 +467,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 0,
       cronLabel: '每日 08:00',
       createdBy: '鄭志明',
+      lastChange: { by: '鄭志明', at: '04/02 10:30', summary: '建立排程' },
       status: 'ok',
       lastRun: '今日 08:02',
       runs: [
@@ -514,6 +519,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 0,
       cronLabel: '每週一 09:00',
       createdBy: '李佳穎',
+      lastChange: { by: '李佳穎', at: '04/13 14:55', summary: '執行時間 每日 07:00 → 每週一 09:00' },
       status: 'error',
       lastRun: '04/14 09:00',
       runs: [
@@ -591,6 +597,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 1,
       cronLabel: '每小時整點',
       createdBy: '陳建宏',
+      lastChange: { by: '陳建宏', at: '03/25 09:00', summary: '建立排程' },
       status: 'pending',
       lastRun: '今日 11:00',
       runs: [
@@ -671,6 +678,7 @@ const SCHEDULING_DATA = {
       confirmSteps: 0,
       cronLabel: '每日 07:30',
       createdBy: '林組長',
+      lastChange: { by: '林組長', at: '04/11 17:22', summary: '建立排程' },
       status: 'ok',
       lastRun: '今日 07:31',
       runs: [
@@ -924,11 +932,26 @@ function getRunPath(view) {
   return { taken: taken, notTaken: notTaken };
 }
 
+/* ── 排程設定的變更層 ──
+   基準排程來自 SCHEDULING_DATA（唯讀），本 session 的編輯以 patch 疊上去；
+   新建的排程也走同一條路徑，建立與編輯才不會各有一套規則。
+   patch 形如 { [itemId]: { name, cronLabel, lastChange } }。 */
+function applyScheduleEdits(items, itemEdits) {
+  var edits = itemEdits || {};
+  return (items || []).map(function (item) {
+    return edits[item.id] ? Object.assign({}, item, edits[item.id]) : item;
+  });
+}
+
 /* ── Codify → 它掛在哪個排程 ──
    Schedule 的「不能重複掛」與 Skill 管理的「已掛排程」共用這一份，
-   兩邊才不會講不一樣的話。含本 session 新建的排程。 */
-function getSkillScheduleMap(personaKey, extraItems) {
-  var list = (extraItems || []).concat((SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || []);
+   兩邊才不會講不一樣的話。含本 session 新建的排程與改過的名稱／時間 ——
+   排程改名之後 Skill 管理那邊的徽章要跟著改，不然兩頁又會講不一樣的話。 */
+function getSkillScheduleMap(personaKey, extraItems, itemEdits) {
+  var list = applyScheduleEdits(
+    (extraItems || []).concat((SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || []),
+    itemEdits
+  );
   var map = {};
   list.forEach(function (item) {
     if (item.skillId && !map[item.skillId]) {

@@ -215,14 +215,50 @@ function SchDecisionReasonModal({ action, step, onCancel, onSubmit }) {
 }
 
 /* ════════════════════════════════════════
-   SchNewScheduleModal — 新增排程
+   SchScheduleModal — 新增／編輯排程（同一個表單的兩種模式）
 
    排程只掛得上 Codify。Skill 每次結果都不一樣、產出的是給人看的建議，
    沒人在場就沒有意義；知識根本沒有要執行的東西。
    但不可用的類型不隱藏 —— 看得到、標明原因，Seed 才知道邊界在哪。
    見 brain/concepts/agent-skill-tiering.md「三層分界」
+
+   ⚠️ 編輯模式刻意不讓改「掛哪一份 Codify」：
+   排程底下累積的執行紀錄、產出物與 interventions[] 都是「這份 Codify 做了什麼」，
+   換掉之後同一個排程的歷史前半段在講 A、後半段在講 B，決議 17 建立的稽核序列就斷了；
+   而且「一份 Codify 只掛一個排程」是 getSkillScheduleMap 的單一真相，換掛會同時
+   改動 Skill 管理那邊的徽章。要換＝停用本排程後另建，兩邊歷史各自留著。
+
+   建立與編輯共用同一個表單，使用者不必學兩次，也不會演化成兩套各自為政的欄位。
    ════════════════════════════════════════ */
 const SCH_CRON_OPTIONS = ['每日 07:00', '每日 07:50', '每日 15:30', '每班結束前 30 分鐘', '每週一 09:00', '每小時整點'];
+
+/* 下次執行是什麼時候 —— 排程改完最常見的困惑是「現在生效還是明天」，直接寫出來。
+   回 null 代表這個排法沒有固定時刻（每班結束前 N 分鐘），由呼叫端改寫說明。 */
+function getNextRunLabel(cron) {
+  var now = new Date();
+  var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+
+  if (/每小時整點/.test(cron)) {
+    var nh = now.getHours() + 1;
+    return nh >= 24 ? '明日 00:00' : '今日 ' + pad(nh) + ':00';
+  }
+
+  var m = /(\d{1,2}):(\d{2})/.exec(cron || '');
+  if (!m) return null;
+
+  var hh = parseInt(m[1], 10);
+  var mm = parseInt(m[2], 10);
+  var passed = (now.getHours() * 60 + now.getMinutes()) >= (hh * 60 + mm);
+  var clock = pad(hh) + ':' + pad(mm);
+
+  if (/每週一/.test(cron)) {
+    var day = now.getDay();                       /* 0=週日 1=週一 */
+    if (day === 1 && !passed) return '今日 ' + clock;
+    var wait = (8 - day) % 7 || 7;                /* 到下一個週一還有幾天 */
+    return (wait === 1 ? '明日 ' : '下週一 ') + clock;
+  }
+  return (passed ? '明日 ' : '今日 ') + clock;
+}
 
 /* 一份 Codify 現在能不能掛排程；不能的話回一句話說明為什麼。
    mounts 來自 getSkillScheduleMap()，與 Skill 管理共用同一份對照。 */
@@ -246,13 +282,16 @@ function countSchedulableSkills(p, mounts) {
     .filter(function (s) { return !schBlockReason(s, mounts); }).length;
 }
 
-function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJumpSchedule }) {
+function SchScheduleModal({ p, mounts, presetSkillId, editItem, pendingCount, onClose, onSubmit, onJumpSchedule }) {
   var { C, fz } = useTheme();
   var all = ((p.knowledge || {}).sopManagement) || [];
+  var isEdit = !!editItem;
 
-  var [query, setQuery]   = React.useState('');
-  var [picked, setPicked] = React.useState(presetSkillId || null);
-  var [cron, setCron]     = React.useState(SCH_CRON_OPTIONS[2]);
+  var [query, setQuery]     = React.useState('');
+  var [picked, setPicked]   = React.useState(isEdit ? editItem.skillId : (presetSkillId || null));
+  var [cron, setCron]       = React.useState(isEdit ? editItem.cronLabel : SCH_CRON_OPTIONS[2]);
+  var [name, setName]       = React.useState(isEdit ? editItem.name : '');
+  var [renamed, setRenamed] = React.useState(false);   /* 自己動過名稱之後就不再被 Codify 標題蓋掉 */
 
   /* 可掛：Production 且尚未掛上排程的 Codify。
      其餘全部列出來但不能選，並寫明為什麼 —— 看得到邊界，Seed 才知道界線在哪 */
@@ -267,27 +306,86 @@ function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJu
     .sort(function(a, b) { return (a.block ? 1 : 0) - (b.block ? 1 : 0); });
 
   var available = all.filter(function(s) { return !schBlockReason(s, mounts); }).length;
-  var pickedSkill = picked ? all.find(function(s) { return s.id === picked; }) : null;
-  if (pickedSkill && schBlockReason(pickedSkill, mounts)) pickedSkill = null;
+
+  /* 編輯模式的 Codify 是既定的，不能套 schBlockReason —— 它已經掛在「自己」身上 */
+  var pickedSkill = isEdit
+    ? all.find(function(s) { return s.id === editItem.skillId; }) || null
+    : (picked ? all.find(function(s) { return s.id === picked; }) : null);
+  if (!isEdit && pickedSkill && schBlockReason(pickedSkill, mounts)) pickedSkill = null;
+
   var pickedSteps  = pickedSkill ? (pickedSkill.plainSteps || []) : [];
-  var confirmSteps = pickedSteps.filter(function(st) { return st.needsConfirm; }).length;
+  var confirmSteps = pickedSkill
+    ? pickedSteps.filter(function(st) { return st.needsConfirm; }).length
+    : (isEdit ? (editItem.confirmSteps || 0) : 0);
+  var showConfirmAlert = !!pickedSkill || (isEdit && typeof editItem.confirmSteps === 'number');
+
+  /* 新增時名稱預設沿用 Codify 標題；使用者改過就不再覆蓋 */
+  React.useEffect(function() {
+    if (isEdit || renamed) return;
+    setName(pickedSkill ? pickedSkill.title : '');
+  }, [picked]);
+
+  /* 舊排程的時間寫法不見得在選項裡（例如一天跑三次），保留它、不要被下拉洗掉 */
+  var cronChoices = SCH_CRON_OPTIONS.slice();
+  if (isEdit && cronChoices.indexOf(editItem.cronLabel) < 0) cronChoices.unshift(editItem.cronLabel);
+
+  var trimmed = name.trim();
+  var changes = [];
+  if (isEdit) {
+    if (trimmed && trimmed !== editItem.name) changes.push('名稱 ' + editItem.name + ' → ' + trimmed);
+    if (cron !== editItem.cronLabel) changes.push('執行時間 ' + editItem.cronLabel + ' → ' + cron);
+  }
+  var canSubmit = isEdit ? (!!trimmed && changes.length > 0) : (!!pickedSkill && !!trimmed);
+  var nextRun = getNextRunLabel(cron);
 
   return (
     <antd.Modal
       open
       centered
       width={640}
-      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>新增排程</span>}
+      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>{isEdit ? '編輯排程' : '新增排程'}</span>}
+      /* 內容比一屏高時讓內文自己捲，按鈕不能被推出畫面外 */
+      styles={{ body: { maxHeight: 'calc(100vh - 232px)', overflowY: 'auto' } }}
       onCancel={onClose}
-      okText="建立排程"
+      okText={isEdit ? '儲存變更' : '建立排程'}
       cancelText="取消"
-      okButtonProps={{ disabled: !pickedSkill }}
-      onOk={function() { if (pickedSkill) onCreate(pickedSkill, cron); }}
+      okButtonProps={{ disabled: !canSubmit }}
+      onOk={function() {
+        if (!canSubmit) return;
+        onSubmit({
+          skill: pickedSkill,
+          name: trimmed,
+          cron: cron,
+          summary: isEdit ? changes.join('、') : '建立排程',
+        });
+      }}
     >
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
-        排程只掛得上已上線、且還沒被掛走的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。
+        {isEdit
+          ? '可以改名稱與執行時間。掛的是哪一份 Codify 不能改 —— 底下的執行紀錄都是它累積的。'
+          : '排程只掛得上已上線、且還沒被掛走的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。'}
       </div>
 
+      {isEdit ? (
+        /* 唯讀的 Codify：看得到是哪一份、也看得到為什麼不能換 */
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>執行的 Codify</div>
+          <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bgPanel }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <SkillTierTag tier="sop" />
+              <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500, flex: 1, minWidth: 0 }}>
+                {pickedSkill ? pickedSkill.title : editItem.skill}
+              </span>
+              <span style={{ fontSize: fz(12) }}>🔒</span>
+            </div>
+            <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, lineHeight: 1.7 }}>
+              不能換掉。這個排程底下的執行紀錄、產出物與介入紀錄都是這份 Codify 累積的，換掉之後同一份歷史會前後講不同的事。
+              要改成別份，請停用本排程後另外新增，兩邊的歷史才各自留得住。
+            </div>
+          </div>
+        </div>
+      ) : (
+      <React.Fragment>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <span style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub }}>
           選一個 Codify（可加入 {available} 份）
@@ -296,6 +394,7 @@ function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJu
         <antd.Input
           allowClear
           size="small"
+          aria-label="搜尋 Codify 名稱、用途或標籤"
           placeholder="搜尋名稱、用途或標籤"
           value={query}
           onChange={function(e) { setQuery(e.target.value); }}
@@ -345,6 +444,8 @@ function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJu
           );
         })}
       </div>
+      </React.Fragment>
+      )}
 
       {/* 選了之後直接看得到它會做哪幾步，不必跳回 Skill 管理 */}
       {pickedSkill && pickedSteps.length > 0 && (
@@ -371,19 +472,48 @@ function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJu
         </div>
       )}
 
-      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>執行時間</div>
-      <antd.Select value={cron} onChange={setCron} style={{ width: '100%', marginBottom: 16 }}
-        options={SCH_CRON_OPTIONS.map(function(c) { return { value: c, label: c }; })}
+      {/* 名稱可改：課上習慣叫「早班 SPC 日報」，不必被 Codify 標題綁死 */}
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>排程名稱</div>
+      <antd.Input
+        value={name}
+        disabled={!isEdit && !pickedSkill}
+        onChange={function(e) { setRenamed(true); setName(e.target.value); }}
       />
+      <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, marginBottom: 16 }}>
+        {isEdit ? '改名不影響既有的執行紀錄。' : '預設沿用 Codify 的名稱，可以改成課上習慣的叫法。'}
+      </div>
 
-      {/* 設排程時就要知道會不會卡住，不然每天早上才發現停在第 3 步 */}
-      {pickedSkill && (
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>執行時間</div>
+      <antd.Select value={cron} onChange={setCron} style={{ width: '100%' }}
+        options={cronChoices.map(function(c) { return { value: c, label: c }; })}
+      />
+      {/* 改完最常見的問題是「這是現在生效還是明天」，直接寫出來 */}
+      <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, marginBottom: 16 }}>
+        {nextRun
+          ? (isEdit ? '儲存後，下次執行：' : '建立後，下次執行：') + nextRun
+          : '依班別結束時間觸發，沒有固定時刻。'}
+      </div>
+
+      {/* 設排程時就要知道會不會卡住，不然每天早上才發現停在第 3 步。
+          「目前正卡著 N 次」併進同一則講完 —— 兩者都在講「這個排程會停下來等人」，
+          分成兩個警示框就是同一畫面講兩次（決議 18 的分界標準）。 */}
+      {showConfirmAlert && (
         confirmSteps > 0
           ? <antd.Alert
               type="warning"
               showIcon
               message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 含 {confirmSteps} 個需確認步驟</span>}
-              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知，任何課員都可以決定，決定後才會繼續。不是設好就完全不用管。</span>}
+              description={
+                <span style={{ fontSize: fz(12), lineHeight: 1.7 }}>
+                  排程執行到那幾步會暫停並通知，任何課員都可以決定，決定後才會繼續。不是設好就完全不用管。
+                  {isEdit && pendingCount > 0 && (
+                    <React.Fragment>
+                      <br />
+                      目前有 {pendingCount} 次執行正卡在決策點：改時間只影響之後的執行，那一次仍在等人決定，不會因此繼續、也不會被取消。
+                    </React.Fragment>
+                  )}
+                </span>
+              }
             />
           : <antd.Alert
               type="success"
@@ -401,17 +531,19 @@ function SchNewScheduleModal({ p, mounts, presetSkillId, onClose, onCreate, onJu
    ════════════════════════════════════════ */
 const SCH_ALL = '__all__';   /* 左欄「執行總覽」的虛擬選取 id */
 
-function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRetry, extraItems, onCreateSchedule, newScheduleReq, onNewScheduleHandled }) {
+function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRetry, extraItems, itemEdits, onCreateSchedule, onUpdateSchedule, newScheduleReq, onNewScheduleHandled }) {
   var { C, fz } = useTheme();
   const baseItems = getScheduleItems(p.key, extraRuns);
-  const items = (extraItems || []).concat(baseItems);
+  /* 本 session 的設定變更疊在基準資料上；新建的排程走同一條路徑 */
+  const items = applyScheduleEdits((extraItems || []).concat(baseItems), itemEdits);
   const ivsByRun = decisions || {};
 
-  /* Codify → 已掛在哪個排程；與 Skill 管理共用同一份對照 */
-  const mounts = getSkillScheduleMap(p.key, extraItems);
+  /* Codify → 已掛在哪個排程；與 Skill 管理共用同一份對照（含改過的名稱與時間）*/
+  const mounts = getSkillScheduleMap(p.key, extraItems, itemEdits);
   const schedulableCount = countSchedulableSkills(p, mounts);
 
   const [showNew, setShowNew]       = React.useState(false);
+  const [editingId, setEditingId]   = React.useState(null);
   const [presetSkillId, setPreset]  = React.useState(null);
   /* 預設停在執行總覽 —— 進門先看「全課昨晚跑了什麼」，
      而不是一進來就鑽進第一個排程的細節 */
@@ -450,6 +582,9 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
 
   const isOverview   = selectedId === SCH_ALL;
   const selectedItem = isOverview ? null : items.find(i => i.id === selectedId);
+  /* 從 items 反查而不是把整個 item 存進 state —— 存進去的話存的是舊快照，
+     改完之後 Modal 還拿著改之前的值 */
+  const editingItem  = editingId ? items.find(i => i.id === editingId) || null : null;
 
   /* 全課待決定：Nav 紅點與左欄匯總共用同一份真相 */
   const pendingDecisions = getPendingDecisions(items, ivsByRun);
@@ -907,7 +1042,17 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
                   {selectedItem.cronLabel} 執行　·　Skill：
                   <span style={{ fontFamily: 'monospace' }}>{selectedItem.skill}</span>
                   　·　建立者：{selectedItem.createdBy}
+                  {getNextRunLabel(selectedItem.cronLabel) && (
+                    <React.Fragment>　·　下次執行：{getNextRunLabel(selectedItem.cronLabel)}</React.Fragment>
+                  )}
                 </div>
+                {/* 排程改的是「沒人在場時 AI 幾點會動作」，比一般設定變更重份量 ——
+                    誰最後一次動過它、動了什麼，要留得住（延續決議 17 的稽核精神）。 */}
+                {selectedItem.lastChange && (
+                  <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
+                    最後變更：{selectedItem.lastChange.by}　·　{selectedItem.lastChange.at}　·　{selectedItem.lastChange.summary}
+                  </div>
+                )}
                 {/* 含寫入的排程不是設好就沒事，講在前面（僅對已標註類型的排程顯示）*/}
                 {typeof selectedItem.confirmSteps === 'number' && (
                   <div style={{ fontSize: fz(12), color: selectedItem.confirmSteps > 0 ? '#F59E0B' : '#22C55E', marginTop: 4, fontWeight: 600 }}>
@@ -918,7 +1063,7 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
                 )}
               </div>
               <antd.Space size={8}>
-                <antd.Button size="small">編輯排程</antd.Button>
+                <antd.Button size="small" onClick={function() { setEditingId(selectedItem.id); }}>編輯排程</antd.Button>
                 <antd.Button size="small" danger>停用</antd.Button>
               </antd.Space>
             </div>
@@ -982,25 +1127,38 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
         />
       )}
 
-      {/* 新增排程：只選得到已上線的 Codify */}
-      {showNew && (
-        <SchNewScheduleModal
+      {/* 新增／編輯排程：同一個表單的兩種模式。
+          新增只選得到已上線的 Codify；編輯不讓換 Codify（理由見 SchScheduleModal 的註解）。 */}
+      {(showNew || editingItem) && (
+        <SchScheduleModal
           p={p}
           mounts={mounts}
           presetSkillId={presetSkillId}
-          onClose={function() { setShowNew(false); setPreset(null); }}
+          editItem={editingItem}
+          pendingCount={editingItem ? pendingDecisions.filter(function(d) { return d.item.id === editingItem.id; }).length : 0}
+          onClose={function() { setShowNew(false); setPreset(null); setEditingId(null); }}
           onJumpSchedule={function(scheduleId) { setShowNew(false); setPreset(null); setSelectedId(scheduleId); }}
-          onCreate={function(skill, cron) {
+          onSubmit={function(out) {
+            var stamp = { by: p.user.name, at: nowLabel(), summary: out.summary };
+
+            if (editingItem) {
+              onUpdateSchedule(editingItem.id, { name: out.name, cronLabel: out.cron, lastChange: stamp });
+              setEditingId(null);
+              return;
+            }
+
+            var skill = out.skill;
             var confirmSteps = (skill.plainSteps || []).filter(function(st) { return st.needsConfirm; }).length;
             var newItem = {
               id: 'sch-new-' + Date.now(),
-              name: skill.title,
+              name: out.name,
               skill: skill.id,
               skillId: skill.id,
               hasWrite: !!skill.hasWrite,
               confirmSteps: confirmSteps,
-              cronLabel: cron,
+              cronLabel: out.cron,
               createdBy: p.user.name,
+              lastChange: stamp,
               status: 'ok',
               lastRun: '尚未執行',
               runs: [],
