@@ -18019,27 +18019,38 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
-              {/* 全掛滿時停用 —— 鎖住的項目已從清單移除，打開會是一片空白，
-                  理由就寫在下面那行常駐副標上，不必開了才知道 */}
-              <antd.Button
-                type="primary" size="small"
-                disabled={schedulableCount === 0}
+              {/* 沒東西可加時停用，理由改成 hover／點擊才出現的 Tooltip。
+                  不做常駐副標的兩個理由：
+                  ① 一句常駐的話得同時涵蓋「完全沒有 Codify」「有但都沒生效」「都掛上排程了」
+                     三種狀況，寫死任何一種，另外兩種就是錯的；
+                  ② 穩定狀態本來就是「都設定完了」，每次進來被提醒一次是溝通疲勞。
+                  ⚠️ 停用的 Button 不發滑鼠事件，Tooltip 必須包一層才觸發得到；
+                  ⚠️ trigger 補上 click，手機沒有 hover，否則這個解釋在手機上等於不存在。 */}
+              {schedulableCount === 0 ? (
+                <antd.Tooltip title="目前沒有可設定排程的 Codify" trigger={['hover', 'focus', 'click']}>
+                  <span style={{ display: 'inline-block', cursor: 'not-allowed' }}>
+                    <antd.Button type="primary" size="small" disabled style={{ pointerEvents: 'none' }}>
+                      ＋ 新增
+                    </antd.Button>
+                  </span>
+                </antd.Tooltip>
+              ) : (
+                <antd.Button
+                  type="primary" size="small"
+                  onClick={function() { setPreset(null); setShowNew(true); }}
+                >＋ 新增</antd.Button>
+              )}
+            </div>
+            {/* 還有東西可以加時才講 —— 這句是「有事可做」的入口，點得下去，
+                與上面那個停用理由性質不同，不因為它改 hover 就一起收掉 */}
+            {schedulableCount > 0 && (
+              <div
                 onClick={function() { setPreset(null); setShowNew(true); }}
-              >＋ 新增</antd.Button>
-            </div>
-            {/* 不必打開 Modal 才知道還有東西可以加 */}
-            <div
-              onClick={function() { if (schedulableCount > 0) { setPreset(null); setShowNew(true); } }}
-              style={{
-                fontSize: fz(11), marginTop: 8,
-                color: schedulableCount > 0 ? '#2563EB' : C.textMuted,
-                cursor: schedulableCount > 0 ? 'pointer' : 'default',
-              }}
-            >
-              {schedulableCount > 0
-                ? '還有 ' + schedulableCount + ' 份 Codify 可加入排程'
-                : '本課已生效的 Codify 都掛上排程了'}
-            </div>
+                style={{ fontSize: fz(11), marginTop: 8, color: '#2563EB', cursor: 'pointer' }}
+              >
+                還有 {schedulableCount} 份 Codify 可加入排程
+              </div>
+            )}
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
             <antd.List
