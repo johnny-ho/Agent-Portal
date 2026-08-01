@@ -416,3 +416,24 @@ build 1,007,758 bytes。⚠️ **無法瀏覽器實測**——`shell.html` 依�
 **未做，留給後續 Phase**：C 跨排程總覽／只看異常／失敗通知（N4）／重跑；D 已掛排程的 Codify 鎖住＋雙向回寫＋搜尋＋Codify 詳情「設為定期執行」入口；E 節點明細（tool／參數／耗時／來源欄位已進資料層但畫面未用）與 Graph 實走路徑。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（＋決議 17 與實作狀態、SCH-OQ-1/4 作廢、新增 SCH-OQ-7）、[notification](entities/modules/notification.md)（Nav 紅點真相來源更正、N2 文案、失敗無通知列待補）、[decisions.md](decisions.md)、[open-questions.md](open-questions.md)、index.md。
+
+## [2026-08-01] build | Schedule Phase C：執行總覽、異常、失敗通知、重跑
+
+接續同日 Phase A + B。PO 說「做」，並同意先做失敗通知那塊（比總覽更急）。
+
+**總覽放哪，改了原本的計畫**：評估時提的是「右欄膠囊 Tabs（總覽／執行紀錄／設定）」，實作時換成**左欄虛擬項目 `SCH_ALL`「執行總覽」**。理由：總覽是**跨排程**的，把它塞進「某一個排程的詳情」裡語意就錯了——你選著 A 排程，右欄卻在講全課的事。左欄項目的作法讓「列表 → 詳情」維持一對一，三欄式佈局也不必動。原計畫本來就把這個當備選（「左欄最上方一列『全部排程』，或右欄總覽 tab」），這次選了前者。
+
+**做了什麼**：
+- `getAllRuns()` 跨排程攤平＋時間倒序；`getRunTs()` 從 `startedAt` 推導時間戳（吃 `今日`／`昨日`／`MM/DD` 三種寫法，`SCH_TODAY` 定義 mock 今日為 2026-04-21）——不在 20 筆 mock 上各補一個 `ts` 欄位。
+- 篩選膠囊四項：全部／執行失敗／待決定／**有人介入**。最後一項是稽核視角，一鍵查得到哪幾次是人做的決定，接目標 5。
+- **N4 執行失敗通知**：站內＋Teams 皆開。這是評估時抓到的最大的洞——`run-eq-004-3`（昨日 23:30 交接報告 timeout）與 `run-pr-002-1`（Recipe 週報 timeout）在 `notifications.js` **一則通知都沒有**，排程半夜掛掉沒有任何人會知道。順手把 `SettingPage.NOTIF_TYPE_LIST` 與 `App` 的偏好初始化改成從 `DEFAULT_NOTIF_PREFS` 推導，之後再加類型不必回頭改三個地方。
+- 失敗改結構化：`SCH_FAILURE_KIND_CFG`（逾時／權限／資料缺／未知，各帶一句白話 hint）＋卡在第幾步＋工具＋原始訊息。
+- **重跑**：`buildRetryRun()` 產生 `trigger:'retry'` 的新執行，記 `triggeredBy` 與 `retryOf`，**原本那筆失敗永遠保留**（重跑是新增一筆，不是覆蓋——覆蓋等於把異常紀錄洗掉）。重跑結果由資料層的 `retry` 樣板定義：交接報告補跑帶產出物並在文案寫明「本份為事後補跑，交接當下並未產出」，Recipe 週報補跑走完四步。
+- 左欄每個排程顯示「近 7 次：N 次失敗」，不穩定的排程自己浮出來。
+- `getPendingDecisions()` 簽章由 `(personaKey, ivs)` 改為 `(items, ivs)`，配合新的 `getScheduleItems(personaKey, extraRuns)`——重跑產生的執行也要納入待決定計算，不能只看 `SCHEDULING_DATA`。
+
+build 1,025,260 bytes。⚠️ **仍無法瀏覽器實測**（unpkg 被 proxy 擋，同上一輪）。Babel 本地編譯通過，行為驗證從 23 項擴充到 **53 項全過**：時間戳三種寫法解析、排序遞減、四種篩選筆數、近 7 次健康度、重跑的 trigger/triggeredBy/retryOf/產出物、重跑併入後原始資料未被汙染、**每一筆 error run 都有對應的 N4 通知**（用交叉比對而非逐筆寫死）。**下次有網路要補的實測**：膠囊選中色與 8px 間距、總覽列的排程名連結、重跑按鈕在 Collapse header 的 `stopPropagation` 是否真的沒有連帶展開。
+
+**未做**：D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、Codify 詳情無「設為定期執行」入口）；E 節點明細與 Graph 實走路徑（欄位已在資料層，畫面未用）；結果異常偵測與定期自動重跑 dry run。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[notification](entities/modules/notification.md)（N4 進表、「明確不做」劃掉失敗通知）、[decisions.md](decisions.md)、index.md。

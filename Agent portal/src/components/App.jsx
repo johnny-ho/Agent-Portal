@@ -332,14 +332,13 @@ function App() {
     return init;
   });
   const [notifPrefsByPersona, setNotifPrefsByPersona] = React.useState(function () {
-    const base = typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : { N1: {}, N2: {}, N3: {} };
+    const base = typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {};
     const init = {};
     Object.keys(PERSONAS || {}).forEach(function (k) {
-      init[k] = {
-        N1: Object.assign({}, base.N1),
-        N2: Object.assign({}, base.N2),
-        N3: Object.assign({}, base.N3),
-      };
+      const cloned = {};
+      /* 從預設值推導，新增通知類型（如 N4 執行失敗）不必再回來補一行 */
+      Object.keys(base).forEach(function (t) { cloned[t] = Object.assign({}, base[t]); });
+      init[k] = cloned;
     });
     return init;
   });
@@ -350,6 +349,13 @@ function App() {
      放在 App 而不是 SchedulingPage，因為 Nav 紅點也要用同一份真相。
      先送出者定案：同一個決策點只收第一筆，之後的一律不受理（B 推翻不了 A）。 */
   const [schedDecisions, setSchedDecisions] = React.useState({});
+  /* 重跑產生的執行：{ [scheduleId]: [run, ...] }。重跑是新增一筆，不覆蓋原本那筆失敗 */
+  const [schedExtraRuns, setSchedExtraRuns] = React.useState({});
+  const handleSchedRetry = React.useCallback(function (scheduleId, newRun) {
+    setSchedExtraRuns(function (prev) {
+      return Object.assign({}, prev, { [scheduleId]: [newRun].concat(prev[scheduleId] || []) });
+    });
+  }, []);
   const decideSchedulingStep = React.useCallback(function (runId, iv) {
     var existing = schedDecisions[runId] || [];
     var taken = existing.some(function (x) { return x.stepNum === iv.stepNum; });
@@ -475,8 +481,8 @@ function App() {
   /* Scheduling nav 紅點：綁「實際還有未決定的決策點」，不綁通知已讀狀態。
      通知讀過不代表事情處理了 —— 紅點要跟著排程本身的狀態走。 */
   const schedulingHasPending = React.useMemo(function () {
-    return getPendingDecisions(persona, schedDecisions).length > 0;
-  }, [persona, schedDecisions]);
+    return getPendingDecisions(getScheduleItems(persona, schedExtraRuns), schedDecisions).length > 0;
+  }, [persona, schedDecisions, schedExtraRuns]);
 
   const handleAskAI = React.useCallback(({ text, label }) => {
     setAiDraft({ text, label });
@@ -709,6 +715,8 @@ function App() {
             expandRunReq={expandRunReq}
             decisions={schedDecisions}
             onDecide={decideSchedulingStep}
+            extraRuns={schedExtraRuns}
+            onRetry={handleSchedRetry}
           />
         )}
       </div>

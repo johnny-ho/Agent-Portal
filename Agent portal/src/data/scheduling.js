@@ -14,6 +14,24 @@
    - 步驟的最終狀態不寫死在資料裡，而是由 interventions 推導（見 getRunView）。
    ════════════════════════════════════════ */
 
+/* ── 失敗分類 ──
+   「一行錯誤訊息」查不出東西：要看得出卡在哪一步、哪個工具、是哪一種失敗、能不能重跑。 */
+const SCH_FAILURE_KIND_CFG = {
+  timeout:    { label: '連線逾時',   hint: '對方系統沒有在時限內回應，通常是對方維護或負載過高。' },
+  permission: { label: '權限不足',   hint: '工具呼叫被拒絕，需要確認該 Codify 的工具授權。' },
+  data:       { label: '資料缺漏',   hint: '來源資料不存在或欄位對不上，重跑不會自己好。' },
+  unknown:    { label: '未知錯誤',   hint: '未分類的失敗，需要看原始訊息判斷。' },
+};
+
+/* ── 執行結果篩選 ──
+   「只看異常」要一鍵切得到；「有人介入」是稽核視角，查得到哪幾次是人做的決定。 */
+const SCH_RUN_FILTERS = [
+  { key: 'all',      label: '全部'     },
+  { key: 'error',    label: '執行失敗' },
+  { key: 'pending',  label: '待決定'   },
+  { key: 'human',    label: '有人介入' },
+];
+
 /* ── 介入選項 ──
    拒絕必填原因（流程被中止，沒有理由後面沒人查得出為什麼）；略過選填。 */
 const SCH_DECISION_CFG = {
@@ -314,6 +332,32 @@ const SCHEDULING_DATA = {
             message: 'eqp.get_uptime timeout after 30s（設備監控系統維護中）',
             retryable: true,
           },
+          /* 重跑產生的是「新的一筆」，不覆蓋原本這筆失敗紀錄 */
+          retry: {
+            duration: '41s',
+            steps: [
+              { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 328.4 h',
+                tool: 'eqp.get_uptime', params: 'shift=swing, section=ETC', system: '設備監控', rows: 16, durationLabel: '12s' },
+              { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 19 筆 → 分級去重後 3 件',
+                tool: 'fdc.list_alarms', params: 'from=16:00, to=00:00', system: 'FDC', rows: 19, durationLabel: '10s' },
+              { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 92.8%、異常密度 0.38 件/台/班', durationLabel: '2s' },
+              { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '7 件（逾期 1 件）',
+                tool: 'case_center.list_open', params: 'section=ETC', system: 'Case Center', rows: 7, durationLabel: '9s' },
+              { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出（補跑，未再送佈告欄）', durationLabel: '6s' },
+            ],
+            output: {
+              title: 'ETC 設備課 · 小夜班交接報告（補跑）',
+              shiftLabel: '小夜班 16:00 – 00:00',
+              generatedAt: '補跑產出',
+              metrics: [
+                { label: '機台稼動率', value: '92.8', unit: '%',  note: '目標 95%，未達標' },
+                { label: '本班異常',   value: '3',    unit: '件', note: 'P2 ×3' },
+                { label: '未結案 Case', value: '7',   unit: '件', note: '逾期 1 件' },
+              ],
+              situation: '【補跑說明】原班次因設備監控系統維護未能產出，本份為事後補跑，資料區間與原班次相同。\n【KPI 未達標】設備稼動率 92.8%（目標 95%）。\n【本班異常】E-308 FDC 異常延續至大夜班。',
+              pending: '• 本份為補跑，交接當下並未產出，請確認小夜班是否已用口頭交接補上。\n• E-308 FDC 異常延續中。',
+            },
+          },
           steps: [
             { num: 1, title: '取當班機台稼動資料',       status: 'error', result: '設備監控系統無回應',
               tool: 'eqp.get_uptime', params: 'shift=swing, section=ETC', system: '設備監控', durationLabel: '30s' },
@@ -491,6 +535,17 @@ const SCHEDULING_DATA = {
             kind: 'timeout',
             message: 'spc_system.get_recipe_stats 連線逾時（timeout 30s）',
             retryable: true,
+          },
+          retry: {
+            duration: '3m 02s',
+            steps: [
+              { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe',
+                tool: 'spc_system.list_recipes', params: 'status=active', system: 'SPC', rows: 12, durationLabel: '16s' },
+              { num: 2, title: '取得各 Recipe 本週 SPC 數據', status: 'done', result: '所有 Recipe 數據取得完成',
+                tool: 'spc_system.get_recipe_stats', params: 'recipe_ids=12 筆, range=this_week', system: 'SPC', rows: 12, durationLabel: '2m 04s' },
+              { num: 3, title: '生成品質週報', status: 'done', result: '週報草稿已生成（補跑）', durationLabel: '35s' },
+              { num: 4, title: '發送週報至 Section Admin', status: 'done', result: '已發送至 李佳穎', durationLabel: '5s' },
+            ],
           },
           steps: [
             { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe',
@@ -739,11 +794,110 @@ function getRunView(run, sessionIvs) {
   };
 }
 
-/* 全課待決定清單 —— Nav 紅點與待確認匯總共用同一份真相 */
-function getPendingDecisions(personaKey, sessionIvsByRun) {
+/* ════════════════════════════════════════
+   跨排程彙整 —— 目標 2、3 的落點
+
+   「昨晚全課跑了什麼」不該要一個一個點排程才看得到。
+   時間戳從 startedAt 推導，不在 20 筆 mock 上各補一個 ts 欄位。
+   ════════════════════════════════════════ */
+
+const SCH_TODAY = { y: 2026, m: 4, d: 21 };   /* mock 的「今日」*/
+
+function schPad(n) { return n < 10 ? '0' + n : '' + n; }
+
+/* '今日 07:50:03' / '昨日 23:30:02' / '04/20 07:50:02' → 20260421075003 */
+function getRunTs(run) {
+  var s = run.startedAt || run.dateLabel || '';
+  var t = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  var hh = t ? schPad(+t[1]) : '00';
+  var mm = t ? t[2] : '00';
+  var ss = t && t[3] ? t[3] : '00';
+
+  var y = SCH_TODAY.y, m = SCH_TODAY.m, d = SCH_TODAY.d;
+  var md = s.match(/^(\d{2})\/(\d{2})/);
+  if (md) {
+    m = +md[1]; d = +md[2];
+  } else if (s.indexOf('昨日') === 0) {
+    var prev = new Date(Date.UTC(SCH_TODAY.y, SCH_TODAY.m - 1, SCH_TODAY.d - 1));
+    y = prev.getUTCFullYear(); m = prev.getUTCMonth() + 1; d = prev.getUTCDate();
+  }
+  return +('' + y + schPad(m) + schPad(d) + hh + mm + ss);
+}
+
+/* 取某課的排程清單，並把本 session 產生的重跑併進各自的 runs（最新在前）*/
+function getScheduleItems(personaKey, extraRunsByScheduleId) {
   var list = (SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || [];
+  var extra = extraRunsByScheduleId || {};
+  return list.map(function (item) {
+    var add = extra[item.id];
+    if (!add || !add.length) return item;
+    var runs = add.concat(item.runs || []).slice().sort(function (a, b) { return getRunTs(b) - getRunTs(a); });
+    return Object.assign({}, item, { runs: runs });
+  });
+}
+
+/* 全課所有執行，依時間倒序攤平；每筆帶著它所屬的排程與推導後的檢視 */
+function getAllRuns(items, sessionIvsByRun) {
   var out = [];
-  list.forEach(function (item) {
+  (items || []).forEach(function (item) {
+    (item.runs || []).forEach(function (run) {
+      out.push({
+        item: item,
+        run: run,
+        view: getRunView(run, (sessionIvsByRun || {})[run.id]),
+        ts: getRunTs(run),
+      });
+    });
+  });
+  return out.sort(function (a, b) { return b.ts - a.ts; });
+}
+
+function matchRunFilter(entry, filterKey) {
+  if (filterKey === 'error')   return entry.view.result === 'error';
+  if (filterKey === 'pending') return entry.view.result === 'pending';
+  if (filterKey === 'human')   return entry.view.interventions.length > 0;
+  return true;
+}
+
+/* 單一排程近 N 次的失敗次數 —— 讓不穩定的排程在左欄自己浮出來 */
+function getRecentHealth(item, sessionIvsByRun, n) {
+  var take = n || 7;
+  var runs = (item.runs || []).slice()
+    .sort(function (a, b) { return getRunTs(b) - getRunTs(a); })
+    .slice(0, take);
+  var failed = runs.filter(function (r) {
+    return getRunView(r, (sessionIvsByRun || {})[r.id]).result === 'error';
+  }).length;
+  return { total: runs.length, failed: failed };
+}
+
+/* 由失敗紀錄產生一筆「重跑」執行 —— 新增一筆，不覆蓋原本那筆失敗 */
+function buildRetryRun(run, actorName, atLabel) {
+  var tpl = run.retry || {};
+  return {
+    id: run.id + '-retry-' + Date.now(),
+    dateLabel: atLabel,
+    startedAt: atLabel,
+    finishedAt: atLabel,
+    trigger: 'retry',
+    triggeredBy: actorName,
+    retryOf: run.id,
+    result: 'success',
+    duration: tpl.duration || '—',
+    totalSteps: (tpl.steps || run.steps || []).length,
+    doneSteps: (tpl.steps || []).length,
+    interventions: [],
+    steps: tpl.steps || (run.steps || []).map(function (s) {
+      return Object.assign({}, s, { status: 'done' });
+    }),
+    output: tpl.output || null,
+  };
+}
+
+/* 全課待決定清單 —— Nav 紅點與待決定匯總共用同一份真相 */
+function getPendingDecisions(items, sessionIvsByRun) {
+  var out = [];
+  (items || []).forEach(function (item) {
     (item.runs || []).forEach(function (run) {
       var view = getRunView(run, (sessionIvsByRun || {})[run.id]);
       if (view.activeStep) out.push({ item: item, run: run, step: view.activeStep });

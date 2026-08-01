@@ -62,7 +62,15 @@ PO 指出兩件事：**未來這一段不打算引入 AI 對話**，而且**「�
 - **Phase A 資料層**：`run` 補 `startedAt / finishedAt / trigger / triggeredBy / failure{stepNum,tool,kind,message,retryable} / interventions[]`；`step` 補 `tool / params / system / rows / durationLabel / mcpParams / needsConfirm / onConfirm / onSkip`；歷史 run 的 `handler`／`decisionBy` 全數遷移成 `interventions`。新增 `SCH_DECISION_CFG`、`getRunView()`、`getPendingDecisions()`。
 - **Phase B 介入層**：決策點面板攤開三個選項（確認單擊、略過／拒絕走理由 Modal）、`SchInterventionLine` 讓介入痕跡**固定顯示且不再因為決定完成而消失**（舊 UI 的破口）、左欄「本課有 N 件待人工決定」匯總、**Nav 紅點改綁實際未決定的決策點**（原本綁未讀 N2 通知，通知一讀紅點就沒了但事情還卡著）。
 - 順手修掉兩個 bug：在 A 課新增的排程會殘留到 B 課；切課後右欄掉回空白（`SchedulingPage` 加 `key={persona}`）。
-- **未做（留給後續 Phase）**：C 跨排程執行總覽／只看異常／失敗通知／重跑；D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、無反向入口）；E 節點明細呈現與 Graph 實走路徑（欄位已進資料層，畫面尚未用上）。
+- **Phase C 執行總覽與異常（2026-08-01 同日完成）**：
+  - **左欄新增「執行總覽」入口**（不做右欄 Tabs——總覽是跨排程的，塞進「某一個排程的詳情」裡語意不對；走左欄虛擬項目 `SCH_ALL`，三欄式佈局不變）。右欄顯示全課所有執行、時間倒序，並置頂跨排程的待決定清單。
+  - **篩選膠囊**（圓角 999px、選中底 `#2563EB`、無底線）：全部／執行失敗／待決定／**有人介入**。最後一項是稽核視角，一鍵查得到哪幾次是人做的決定。
+  - **N4 執行失敗通知**（站內＋Teams 皆開，跟著 N2 走——排程失敗多半發生在無人的班次，只放站內等於沒人看到）。`NOTIF_TYPE_LIST` 與 App 的偏好初始化改為從 `DEFAULT_NOTIF_PREFS` 推導，之後再加類型不必回頭改三個地方。
+  - **結構化失敗**：`SCH_FAILURE_KIND_CFG`（逾時／權限／資料缺／未知）＋卡在第幾步＋工具＋原始訊息，取代原本一行 `errorMsg`。
+  - **重跑**：`retryable` 的失敗給「↻ 重跑」，`buildRetryRun()` **新增一筆** `trigger:'retry'` 的執行並記下觸發者與 `retryOf`，**原本那筆失敗永遠保留**。重跑結果由資料層的 `retry` 樣板定義（交接報告補跑帶產出物、Recipe 週報補跑）。
+  - **左欄近 7 次失敗數**：不穩定的排程自己浮出來。
+  - 時間排序用 `getRunTs()` 從 `startedAt` 推導（`今日`／`昨日`／`MM/DD` 三種寫法），不在 20 筆 mock 上各補一個 `ts` 欄位。`SCH_TODAY` 定義 mock 的今日為 2026-04-21。
+- **未做（留給後續 Phase）**：D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、無反向入口）；E 節點明細呈現與 Graph 實走路徑（`tool`／`params`／`durationLabel`／`rows` 欄位已進資料層，畫面尚未用上）。另仍未做：結果異常偵測（與前 N 次比較）、定期自動重跑 dry run。
 
 ⚠️ 本輪**無法做瀏覽器實測**——`shell.html` 依賴 unpkg CDN，本 session 網路政策擋住外連。改以 Babel 本地編譯（等價於瀏覽器內 `@babel/standalone`）＋ 對 `getRunView`／`getPendingDecisions` 的 23 項行為驗證通過。
 

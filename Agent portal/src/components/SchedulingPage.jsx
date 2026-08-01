@@ -308,15 +308,18 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
 /* ════════════════════════════════════════
    SCHEDULING PAGE MAIN
    ════════════════════════════════════════ */
-function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
+const SCH_ALL = '__all__';   /* 左欄「執行總覽」的虛擬選取 id */
+
+function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRetry }) {
   var { C, fz } = useTheme();
-  const baseItems = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
+  const baseItems = getScheduleItems(p.key, extraRuns);
   const [extraItems, setExtraItems] = React.useState([]);
   const items = extraItems.concat(baseItems);
   const ivsByRun = decisions || {};
 
   const [showNew, setShowNew]       = React.useState(false);
   const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
+  const [runFilter, setRunFilter]   = React.useState('all');
   const [reasonModal, setReasonModal] = React.useState(null);   // { action, run, step }
   const [conflict, setConflict]     = React.useState(null);     // 決定被搶先時的提示
   const [expandedRuns, setExpandedRuns] = React.useState(() => {
@@ -338,10 +341,15 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
     setExpandedRuns(function (prev) { const n = new Set(prev); n.add(runId); return n; });
   }, [expandRunReq && expandRunReq.nonce]);
 
-  const selectedItem = items.find(i => i.id === selectedId);
+  const isOverview   = selectedId === SCH_ALL;
+  const selectedItem = isOverview ? null : items.find(i => i.id === selectedId);
 
   /* 全課待決定：Nav 紅點與左欄匯總共用同一份真相 */
-  const pendingDecisions = getPendingDecisions(p.key, ivsByRun);
+  const pendingDecisions = getPendingDecisions(items, ivsByRun);
+
+  /* 全課所有執行（時間倒序），總覽與左欄健康度共用 */
+  const allRuns   = getAllRuns(items, ivsByRun);
+  const errorRuns = allRuns.filter(e => e.view.result === 'error');
 
   /* 目前選中排程的決策點（一次只會有一個活著的決策點）*/
   const activeDecision = pendingDecisions.filter(function (d) {
@@ -458,11 +466,23 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
     );
   };
 
-  /* ── 執行紀錄 → Collapse（摘要列＝panel header，步驟＝panel body）── */
-  const renderRunPanels = () => {
-    return (selectedItem.runs || []).map(function (run) {
-      const view = getRunView(run, ivsByRun[run.id]);
+  /* ── 重跑：新增一筆執行，不覆蓋原本那筆失敗 ── */
+  const handleRetry = (item, run) => {
+    const newRun = buildRetryRun(run, p.user.name, nowLabel());
+    onRetry(item.id, newRun);
+    setSelectedId(item.id);
+    setExpandedRuns(prev => { const n = new Set(prev); n.add(newRun.id); return n; });
+  };
+
+  /* ── 執行紀錄 → Collapse（摘要列＝panel header，步驟＝panel body）──
+     entries 來自單一排程或全課總覽，兩邊共用同一組列。 */
+  const renderRunPanels = (entries, showScheduleName) => {
+    return entries.map(function (entry) {
+      const item = entry.item;
+      const run  = entry.run;
+      const view = entry.view;
       const cfg  = SCH_RUN_CFG[view.result] || SCH_RUN_CFG.success;
+      const failKind = run.failure ? (SCH_FAILURE_KIND_CFG[run.failure.kind] || SCH_FAILURE_KIND_CFG.unknown) : null;
 
       /* 完成但中間有人略過，要在摘要就看得出來 */
       const resultLabel = view.result === 'success' && view.hasSkip
@@ -479,6 +499,9 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             <SchStepIcon status={SCH_RESULT_TO_ICON[view.result] || 'done'} size={24} />
             <div style={{ flex: 1 }}>
+              {showScheduleName && (
+                <div style={{ fontSize: fz(12), fontWeight: 600, color: '#2563EB', marginBottom: 2 }}>{item.name}</div>
+              )}
               <div style={{ fontSize: fz(13), fontWeight: 500, color: C.text, marginBottom: 2 }}>
                 {run.dateLabel} — {resultLabel}（{view.doneSteps}/{view.totalSteps} 步驟）
               </div>
@@ -497,19 +520,37 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
                 </div>
               )}
 
-              {/* 失敗資訊 */}
+              {/* 失敗資訊：一行錯誤訊息查不出東西，要看得出卡在哪、哪個工具、哪一種失敗 */}
               {run.failure && (
-                <div style={{ marginTop: 8, fontSize: fz(11), color: '#DC2626', fontFamily: 'monospace', background: 'rgba(239,68,68,0.05)', padding: '4px 8px', borderRadius: 4 }}>
-                  Step {run.failure.stepNum} · {run.failure.message}
+                <div style={{ marginTop: 8, background: 'rgba(239,68,68,0.05)', padding: 8, borderRadius: 4 }}>
+                  <div style={{ fontSize: fz(12), color: '#DC2626', fontWeight: 600, marginBottom: 2 }}>
+                    {failKind.label}　·　卡在 Step {run.failure.stepNum}
+                  </div>
+                  <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 2 }}>{failKind.hint}</div>
+                  <div style={{ fontSize: fz(11), color: '#DC2626', fontFamily: 'monospace' }}>{run.failure.message}</div>
+                </div>
+              )}
+              {/* 重跑的來歷要看得出來 */}
+              {run.retryOf && (
+                <div style={{ marginTop: 8, fontSize: fz(11), color: C.textMuted }}>
+                  這是失敗後的補跑，原本那筆失敗紀錄仍保留在清單中。
                 </div>
               )}
             </div>
           </div>
         ),
         extra: (
-          <antd.Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: cfg.bg, color: cfg.color, borderColor: 'transparent' }}>
-            {cfg.label}
-          </antd.Tag>
+          <antd.Space size={8}>
+            {run.failure && run.failure.retryable && (
+              <antd.Button
+                size="small"
+                onClick={function (e) { e.stopPropagation(); handleRetry(item, run); }}
+              >↻ 重跑</antd.Button>
+            )}
+            <antd.Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: cfg.bg, color: cfg.color, borderColor: 'transparent' }}>
+              {cfg.label}
+            </antd.Tag>
+          </antd.Space>
         ),
         children: (
           <div>
@@ -530,6 +571,84 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
         ),
       };
     });
+  };
+
+  /* ── 篩選膠囊（規範：圓角 999px、選中底 #2563EB、禁底線）── */
+  const renderFilterPills = () => (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {SCH_RUN_FILTERS.map(function (f) {
+        const active = runFilter === f.key;
+        const count = f.key === 'all' ? allRuns.length : allRuns.filter(e => matchRunFilter(e, f.key)).length;
+        return (
+          <div
+            key={f.key}
+            onClick={function () { setRunFilter(f.key); }}
+            style={{
+              padding: '4px 16px', borderRadius: 999, cursor: 'pointer',
+              fontSize: fz(12), fontWeight: active ? 600 : 400,
+              background: active ? '#2563EB' : 'transparent',
+              color: active ? '#fff' : C.textSub,
+              border: '1px solid ' + (active ? '#2563EB' : C.border),
+            }}
+          >{f.label}（{count}）</div>
+        );
+      })}
+    </div>
+  );
+
+  /* ── 全課執行總覽 ──
+     目標 2、3 的落點：跨排程、時間倒序，「只看異常」一鍵切得到。 */
+  const renderOverview = () => {
+    const filtered = allRuns.filter(e => matchRunFilter(e, runFilter));
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bgPanel }}>
+        <div style={{ padding: '16px 24px', background: C.bg, borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
+          <div style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>執行總覽</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
+            本課 {items.length} 個排程　·　{allRuns.length} 次執行　·
+            <span style={{ color: errorRuns.length > 0 ? '#DC2626' : C.textMuted }}>{errorRuns.length} 次失敗</span>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 待人工決定：跨排程集中在這裡，點一下直接跳過去 */}
+          {pendingDecisions.length > 0 && (
+            <antd.Alert
+              type="error"
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>有 {pendingDecisions.length} 件待人工決定</span>}
+              description={
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {pendingDecisions.map(function (d) {
+                    return (
+                      <div key={d.run.id} style={{ fontSize: fz(12), color: C.textSub }}>
+                        <a onClick={function () { setSelectedId(d.item.id); }} style={{ fontWeight: 600 }}>{d.item.name}</a>
+                        {'　Step ' + d.step.num + '「' + d.step.title + '」·　自 '}
+                        <span style={{ fontFamily: 'monospace' }}>{d.run.waitingSince || d.run.startedAt}</span>
+                        {' 起等待中'}
+                      </div>
+                    );
+                  })}
+                </div>
+              }
+            />
+          )}
+
+          {renderFilterPills()}
+
+          {filtered.length === 0 ? (
+            <antd.Empty style={{ padding: 24 }} description={<span style={{ fontSize: fz(13), color: C.textMuted }}>此條件下沒有執行紀錄</span>} />
+          ) : (
+            <antd.Collapse
+              bordered={false}
+              activeKey={Array.from(expandedRuns)}
+              onChange={function (keys) { setExpandedRuns(new Set(keys)); }}
+              items={renderRunPanels(filtered, true)}
+              style={{ background: 'transparent' }}
+            />
+          )}
+        </div>
+      </div>
+    );
   };
 
   /* ── Main render ── */
@@ -562,6 +681,22 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
               </div>
             </div>
           )}
+
+          {/* 執行總覽入口：不必逐一點排程才知道全課跑了什麼、哪幾次掛了 */}
+          <div
+            onClick={function () { setSelectedId(SCH_ALL); }}
+            style={{
+              padding: '12px 16px', borderBottom: '1px solid ' + C.border, cursor: 'pointer',
+              background: isOverview ? 'rgba(37,99,235,0.08)' : 'transparent',
+              borderLeft: '3px solid ' + (isOverview ? '#2563EB' : 'transparent'),
+            }}
+          >
+            <div style={{ fontSize: fz(13), fontWeight: 600, color: isOverview ? '#2563EB' : C.text }}>執行總覽</div>
+            <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
+              全課 {allRuns.length} 次執行
+              {errorRuns.length > 0 && <span style={{ color: '#DC2626' }}>　·　{errorRuns.length} 次失敗</span>}
+            </div>
+          </div>
 
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
@@ -600,6 +735,16 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
                         </antd.Tag>
                       </div>
                       <div style={{ fontSize: fz(11), color: C.textMuted }}>上次執行：{item.lastRun}</div>
+                      {/* 近 N 次的失敗數：不穩定的排程自己浮出來，不必點進去才知道 */}
+                      {(function () {
+                        const h = getRecentHealth(item, ivsByRun, 7);
+                        if (!h.total) return null;
+                        return (
+                          <div style={{ fontSize: fz(11), color: h.failed > 0 ? '#DC2626' : C.textMuted, marginTop: 2 }}>
+                            近 {h.total} 次：{h.failed > 0 ? h.failed + ' 次失敗' : '全部正常'}
+                          </div>
+                        );
+                      })()}
                     </antd.Card>
                   </antd.List.Item>
                 );
@@ -609,7 +754,7 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
         </div>
 
         {/* ── Right Panel ── */}
-        {selectedItem ? (
+        {isOverview ? renderOverview() : selectedItem ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bgPanel }}>
 
             {/* Right Header */}
@@ -668,7 +813,12 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
                     bordered={false}
                     activeKey={Array.from(expandedRuns)}
                     onChange={function (keys) { setExpandedRuns(new Set(keys)); }}
-                    items={renderRunPanels()}
+                    items={renderRunPanels(
+                      (selectedItem.runs || []).map(function (run) {
+                        return { item: selectedItem, run: run, view: getRunView(run, ivsByRun[run.id]) };
+                      }),
+                      false
+                    )}
                     style={{ background: 'transparent' }}
                   />
                 )}

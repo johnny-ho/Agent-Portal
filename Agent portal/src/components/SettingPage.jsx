@@ -919,7 +919,8 @@ function PersonalSettingTab({ notifPrefs, onNotifPrefChange }) {
   var Switch = (typeof antd !== 'undefined' && antd.Switch) ? antd.Switch : null;
   var Segmented = (typeof antd !== 'undefined' && antd.Segmented) ? antd.Segmented : null;
   var Select = (typeof antd !== 'undefined' && antd.Select) ? antd.Select : null;
-  var NOTIF_TYPE_LIST = ['N1', 'N2', 'N3'];
+  /* 從預設值推導，新增通知類型（如 N4 執行失敗）不必再回來改這一行 */
+  var NOTIF_TYPE_LIST = Object.keys(typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {});
 
   /* ── 語言選擇（未來用）── */
   var [lang, setLang] = React.useState('zh-TW');

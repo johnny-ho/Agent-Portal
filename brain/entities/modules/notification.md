@@ -28,8 +28,12 @@ status: current
 | N1 | Schedule job 完成 | `SCHEDULING_DATA` runs `result: done` | ✅ | ❌ |
 | N2 | Schedule job 需人工決定（HITL） | runs `result: pending` | ✅ | ✅ |
 | N3 | 我（AR=被指派人本人）被指派 P1 任務 | `tasks.js` 指派人=我 且 P1 | ✅ | ✅ |
+| **N4** | **Schedule job 執行失敗**（2026-08-01 新增） | runs `result: error` | ✅ | ✅ |
 
-**明確不做（v1）**：發起人的回向通知（如「P1 已完成」）；Teams 推送的任何 mock 行為——**Teams 只在設定 UI 呈現逐則推送開關並持久化狀態**，真實整合列 W-5（見 [open-questions](../../open-questions.md)）。
+> **N4 為什麼 Teams 也要開**：排程失敗多半發生在無人的班次（`run-eq-004-3` 就是昨日 23:30 掛的），只放站內等於沒人看到。這一類原本完全沒有通知——N1 只涵蓋完成、N2 只涵蓋待決定，兩筆 error run 在 `notifications.js` 一則都沒有，是「異常容易被查看」這個目標最大的洞。
+> 實作上 `SettingPage` 的 `NOTIF_TYPE_LIST` 與 `App.jsx` 的偏好初始化都改為從 `DEFAULT_NOTIF_PREFS` 推導，之後再新增類型不必回頭改三個地方。
+
+**明確不做（v1）**：~~失敗通知~~ **已於 2026-08-01 補上（N4）**；發起人的回向通知（如「P1 已完成」）；Teams 推送的任何 mock 行為——**Teams 只在設定 UI 呈現逐則推送開關並持久化狀態**，真實整合列 W-5（見 [open-questions](../../open-questions.md)）。
 
 ## UI 與互動
 

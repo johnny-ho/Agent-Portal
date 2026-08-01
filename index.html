@@ -3383,6 +3383,24 @@ const TASKS_BY_PERSONA = {
    - 步驟的最終狀態不寫死在資料裡，而是由 interventions 推導（見 getRunView）。
    ════════════════════════════════════════ */
 
+/* ── 失敗分類 ──
+   「一行錯誤訊息」查不出東西：要看得出卡在哪一步、哪個工具、是哪一種失敗、能不能重跑。 */
+const SCH_FAILURE_KIND_CFG = {
+  timeout:    { label: '連線逾時',   hint: '對方系統沒有在時限內回應，通常是對方維護或負載過高。' },
+  permission: { label: '權限不足',   hint: '工具呼叫被拒絕，需要確認該 Codify 的工具授權。' },
+  data:       { label: '資料缺漏',   hint: '來源資料不存在或欄位對不上，重跑不會自己好。' },
+  unknown:    { label: '未知錯誤',   hint: '未分類的失敗，需要看原始訊息判斷。' },
+};
+
+/* ── 執行結果篩選 ──
+   「只看異常」要一鍵切得到；「有人介入」是稽核視角，查得到哪幾次是人做的決定。 */
+const SCH_RUN_FILTERS = [
+  { key: 'all',      label: '全部'     },
+  { key: 'error',    label: '執行失敗' },
+  { key: 'pending',  label: '待決定'   },
+  { key: 'human',    label: '有人介入' },
+];
+
 /* ── 介入選項 ──
    拒絕必填原因（流程被中止，沒有理由後面沒人查得出為什麼）；略過選填。 */
 const SCH_DECISION_CFG = {
@@ -3683,6 +3701,32 @@ const SCHEDULING_DATA = {
             message: 'eqp.get_uptime timeout after 30s（設備監控系統維護中）',
             retryable: true,
           },
+          /* 重跑產生的是「新的一筆」，不覆蓋原本這筆失敗紀錄 */
+          retry: {
+            duration: '41s',
+            steps: [
+              { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 328.4 h',
+                tool: 'eqp.get_uptime', params: 'shift=swing, section=ETC', system: '設備監控', rows: 16, durationLabel: '12s' },
+              { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 19 筆 → 分級去重後 3 件',
+                tool: 'fdc.list_alarms', params: 'from=16:00, to=00:00', system: 'FDC', rows: 19, durationLabel: '10s' },
+              { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 92.8%、異常密度 0.38 件/台/班', durationLabel: '2s' },
+              { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '7 件（逾期 1 件）',
+                tool: 'case_center.list_open', params: 'section=ETC', system: 'Case Center', rows: 7, durationLabel: '9s' },
+              { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出（補跑，未再送佈告欄）', durationLabel: '6s' },
+            ],
+            output: {
+              title: 'ETC 設備課 · 小夜班交接報告（補跑）',
+              shiftLabel: '小夜班 16:00 – 00:00',
+              generatedAt: '補跑產出',
+              metrics: [
+                { label: '機台稼動率', value: '92.8', unit: '%',  note: '目標 95%，未達標' },
+                { label: '本班異常',   value: '3',    unit: '件', note: 'P2 ×3' },
+                { label: '未結案 Case', value: '7',   unit: '件', note: '逾期 1 件' },
+              ],
+              situation: '【補跑說明】原班次因設備監控系統維護未能產出，本份為事後補跑，資料區間與原班次相同。\n【KPI 未達標】設備稼動率 92.8%（目標 95%）。\n【本班異常】E-308 FDC 異常延續至大夜班。',
+              pending: '• 本份為補跑，交接當下並未產出，請確認小夜班是否已用口頭交接補上。\n• E-308 FDC 異常延續中。',
+            },
+          },
           steps: [
             { num: 1, title: '取當班機台稼動資料',       status: 'error', result: '設備監控系統無回應',
               tool: 'eqp.get_uptime', params: 'shift=swing, section=ETC', system: '設備監控', durationLabel: '30s' },
@@ -3860,6 +3904,17 @@ const SCHEDULING_DATA = {
             kind: 'timeout',
             message: 'spc_system.get_recipe_stats 連線逾時（timeout 30s）',
             retryable: true,
+          },
+          retry: {
+            duration: '3m 02s',
+            steps: [
+              { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe',
+                tool: 'spc_system.list_recipes', params: 'status=active', system: 'SPC', rows: 12, durationLabel: '16s' },
+              { num: 2, title: '取得各 Recipe 本週 SPC 數據', status: 'done', result: '所有 Recipe 數據取得完成',
+                tool: 'spc_system.get_recipe_stats', params: 'recipe_ids=12 筆, range=this_week', system: 'SPC', rows: 12, durationLabel: '2m 04s' },
+              { num: 3, title: '生成品質週報', status: 'done', result: '週報草稿已生成（補跑）', durationLabel: '35s' },
+              { num: 4, title: '發送週報至 Section Admin', status: 'done', result: '已發送至 李佳穎', durationLabel: '5s' },
+            ],
           },
           steps: [
             { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe',
@@ -4108,11 +4163,110 @@ function getRunView(run, sessionIvs) {
   };
 }
 
-/* 全課待決定清單 —— Nav 紅點與待確認匯總共用同一份真相 */
-function getPendingDecisions(personaKey, sessionIvsByRun) {
+/* ════════════════════════════════════════
+   跨排程彙整 —— 目標 2、3 的落點
+
+   「昨晚全課跑了什麼」不該要一個一個點排程才看得到。
+   時間戳從 startedAt 推導，不在 20 筆 mock 上各補一個 ts 欄位。
+   ════════════════════════════════════════ */
+
+const SCH_TODAY = { y: 2026, m: 4, d: 21 };   /* mock 的「今日」*/
+
+function schPad(n) { return n < 10 ? '0' + n : '' + n; }
+
+/* '今日 07:50:03' / '昨日 23:30:02' / '04/20 07:50:02' → 20260421075003 */
+function getRunTs(run) {
+  var s = run.startedAt || run.dateLabel || '';
+  var t = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  var hh = t ? schPad(+t[1]) : '00';
+  var mm = t ? t[2] : '00';
+  var ss = t && t[3] ? t[3] : '00';
+
+  var y = SCH_TODAY.y, m = SCH_TODAY.m, d = SCH_TODAY.d;
+  var md = s.match(/^(\d{2})\/(\d{2})/);
+  if (md) {
+    m = +md[1]; d = +md[2];
+  } else if (s.indexOf('昨日') === 0) {
+    var prev = new Date(Date.UTC(SCH_TODAY.y, SCH_TODAY.m - 1, SCH_TODAY.d - 1));
+    y = prev.getUTCFullYear(); m = prev.getUTCMonth() + 1; d = prev.getUTCDate();
+  }
+  return +('' + y + schPad(m) + schPad(d) + hh + mm + ss);
+}
+
+/* 取某課的排程清單，並把本 session 產生的重跑併進各自的 runs（最新在前）*/
+function getScheduleItems(personaKey, extraRunsByScheduleId) {
   var list = (SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || [];
+  var extra = extraRunsByScheduleId || {};
+  return list.map(function (item) {
+    var add = extra[item.id];
+    if (!add || !add.length) return item;
+    var runs = add.concat(item.runs || []).slice().sort(function (a, b) { return getRunTs(b) - getRunTs(a); });
+    return Object.assign({}, item, { runs: runs });
+  });
+}
+
+/* 全課所有執行，依時間倒序攤平；每筆帶著它所屬的排程與推導後的檢視 */
+function getAllRuns(items, sessionIvsByRun) {
   var out = [];
-  list.forEach(function (item) {
+  (items || []).forEach(function (item) {
+    (item.runs || []).forEach(function (run) {
+      out.push({
+        item: item,
+        run: run,
+        view: getRunView(run, (sessionIvsByRun || {})[run.id]),
+        ts: getRunTs(run),
+      });
+    });
+  });
+  return out.sort(function (a, b) { return b.ts - a.ts; });
+}
+
+function matchRunFilter(entry, filterKey) {
+  if (filterKey === 'error')   return entry.view.result === 'error';
+  if (filterKey === 'pending') return entry.view.result === 'pending';
+  if (filterKey === 'human')   return entry.view.interventions.length > 0;
+  return true;
+}
+
+/* 單一排程近 N 次的失敗次數 —— 讓不穩定的排程在左欄自己浮出來 */
+function getRecentHealth(item, sessionIvsByRun, n) {
+  var take = n || 7;
+  var runs = (item.runs || []).slice()
+    .sort(function (a, b) { return getRunTs(b) - getRunTs(a); })
+    .slice(0, take);
+  var failed = runs.filter(function (r) {
+    return getRunView(r, (sessionIvsByRun || {})[r.id]).result === 'error';
+  }).length;
+  return { total: runs.length, failed: failed };
+}
+
+/* 由失敗紀錄產生一筆「重跑」執行 —— 新增一筆，不覆蓋原本那筆失敗 */
+function buildRetryRun(run, actorName, atLabel) {
+  var tpl = run.retry || {};
+  return {
+    id: run.id + '-retry-' + Date.now(),
+    dateLabel: atLabel,
+    startedAt: atLabel,
+    finishedAt: atLabel,
+    trigger: 'retry',
+    triggeredBy: actorName,
+    retryOf: run.id,
+    result: 'success',
+    duration: tpl.duration || '—',
+    totalSteps: (tpl.steps || run.steps || []).length,
+    doneSteps: (tpl.steps || []).length,
+    interventions: [],
+    steps: tpl.steps || (run.steps || []).map(function (s) {
+      return Object.assign({}, s, { status: 'done' });
+    }),
+    output: tpl.output || null,
+  };
+}
+
+/* 全課待決定清單 —— Nav 紅點與待決定匯總共用同一份真相 */
+function getPendingDecisions(items, sessionIvsByRun) {
+  var out = [];
+  (items || []).forEach(function (item) {
     (item.runs || []).forEach(function (run) {
       var view = getRunView(run, (sessionIvsByRun || {})[run.id]);
       if (view.activeStep) out.push({ item: item, run: run, step: view.activeStep });
@@ -4416,7 +4570,8 @@ var KPI_REPORT_MOCK = {
 /* ════════════════════════════════════════
    NOTIFICATIONS MOCK DATA
    通知中心 v1（見 brain/entities/modules/notification.md）
-   三類通知：N1 Schedule 完成 / N2 Schedule 需人工介入(HITL) / N3 被指派 P1
+   四類通知：N1 Schedule 完成 / N2 Schedule 需人工決定(HITL) / N3 被指派 P1
+             / N4 Schedule 執行失敗（2026-08-01 新增 —— 半夜排程掛掉原本沒有任何人會知道）
    原則：低摩擦、不回報已讀給派工者/課長、Personal 層自管。
    ════════════════════════════════════════ */
 
@@ -4425,14 +4580,17 @@ const NOTIF_TYPES = {
   N1: { key: 'N1', label: 'Schedule 完成',     short: '完成',   dot: '#22C55E', icon: '✓' },
   N2: { key: 'N2', label: 'Schedule 需人工決定', short: '需決定', dot: '#F59E0B', icon: '⏸' },
   N3: { key: 'N3', label: '被指派 P1 任務',     short: 'P1 指派', dot: '#EF4444', icon: '❗' },
+  N4: { key: 'N4', label: 'Schedule 執行失敗',  short: '執行失敗', dot: '#EF4444', icon: '✕' },
 };
 
 /* ── 站內 / Teams 逐則推送預設（PO 已確認）──
-   N1 站內開、Teams 關；N2 / N3 站內 + Teams 皆開。 */
+   N1 站內開、Teams 關；N2 / N3 / N4 站內 + Teams 皆開。
+   N4 跟著 N2 走：排程失敗多半發生在無人的班次，只放站內等於沒人看到。 */
 const DEFAULT_NOTIF_PREFS = {
   N1: { inApp: true,  teams: false },
   N2: { inApp: true,  teams: true  },
   N3: { inApp: true,  teams: true  },
+  N4: { inApp: true,  teams: true  },
 };
 
 /* ── per-persona 通知清單（保留 7 天；ts 越大越新，未讀置頂由 UI 處理）──
@@ -4453,6 +4611,13 @@ const NOTIFICATIONS_BY_PERSONA = {
       desc: '電流波動追蹤，due 今日。指派人：林課長。',
       timeLabel: '今日 07:30',
       link: { nav: 'tasks', taskOpenId: 'T-003' },
+    },
+    {
+      id: 'ntf-eq-5', type: 'N4', read: false, ts: 20260724073200,
+      title: '當班交接報告 執行失敗',
+      desc: 'Step 1「取當班機台稼動資料」連線逾時（設備監控系統維護中），小夜班交接報告未產出。可重跑。',
+      timeLabel: '昨日 23:30',
+      link: { nav: 'scheduling', expandRunId: 'run-eq-004-3' },
     },
     {
       id: 'ntf-eq-3', type: 'N1', read: true, ts: 20260724070500,
@@ -4477,6 +4642,13 @@ const NOTIFICATIONS_BY_PERSONA = {
       desc: '今日 07:50 執行完成，本日無 OOC 站點。',
       timeLabel: '今日 07:50',
       link: { nav: 'scheduling', expandRunId: 'run-pr-001-1' },
+    },
+    {
+      id: 'ntf-pr-3', type: 'N4', read: false, ts: 20260721090200,
+      title: 'Recipe 品質週報 執行失敗',
+      desc: 'Step 2「取得各 Recipe 本週 SPC 數據」連線逾時，本週週報未產出。可重跑。',
+      timeLabel: '04/14 09:02',
+      link: { nav: 'scheduling', expandRunId: 'run-pr-002-1' },
     },
     {
       id: 'ntf-pr-2', type: 'N1', read: true, ts: 20260721090000,
@@ -14301,7 +14473,8 @@ function PersonalSettingTab({ notifPrefs, onNotifPrefChange }) {
   var Switch = (typeof antd !== 'undefined' && antd.Switch) ? antd.Switch : null;
   var Segmented = (typeof antd !== 'undefined' && antd.Segmented) ? antd.Segmented : null;
   var Select = (typeof antd !== 'undefined' && antd.Select) ? antd.Select : null;
-  var NOTIF_TYPE_LIST = ['N1', 'N2', 'N3'];
+  /* 從預設值推導，新增通知類型（如 N4 執行失敗）不必再回來改這一行 */
+  var NOTIF_TYPE_LIST = Object.keys(typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {});
 
   /* ── 語言選擇（未來用）── */
   var [lang, setLang] = React.useState('zh-TW');
@@ -17162,15 +17335,18 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
 /* ════════════════════════════════════════
    SCHEDULING PAGE MAIN
    ════════════════════════════════════════ */
-function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
+const SCH_ALL = '__all__';   /* 左欄「執行總覽」的虛擬選取 id */
+
+function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRetry }) {
   var { C, fz } = useTheme();
-  const baseItems = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
+  const baseItems = getScheduleItems(p.key, extraRuns);
   const [extraItems, setExtraItems] = React.useState([]);
   const items = extraItems.concat(baseItems);
   const ivsByRun = decisions || {};
 
   const [showNew, setShowNew]       = React.useState(false);
   const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
+  const [runFilter, setRunFilter]   = React.useState('all');
   const [reasonModal, setReasonModal] = React.useState(null);   // { action, run, step }
   const [conflict, setConflict]     = React.useState(null);     // 決定被搶先時的提示
   const [expandedRuns, setExpandedRuns] = React.useState(() => {
@@ -17192,10 +17368,15 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
     setExpandedRuns(function (prev) { const n = new Set(prev); n.add(runId); return n; });
   }, [expandRunReq && expandRunReq.nonce]);
 
-  const selectedItem = items.find(i => i.id === selectedId);
+  const isOverview   = selectedId === SCH_ALL;
+  const selectedItem = isOverview ? null : items.find(i => i.id === selectedId);
 
   /* 全課待決定：Nav 紅點與左欄匯總共用同一份真相 */
-  const pendingDecisions = getPendingDecisions(p.key, ivsByRun);
+  const pendingDecisions = getPendingDecisions(items, ivsByRun);
+
+  /* 全課所有執行（時間倒序），總覽與左欄健康度共用 */
+  const allRuns   = getAllRuns(items, ivsByRun);
+  const errorRuns = allRuns.filter(e => e.view.result === 'error');
 
   /* 目前選中排程的決策點（一次只會有一個活著的決策點）*/
   const activeDecision = pendingDecisions.filter(function (d) {
@@ -17312,11 +17493,23 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
     );
   };
 
-  /* ── 執行紀錄 → Collapse（摘要列＝panel header，步驟＝panel body）── */
-  const renderRunPanels = () => {
-    return (selectedItem.runs || []).map(function (run) {
-      const view = getRunView(run, ivsByRun[run.id]);
+  /* ── 重跑：新增一筆執行，不覆蓋原本那筆失敗 ── */
+  const handleRetry = (item, run) => {
+    const newRun = buildRetryRun(run, p.user.name, nowLabel());
+    onRetry(item.id, newRun);
+    setSelectedId(item.id);
+    setExpandedRuns(prev => { const n = new Set(prev); n.add(newRun.id); return n; });
+  };
+
+  /* ── 執行紀錄 → Collapse（摘要列＝panel header，步驟＝panel body）──
+     entries 來自單一排程或全課總覽，兩邊共用同一組列。 */
+  const renderRunPanels = (entries, showScheduleName) => {
+    return entries.map(function (entry) {
+      const item = entry.item;
+      const run  = entry.run;
+      const view = entry.view;
       const cfg  = SCH_RUN_CFG[view.result] || SCH_RUN_CFG.success;
+      const failKind = run.failure ? (SCH_FAILURE_KIND_CFG[run.failure.kind] || SCH_FAILURE_KIND_CFG.unknown) : null;
 
       /* 完成但中間有人略過，要在摘要就看得出來 */
       const resultLabel = view.result === 'success' && view.hasSkip
@@ -17333,6 +17526,9 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             <SchStepIcon status={SCH_RESULT_TO_ICON[view.result] || 'done'} size={24} />
             <div style={{ flex: 1 }}>
+              {showScheduleName && (
+                <div style={{ fontSize: fz(12), fontWeight: 600, color: '#2563EB', marginBottom: 2 }}>{item.name}</div>
+              )}
               <div style={{ fontSize: fz(13), fontWeight: 500, color: C.text, marginBottom: 2 }}>
                 {run.dateLabel} — {resultLabel}（{view.doneSteps}/{view.totalSteps} 步驟）
               </div>
@@ -17351,19 +17547,37 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
                 </div>
               )}
 
-              {/* 失敗資訊 */}
+              {/* 失敗資訊：一行錯誤訊息查不出東西，要看得出卡在哪、哪個工具、哪一種失敗 */}
               {run.failure && (
-                <div style={{ marginTop: 8, fontSize: fz(11), color: '#DC2626', fontFamily: 'monospace', background: 'rgba(239,68,68,0.05)', padding: '4px 8px', borderRadius: 4 }}>
-                  Step {run.failure.stepNum} · {run.failure.message}
+                <div style={{ marginTop: 8, background: 'rgba(239,68,68,0.05)', padding: 8, borderRadius: 4 }}>
+                  <div style={{ fontSize: fz(12), color: '#DC2626', fontWeight: 600, marginBottom: 2 }}>
+                    {failKind.label}　·　卡在 Step {run.failure.stepNum}
+                  </div>
+                  <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 2 }}>{failKind.hint}</div>
+                  <div style={{ fontSize: fz(11), color: '#DC2626', fontFamily: 'monospace' }}>{run.failure.message}</div>
+                </div>
+              )}
+              {/* 重跑的來歷要看得出來 */}
+              {run.retryOf && (
+                <div style={{ marginTop: 8, fontSize: fz(11), color: C.textMuted }}>
+                  這是失敗後的補跑，原本那筆失敗紀錄仍保留在清單中。
                 </div>
               )}
             </div>
           </div>
         ),
         extra: (
-          <antd.Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: cfg.bg, color: cfg.color, borderColor: 'transparent' }}>
-            {cfg.label}
-          </antd.Tag>
+          <antd.Space size={8}>
+            {run.failure && run.failure.retryable && (
+              <antd.Button
+                size="small"
+                onClick={function (e) { e.stopPropagation(); handleRetry(item, run); }}
+              >↻ 重跑</antd.Button>
+            )}
+            <antd.Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: cfg.bg, color: cfg.color, borderColor: 'transparent' }}>
+              {cfg.label}
+            </antd.Tag>
+          </antd.Space>
         ),
         children: (
           <div>
@@ -17384,6 +17598,84 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
         ),
       };
     });
+  };
+
+  /* ── 篩選膠囊（規範：圓角 999px、選中底 #2563EB、禁底線）── */
+  const renderFilterPills = () => (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {SCH_RUN_FILTERS.map(function (f) {
+        const active = runFilter === f.key;
+        const count = f.key === 'all' ? allRuns.length : allRuns.filter(e => matchRunFilter(e, f.key)).length;
+        return (
+          <div
+            key={f.key}
+            onClick={function () { setRunFilter(f.key); }}
+            style={{
+              padding: '4px 16px', borderRadius: 999, cursor: 'pointer',
+              fontSize: fz(12), fontWeight: active ? 600 : 400,
+              background: active ? '#2563EB' : 'transparent',
+              color: active ? '#fff' : C.textSub,
+              border: '1px solid ' + (active ? '#2563EB' : C.border),
+            }}
+          >{f.label}（{count}）</div>
+        );
+      })}
+    </div>
+  );
+
+  /* ── 全課執行總覽 ──
+     目標 2、3 的落點：跨排程、時間倒序，「只看異常」一鍵切得到。 */
+  const renderOverview = () => {
+    const filtered = allRuns.filter(e => matchRunFilter(e, runFilter));
+    return (
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bgPanel }}>
+        <div style={{ padding: '16px 24px', background: C.bg, borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
+          <div style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>執行總覽</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
+            本課 {items.length} 個排程　·　{allRuns.length} 次執行　·
+            <span style={{ color: errorRuns.length > 0 ? '#DC2626' : C.textMuted }}>{errorRuns.length} 次失敗</span>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* 待人工決定：跨排程集中在這裡，點一下直接跳過去 */}
+          {pendingDecisions.length > 0 && (
+            <antd.Alert
+              type="error"
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>有 {pendingDecisions.length} 件待人工決定</span>}
+              description={
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {pendingDecisions.map(function (d) {
+                    return (
+                      <div key={d.run.id} style={{ fontSize: fz(12), color: C.textSub }}>
+                        <a onClick={function () { setSelectedId(d.item.id); }} style={{ fontWeight: 600 }}>{d.item.name}</a>
+                        {'　Step ' + d.step.num + '「' + d.step.title + '」·　自 '}
+                        <span style={{ fontFamily: 'monospace' }}>{d.run.waitingSince || d.run.startedAt}</span>
+                        {' 起等待中'}
+                      </div>
+                    );
+                  })}
+                </div>
+              }
+            />
+          )}
+
+          {renderFilterPills()}
+
+          {filtered.length === 0 ? (
+            <antd.Empty style={{ padding: 24 }} description={<span style={{ fontSize: fz(13), color: C.textMuted }}>此條件下沒有執行紀錄</span>} />
+          ) : (
+            <antd.Collapse
+              bordered={false}
+              activeKey={Array.from(expandedRuns)}
+              onChange={function (keys) { setExpandedRuns(new Set(keys)); }}
+              items={renderRunPanels(filtered, true)}
+              style={{ background: 'transparent' }}
+            />
+          )}
+        </div>
+      </div>
+    );
   };
 
   /* ── Main render ── */
@@ -17416,6 +17708,22 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
               </div>
             </div>
           )}
+
+          {/* 執行總覽入口：不必逐一點排程才知道全課跑了什麼、哪幾次掛了 */}
+          <div
+            onClick={function () { setSelectedId(SCH_ALL); }}
+            style={{
+              padding: '12px 16px', borderBottom: '1px solid ' + C.border, cursor: 'pointer',
+              background: isOverview ? 'rgba(37,99,235,0.08)' : 'transparent',
+              borderLeft: '3px solid ' + (isOverview ? '#2563EB' : 'transparent'),
+            }}
+          >
+            <div style={{ fontSize: fz(13), fontWeight: 600, color: isOverview ? '#2563EB' : C.text }}>執行總覽</div>
+            <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
+              全課 {allRuns.length} 次執行
+              {errorRuns.length > 0 && <span style={{ color: '#DC2626' }}>　·　{errorRuns.length} 次失敗</span>}
+            </div>
+          </div>
 
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
@@ -17454,6 +17762,16 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
                         </antd.Tag>
                       </div>
                       <div style={{ fontSize: fz(11), color: C.textMuted }}>上次執行：{item.lastRun}</div>
+                      {/* 近 N 次的失敗數：不穩定的排程自己浮出來，不必點進去才知道 */}
+                      {(function () {
+                        const h = getRecentHealth(item, ivsByRun, 7);
+                        if (!h.total) return null;
+                        return (
+                          <div style={{ fontSize: fz(11), color: h.failed > 0 ? '#DC2626' : C.textMuted, marginTop: 2 }}>
+                            近 {h.total} 次：{h.failed > 0 ? h.failed + ' 次失敗' : '全部正常'}
+                          </div>
+                        );
+                      })()}
                     </antd.Card>
                   </antd.List.Item>
                 );
@@ -17463,7 +17781,7 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
         </div>
 
         {/* ── Right Panel ── */}
-        {selectedItem ? (
+        {isOverview ? renderOverview() : selectedItem ? (
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bgPanel }}>
 
             {/* Right Header */}
@@ -17522,7 +17840,12 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
                     bordered={false}
                     activeKey={Array.from(expandedRuns)}
                     onChange={function (keys) { setExpandedRuns(new Set(keys)); }}
-                    items={renderRunPanels()}
+                    items={renderRunPanels(
+                      (selectedItem.runs || []).map(function (run) {
+                        return { item: selectedItem, run: run, view: getRunView(run, ivsByRun[run.id]) };
+                      }),
+                      false
+                    )}
                     style={{ background: 'transparent' }}
                   />
                 )}
@@ -18407,14 +18730,13 @@ function App() {
     return init;
   });
   const [notifPrefsByPersona, setNotifPrefsByPersona] = React.useState(function () {
-    const base = typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : { N1: {}, N2: {}, N3: {} };
+    const base = typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {};
     const init = {};
     Object.keys(PERSONAS || {}).forEach(function (k) {
-      init[k] = {
-        N1: Object.assign({}, base.N1),
-        N2: Object.assign({}, base.N2),
-        N3: Object.assign({}, base.N3),
-      };
+      const cloned = {};
+      /* 從預設值推導，新增通知類型（如 N4 執行失敗）不必再回來補一行 */
+      Object.keys(base).forEach(function (t) { cloned[t] = Object.assign({}, base[t]); });
+      init[k] = cloned;
     });
     return init;
   });
@@ -18425,6 +18747,13 @@ function App() {
      放在 App 而不是 SchedulingPage，因為 Nav 紅點也要用同一份真相。
      先送出者定案：同一個決策點只收第一筆，之後的一律不受理（B 推翻不了 A）。 */
   const [schedDecisions, setSchedDecisions] = React.useState({});
+  /* 重跑產生的執行：{ [scheduleId]: [run, ...] }。重跑是新增一筆，不覆蓋原本那筆失敗 */
+  const [schedExtraRuns, setSchedExtraRuns] = React.useState({});
+  const handleSchedRetry = React.useCallback(function (scheduleId, newRun) {
+    setSchedExtraRuns(function (prev) {
+      return Object.assign({}, prev, { [scheduleId]: [newRun].concat(prev[scheduleId] || []) });
+    });
+  }, []);
   const decideSchedulingStep = React.useCallback(function (runId, iv) {
     var existing = schedDecisions[runId] || [];
     var taken = existing.some(function (x) { return x.stepNum === iv.stepNum; });
@@ -18550,8 +18879,8 @@ function App() {
   /* Scheduling nav 紅點：綁「實際還有未決定的決策點」，不綁通知已讀狀態。
      通知讀過不代表事情處理了 —— 紅點要跟著排程本身的狀態走。 */
   const schedulingHasPending = React.useMemo(function () {
-    return getPendingDecisions(persona, schedDecisions).length > 0;
-  }, [persona, schedDecisions]);
+    return getPendingDecisions(getScheduleItems(persona, schedExtraRuns), schedDecisions).length > 0;
+  }, [persona, schedDecisions, schedExtraRuns]);
 
   const handleAskAI = React.useCallback(({ text, label }) => {
     setAiDraft({ text, label });
@@ -18784,6 +19113,8 @@ function App() {
             expandRunReq={expandRunReq}
             decisions={schedDecisions}
             onDecide={decideSchedulingStep}
+            extraRuns={schedExtraRuns}
+            onRetry={handleSchedRetry}
           />
         )}
       </div>
