@@ -400,3 +400,19 @@ PO 帶著使用者回饋回來：「使用者認為 Skill 是一個 Agentic AI �
 build 987,628 bytes。**本輪有做瀏覽器實測**（上一輪因 CDN 被擋只能靠 Babel 編譯等價驗證）：預設落 Skill 分頁 3 筆、小標題正確；切 Codify → 4 筆、小標題與階段徽章（Draft 0／Testing 1／Approving 0／Pilot 1／Production 2）全部重算；詳情頁徽章與說明同步；建立 Modal 兩張卡為 Skill／Codify；console 僅既有 Babel 500KB 提示，零 error。
 
 受影響 wiki 頁：[concepts/agent-skill-tiering.md](concepts/agent-skill-tiering.md)（＋決議 16，頁首改名對照表補成兩輪）、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-01] decision + build | Schedule 六目標評估，介入機制改寫（Phase A + B）
+
+PO 帶著六個目標來要評估：①可加入排程的 Codify 好不好找 ②每次執行有沒有紀錄 ③異常好不好查 ④需要人介入時感不感知得到 ⑤介入有沒有記下誰在何時 ⑥跑完看不看得到每個節點與結果。
+
+**評估結論**：④最完整（通知＋Nav 紅點＋左欄紅框＋Alert 四層都在）；⑤表面有、**互動後反而消失**——`handleConfirm` 只把 runId 丟進 `resolvedRuns`，而摘要列的介入者那一行條件是 `run.result !== 'success' && !isResolved`，一按確認就整段不渲染，下面的 `stepActors` 又要求 `result === 'success'`（原始資料仍是 `pending`），兩邊都不顯示 → 按完只剩「完成（人工確認）」，看不出是誰、幾點、為什麼；②③⑥只在「單一排程」尺度成立，缺跨排程視角；③最大的洞是**排程失敗完全沒有通知**（N1/N2/N3 不涵蓋，兩筆 error run 在 notifications.js 一則都沒有）；①的洞是 `blockReason()` 只看 tier/stage，**不排除已掛排程的 Codify**（`sm-eq-008` 已掛 `sch-eq-001` 仍可再選一次），且建立後不回寫 `consumedBy`。
+
+**PO 的關鍵修正**（決議 17，完整表格見 [scheduling](entities/modules/scheduling.md)）：舊設計「按了介入就啟動 AI 對話」——**未來這一段不打算引入 AI 對話**；而且**不需要舉手**，該做的是把選項直接展示在介入畫面裡，誰點了就記下他的決定與時間；同時**要卡控 A 的決定被 B 推翻**。五題拍板：選項含「略過此步驟」／逾時先不做只做持續等待／拒絕理由必填／連產出物的「針對這份問 AI」也一併移除讓情境單純／Seed 與 member 都可以決定。
+
+**實作**：`scheduling.js` 全檔重寫資料模型（`run.interventions[]` 取代 `handler`＋`decisionBy`；步驟最終狀態改由 `getRunView()` 從介入紀錄推導，不寫死；新增 `SCH_DECISION_CFG`、`getPendingDecisions()`）；`SchedulingPage.jsx` 決策點面板攤開三選項（確認單擊、略過／拒絕走 `SchDecisionReasonModal`）、`SchInterventionLine` 讓痕跡固定顯示、左欄「本課有 N 件待人工決定」匯總、移除 `handleDiscuss`／`handleAskAboutOutput`／`lockedRun`／`resolvedRuns`／`SchActorLine`；`App.jsx` 把決定狀態提升成 `schedDecisions` 並在 `decideSchedulingStep` 實作 first-write-wins（同一決策點只收第一筆，之後回 `false`），Nav 紅點改綁 `getPendingDecisions`。順手修兩個 bug：`extraItems` 跨課殘留、切課後右欄空白（加 `key={persona}`）。
+
+build 1,007,758 bytes。⚠️ **無法瀏覽器實測**——`shell.html` 依賴 unpkg CDN，本 session proxy 政策擋住外連（`CONNECT tunnel failed 403`），連本地 vendor 化都下載不到。改以 Babel 本地編譯（等價於瀏覽器內 `@babel/standalone`）＋ vm 宣告階段執行＋對 `getRunView`／`getPendingDecisions` 的 23 項行為驗證（決策點推進、略過流程續走、拒絕終止後續、歷史介入留痕、待決定匯總歸零、交接報告未被破壞）全數通過。**下次有網路時要補的實測**：三顆按鈕的視覺與間距、理由 Modal 的必填禁用、決定後左欄狀態與 Nav 紅點同步。
+
+**未做，留給後續 Phase**：C 跨排程總覽／只看異常／失敗通知（N4）／重跑；D 已掛排程的 Codify 鎖住＋雙向回寫＋搜尋＋Codify 詳情「設為定期執行」入口；E 節點明細（tool／參數／耗時／來源欄位已進資料層但畫面未用）與 Graph 實走路徑。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)（＋決議 17 與實作狀態、SCH-OQ-1/4 作廢、新增 SCH-OQ-7）、[notification](entities/modules/notification.md)（Nav 紅點真相來源更正、N2 文案、失敗無通知列待補）、[decisions.md](decisions.md)、[open-questions.md](open-questions.md)、index.md。

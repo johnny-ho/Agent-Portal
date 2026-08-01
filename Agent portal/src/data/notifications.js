@@ -8,7 +8,7 @@
 /* ── 通知類型 meta：label / 顏色 / 圖示（狀態圓點限規範四色）── */
 const NOTIF_TYPES = {
   N1: { key: 'N1', label: 'Schedule 完成',     short: '完成',   dot: '#22C55E', icon: '✓' },
-  N2: { key: 'N2', label: 'Schedule 需人工介入', short: '需介入', dot: '#F59E0B', icon: '⏸' },
+  N2: { key: 'N2', label: 'Schedule 需人工決定', short: '需決定', dot: '#F59E0B', icon: '⏸' },
   N3: { key: 'N3', label: '被指派 P1 任務',     short: 'P1 指派', dot: '#EF4444', icon: '❗' },
 };
 
@@ -27,8 +27,8 @@ const NOTIFICATIONS_BY_PERSONA = {
   equipment: [
     {
       id: 'ntf-eq-1', type: 'N2', read: false, ts: 20260724075000,
-      title: 'SPC 異常日報 需要你確認',
-      desc: 'Step 3「開立異常工單」等待人工確認（E-308 × 3 筆 OOC）。',
+      title: 'SPC 異常日報 等待人工決定',
+      desc: 'Step 3「開立異常工單」等待決定（E-308 × 3 筆 OOC）。本課任何成員都可以決定。',
       timeLabel: '今日 07:50',
       link: { nav: 'scheduling', expandRunId: 'run-eq-001-1' },
     },
@@ -75,8 +75,8 @@ const NOTIFICATIONS_BY_PERSONA = {
   mfg: [
     {
       id: 'ntf-mf-1', type: 'N2', read: false, ts: 20260724081000,
-      title: '產能落後預警 需要你確認',
-      desc: 'Line 2 產出落後，等待人工確認是否發出調度通知。',
+      title: '產能落後預警 等待人工決定',
+      desc: 'Line 3 產出落後 8%，Step 3「建立緊急應變工單」等待決定。本課任何成員都可以決定。',
       timeLabel: '今日 08:10',
       link: { nav: 'scheduling', expandRunId: 'run-mf-001-1' },
     },

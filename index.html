@@ -3369,7 +3369,42 @@ const TASKS_BY_PERSONA = {
 
 /* ════════════════════════════════════════
    SCHEDULING DATA
+
+   2026-08-01 決議（介入機制改寫）：
+   1. 取消「我來處理」認領步驟 —— 介入畫面直接把選項攤開，一次點擊完成決定。
+   2. 取消「延伸討論」—— 排程頁不再有任何 AI 對話出口。
+   3. 選項三個：確認執行 / 略過此步驟 / 拒絕執行（拒絕即終止整次執行）。
+   4. 全課成員（Seed + member）皆可決定，不指定人、不需認領。
+   5. 先送出的決定即定案，不可變更、不可撤回 —— B 推翻不了 A。
+   6. 決策點持續等待直到有人決定（逾時升級與自動終止後期再補）。
+
+   資料模型：
+   - run.interventions[] 是唯一的介入稽核序列，取代舊的 handler / steps[].decisionBy。
+   - 步驟的最終狀態不寫死在資料裡，而是由 interventions 推導（見 getRunView）。
    ════════════════════════════════════════ */
+
+/* ── 介入選項 ──
+   拒絕必填原因（流程被中止，沒有理由後面沒人查得出為什麼）；略過選填。 */
+const SCH_DECISION_CFG = {
+  confirm: {
+    key: 'confirm', label: '確認執行', pastLabel: '確認執行',
+    color: '#16A34A', bg: 'rgba(34,197,94,0.1)', icon: '✓',
+    reasonRequired: false,
+    desc: 'AI 會呼叫該步驟的工具，並繼續往下執行。',
+  },
+  skip: {
+    key: 'skip', label: '略過此步驟', pastLabel: '略過此步驟',
+    color: '#F59E0B', bg: 'rgba(245,158,11,0.1)', icon: '⏭',
+    reasonRequired: false,
+    desc: '不呼叫該步驟的工具，直接跳到下一步繼續執行。',
+  },
+  reject: {
+    key: 'reject', label: '拒絕執行', pastLabel: '拒絕執行',
+    color: '#DC2626', bg: 'rgba(239,68,68,0.1)', icon: '✕',
+    reasonRequired: true,
+    desc: '本次執行就此終止，後續步驟都不會執行。',
+  },
+};
 
 const SCHEDULING_DATA = {
 
@@ -3381,7 +3416,7 @@ const SCHEDULING_DATA = {
       skill: 'spc-daily-report',
       skillId: 'sm-eq-008',      /* 對應 personas.js 的 Codify（含寫入）*/
       hasWrite: true,
-      confirmSteps: 2,           /* 執行到這幾步會暫停等人確認 */
+      confirmSteps: 2,           /* 執行到這幾步會暫停等人決定 */
       cronLabel: '每日 07:50',
       createdBy: '陳育民',
       status: 'pending',
@@ -3390,81 +3425,153 @@ const SCHEDULING_DATA = {
         {
           id: 'run-eq-001-1',
           dateLabel: '今日 07:50',
+          startedAt: '今日 07:50:03',
+          finishedAt: null,
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'pending',
-          duration: '47s（暫停中）',
+          duration: '暫停中',
+          waitingSince: '今日 07:52',
           totalSteps: 4,
           doneSteps: 2,
-          handler: { name: '王志明', avatar: '王', color: '#2563EB' },
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 12 筆資料' },
-            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: 'E-308 × 3 筆、E-201 × 1 筆' },
+            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 12 筆資料',
+              tool: 'spc.query_daily', params: 'date=today, area=ETC-2F/ETC-3F', system: 'SPC', rows: 12, durationLabel: '4s' },
+            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: 'E-308 × 3 筆、E-201 × 1 筆',
+              durationLabel: '1s', note: '本課自訂：連續 3 點同側也納入' },
             {
-              num: 3, title: '開立異常工單', status: 'waiting', result: '等待確認',
+              num: 3, title: '開立異常工單', status: 'waiting', result: '等待人工決定',
+              needsConfirm: true,
               mcpTool: 'case_center.create_case',
+              mcpParams: 'eqp_id=E-308, recipe=CMP-Standard, priority=P2',
+              system: 'Case Center',
               detail: { machine: 'E-308', recipe: 'CMP-Standard', priority: 'P2', desc: '今日 07:00–07:50 發生 3 次 Standard Deviation 超標，建議 EE 確認 Chamber A 氣體流量是否異常' },
+              onConfirm: '已開立工單 #CS-20260421-018（E-308）',
+              onSkip: '人工略過，未開立工單',
             },
-            { num: 4, title: '發送通知給值班 EE', status: 'pending', result: '待執行' },
+            {
+              num: 4, title: '發送通知給值班 EE', status: 'pending', result: '待執行',
+              needsConfirm: true,
+              mcpTool: 'notify.send_to_duty',
+              mcpParams: 'to=值班 EE（吳志豪）, ref=本次 SPC 異常日報',
+              system: '通知中心',
+              detail: { desc: '將本次 SPC 異常摘要與已開立的工單編號一併推送給值班 EE。' },
+              onConfirm: '已送出通知給值班 EE 吳志豪',
+              onSkip: '人工略過，未發送通知',
+            },
           ],
         },
         {
           id: 'run-eq-001-2',
           dateLabel: '04/20 07:50',
+          startedAt: '04/20 07:50:02',
+          finishedAt: '04/20 07:51:14',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '1m 12s',
           totalSteps: 4,
           doneSteps: 4,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 9 筆資料' },
-            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: '無異常' },
-            { num: 3, title: '開立異常工單', status: 'done', result: '跳過（無符合條件）' },
-            { num: 4, title: '發送通知給值班 EE', status: 'done', result: '已送出「今日 SPC 正常，無異常開單」' },
+            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 9 筆資料',
+              tool: 'spc.query_daily', params: 'date=2026-04-20, area=ETC-2F/ETC-3F', system: 'SPC', rows: 9, durationLabel: '5s' },
+            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: '無異常', durationLabel: '1s' },
+            { num: 3, title: '開立異常工單', status: 'skip', result: '跳過（無符合條件，未觸及確認點）' },
+            { num: 4, title: '發送通知給值班 EE', status: 'done', result: '已送出「今日 SPC 正常，無異常開單」',
+              tool: 'notify.send_to_duty', params: 'to=值班 EE', system: '通知中心', durationLabel: '2s' },
           ],
         },
         {
           id: 'run-eq-001-3',
           dateLabel: '04/19 07:50',
+          startedAt: '04/19 07:50:04',
+          finishedAt: '04/19 07:58:35',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '8m 31s（含等待）',
           totalSteps: 4,
           doneSteps: 4,
+          /* 兩個決策點由不同人決定 —— 誰在何時介入必須留得住 */
+          interventions: [
+            { id: 'iv-eq-001-3-a', action: 'confirm', stepNum: 3, at: '04/19 08:04',
+              actor: { name: '吳志豪', avatar: '吳', color: '#2563EB' }, reason: '',
+              toolCall: { tool: 'case_center.create_case', params: 'eqp_id=E-308, priority=P2', result: '已開立 #CS-20260419-006' } },
+            { id: 'iv-eq-001-3-b', action: 'confirm', stepNum: 4, at: '04/19 08:09',
+              actor: { name: '張文凱', avatar: '張', color: '#16A34A' }, reason: '',
+              toolCall: { tool: 'notify.send_to_duty', params: 'to=值班 EE', result: '已送出' } },
+          ],
           steps: [
-            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 14 筆資料' },
-            { num: 2, title: '篩選 OOC 項目', status: 'done', result: 'E-308 × 2',
-              decisionBy: { name: '吳志豪', avatar: '吳', color: '#2563EB', action: '確認執行', time: '08:04' } },
-            { num: 3, title: '開立工單 E-308 × 1', status: 'done', result: '已開立',
-              decisionBy: { name: '張文凱', avatar: '張', color: '#16A34A', action: '確認執行', time: '08:09' } },
-            { num: 4, title: '發送通知給值班 EE', status: 'done', result: '已送出' },
+            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 14 筆資料',
+              tool: 'spc.query_daily', params: 'date=2026-04-19', system: 'SPC', rows: 14, durationLabel: '6s' },
+            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: 'E-308 × 2', durationLabel: '1s' },
+            { num: 3, title: '開立異常工單', status: 'done', result: '已開立',
+              needsConfirm: true, mcpTool: 'case_center.create_case', system: 'Case Center',
+              onConfirm: '已開立工單 #CS-20260419-006（E-308）', onSkip: '人工略過，未開立工單' },
+            { num: 4, title: '發送通知給值班 EE', status: 'done', result: '已送出',
+              needsConfirm: true, mcpTool: 'notify.send_to_duty', system: '通知中心',
+              onConfirm: '已送出通知給值班 EE 吳志豪', onSkip: '人工略過，未發送通知' },
           ],
         },
         {
           id: 'run-eq-001-4',
           dateLabel: '04/17 07:50',
-          result: 'discuss',
-          duration: '2m 18s（含等待）',
+          startedAt: '04/17 07:50:01',
+          finishedAt: '04/17 08:12:44',
+          trigger: 'schedule',
+          triggeredBy: null,
+          result: 'success',
+          duration: '22m 43s（含等待）',
           totalSteps: 4,
-          doneSteps: 1,
-          handler: { name: '陳育民', avatar: '陳', color: '#7C3AED', action: '延伸討論', time: '08:12' },
+          doneSteps: 4,
+          /* 略過的示範：流程沒被中止，但那一步確實沒做，且記得住是誰決定的 */
+          interventions: [
+            { id: 'iv-eq-001-4-a', action: 'skip', stepNum: 3, at: '04/17 08:12',
+              actor: { name: '陳育民', avatar: '陳', color: '#7C3AED' },
+              reason: '同一批 E-201 昨日已開過工單 #CS-20260416-021，不重複開單',
+              toolCall: null },
+            { id: 'iv-eq-001-4-b', action: 'confirm', stepNum: 4, at: '04/17 08:12',
+              actor: { name: '陳育民', avatar: '陳', color: '#7C3AED' }, reason: '',
+              toolCall: { tool: 'notify.send_to_duty', params: 'to=值班 EE', result: '已送出' } },
+          ],
           steps: [
-            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 11 筆資料' },
-            { num: 2, title: '篩選 OOC 項目', status: 'discuss', result: 'E-201 × 5（異常高，決策點）',
-              decisionBy: { name: '陳育民', avatar: '陳', color: '#7C3AED', action: '延伸討論', time: '08:12' } },
-            { num: 3, title: '開立異常工單', status: 'skip', result: '未執行（由 AI Chat 延伸處理）' },
-            { num: 4, title: '發送通知給值班 EE', status: 'skip', result: '未執行' },
+            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 11 筆資料',
+              tool: 'spc.query_daily', params: 'date=2026-04-17', system: 'SPC', rows: 11, durationLabel: '5s' },
+            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: 'E-201 × 5', durationLabel: '1s' },
+            { num: 3, title: '開立異常工單', status: 'skip', result: '人工略過，未開立工單',
+              needsConfirm: true, mcpTool: 'case_center.create_case', system: 'Case Center',
+              onConfirm: '已開立工單（E-201）', onSkip: '人工略過，未開立工單' },
+            { num: 4, title: '發送通知給值班 EE', status: 'done', result: '已送出（含略過說明）',
+              needsConfirm: true, mcpTool: 'notify.send_to_duty', system: '通知中心',
+              onConfirm: '已送出通知給值班 EE 吳志豪', onSkip: '人工略過，未發送通知' },
           ],
         },
         {
           id: 'run-eq-001-5',
           dateLabel: '04/16 07:50',
+          startedAt: '04/16 07:50:03',
+          finishedAt: '04/16 09:11:52',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'rejected',
-          duration: '5m 21s（含等待）',
+          duration: '1h 21m（含等待）',
           totalSteps: 4,
           doneSteps: 2,
-          handler: { name: '陳育民', avatar: '陳', color: '#2563EB', action: '拒絕執行', time: '09:11', note: '資料有誤，改手動處理' },
+          interventions: [
+            { id: 'iv-eq-001-5-a', action: 'reject', stepNum: 3, at: '04/16 09:11',
+              actor: { name: '陳育民', avatar: '陳', color: '#2563EB' },
+              reason: 'SPC 資料來源當日有誤（量測機重校中），改由人工處理',
+              toolCall: null },
+          ],
           steps: [
-            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 8 筆資料' },
-            { num: 2, title: '篩選 OOC 項目', status: 'done', result: 'E-308 × 1' },
+            { num: 1, title: '查詢今日 SPC 資料', status: 'done', result: '共取得 8 筆資料',
+              tool: 'spc.query_daily', params: 'date=2026-04-16', system: 'SPC', rows: 8, durationLabel: '4s' },
+            { num: 2, title: '篩選 OOC 異常項目', status: 'done', result: 'E-308 × 1', durationLabel: '1s' },
             { num: 3, title: '開立異常工單', status: 'rejected', result: '拒絕執行，排程終止',
-              decisionBy: { name: '陳育民', avatar: '陳', color: '#2563EB', action: '拒絕執行', time: '09:11', note: '資料有誤，改手動處理' } },
+              needsConfirm: true, mcpTool: 'case_center.create_case', system: 'Case Center',
+              onConfirm: '已開立工單（E-308）', onSkip: '人工略過，未開立工單' },
             { num: 4, title: '發送通知給值班 EE', status: 'skip', result: '未執行' },
           ],
         },
@@ -3490,16 +3597,24 @@ const SCHEDULING_DATA = {
         {
           id: 'run-eq-004-1',
           dateLabel: '今日 15:30',
+          startedAt: '今日 15:30:02',
+          finishedAt: '今日 15:30:40',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '38s',
           totalSteps: 5,
           doneSteps: 5,
+          interventions: [],
           steps: [
-            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 340.8 h' },
-            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 27 筆 → 分級去重後 5 件' },
-            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 94.2%、異常密度 0.63 件/台/班' },
-            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '7 件（逾期 1 件）' },
-            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄' },
+            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 340.8 h',
+              tool: 'eqp.get_uptime', params: 'shift=day, section=ETC', system: '設備監控', rows: 16, durationLabel: '9s' },
+            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 27 筆 → 分級去重後 5 件',
+              tool: 'fdc.list_alarms', params: 'from=08:00, to=16:00', system: 'FDC', rows: 27, durationLabel: '11s' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 94.2%、異常密度 0.63 件/台/班', durationLabel: '2s' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '7 件（逾期 1 件）',
+              tool: 'case_center.list_open', params: 'section=ETC', system: 'Case Center', rows: 7, durationLabel: '8s' },
+            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄', durationLabel: '6s' },
           ],
           output: {
             title: 'ETC 設備課 · 日班交接報告',
@@ -3517,16 +3632,24 @@ const SCHEDULING_DATA = {
         {
           id: 'run-eq-004-2',
           dateLabel: '今日 07:30',
+          startedAt: '今日 07:30:01',
+          finishedAt: '今日 07:30:36',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '35s',
           totalSteps: 5,
           doneSteps: 5,
+          interventions: [],
           steps: [
-            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 352.1 h' },
-            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 14 筆 → 分級去重後 2 件' },
-            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 96.1%、異常密度 0.25 件/台/班' },
-            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '6 件' },
-            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄' },
+            { num: 1, title: '取當班機台稼動資料',       status: 'done', result: '16 台，總運轉 352.1 h',
+              tool: 'eqp.get_uptime', params: 'shift=night, section=ETC', system: '設備監控', rows: 16, durationLabel: '8s' },
+            { num: 2, title: '取同時段警報並分級',       status: 'done', result: '原始 14 筆 → 分級去重後 2 件',
+              tool: 'fdc.list_alarms', params: 'from=00:00, to=08:00', system: 'FDC', rows: 14, durationLabel: '9s' },
+            { num: 3, title: '計算稼動率與異常密度',     status: 'done', result: '稼動率 96.1%、異常密度 0.25 件/台/班', durationLabel: '2s' },
+            { num: 4, title: '取未結案 Case 與待辦事項', status: 'done', result: '6 件',
+              tool: 'case_center.list_open', params: 'section=ETC', system: 'Case Center', rows: 6, durationLabel: '7s' },
+            { num: 5, title: '套用交接報告格式',         status: 'done', result: '已產出，同步送至課佈告欄', durationLabel: '5s' },
           ],
           output: {
             title: 'ETC 設備課 · 大夜班交接報告',
@@ -3544,13 +3667,25 @@ const SCHEDULING_DATA = {
         {
           id: 'run-eq-004-3',
           dateLabel: '昨日 23:30',
+          startedAt: '昨日 23:30:02',
+          finishedAt: '昨日 23:30:14',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'error',
           duration: '12s',
           totalSteps: 5,
           doneSteps: 1,
-          errorMsg: 'eqp.get_uptime timeout（設備監控系統維護中）',
+          interventions: [],
+          failure: {
+            stepNum: 1,
+            tool: 'eqp.get_uptime',
+            kind: 'timeout',
+            message: 'eqp.get_uptime timeout after 30s（設備監控系統維護中）',
+            retryable: true,
+          },
           steps: [
-            { num: 1, title: '取當班機台稼動資料',       status: 'error', result: '設備監控系統無回應' },
+            { num: 1, title: '取當班機台稼動資料',       status: 'error', result: '設備監控系統無回應',
+              tool: 'eqp.get_uptime', params: 'shift=swing, section=ETC', system: '設備監控', durationLabel: '30s' },
             { num: 2, title: '取同時段警報並分級',       status: 'skip',  result: '未執行' },
             { num: 3, title: '計算稼動率與異常密度',     status: 'skip',  result: '未執行' },
             { num: 4, title: '取未結案 Case 與待辦事項', status: 'skip',  result: '未執行' },
@@ -3563,6 +3698,8 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-002',
       name: 'FDC 異常摘要',
       skill: 'fdc-daily-summary',
+      hasWrite: false,
+      confirmSteps: 0,
       cronLabel: '每日 08:00',
       createdBy: '王志明',
       status: 'ok',
@@ -3571,27 +3708,39 @@ const SCHEDULING_DATA = {
         {
           id: 'run-eq-002-1',
           dateLabel: '今日 08:00',
+          startedAt: '今日 08:00:03',
+          finishedAt: '今日 08:01:08',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '1m 05s',
           totalSteps: 3,
           doneSteps: 3,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢今日 FDC 異常事件', status: 'done', result: '共 5 筆 Level-2 異常' },
-            { num: 2, title: '彙整異常摘要', status: 'done', result: 'E-308 × 3、E-201 × 2' },
-            { num: 3, title: '發佈至 Dashboard 公告欄', status: 'done', result: '已發佈（08:01）' },
+            { num: 1, title: '查詢今日 FDC 異常事件', status: 'done', result: '共 5 筆 Level-2 異常',
+              tool: 'fdc.list_alarms', params: 'date=today, level=2', system: 'FDC', rows: 5, durationLabel: '12s' },
+            { num: 2, title: '彙整異常摘要', status: 'done', result: 'E-308 × 3、E-201 × 2', durationLabel: '3s' },
+            { num: 3, title: '發佈至 Dashboard 公告欄', status: 'done', result: '已發佈（08:01）', durationLabel: '4s' },
           ],
         },
         {
           id: 'run-eq-002-2',
           dateLabel: '04/20 08:00',
+          startedAt: '04/20 08:00:02',
+          finishedAt: '04/20 08:01:00',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '58s',
           totalSteps: 3,
           doneSteps: 3,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢今日 FDC 異常事件', status: 'done', result: '共 2 筆 Level-1 異常' },
-            { num: 2, title: '彙整異常摘要', status: 'done', result: 'E-101 × 2' },
-            { num: 3, title: '發佈至 Dashboard 公告欄', status: 'done', result: '已發佈（08:01）' },
+            { num: 1, title: '查詢今日 FDC 異常事件', status: 'done', result: '共 2 筆 Level-1 異常',
+              tool: 'fdc.list_alarms', params: 'date=2026-04-20, level=1', system: 'FDC', rows: 2, durationLabel: '11s' },
+            { num: 2, title: '彙整異常摘要', status: 'done', result: 'E-101 × 2', durationLabel: '2s' },
+            { num: 3, title: '發佈至 Dashboard 公告欄', status: 'done', result: '已發佈（08:01）', durationLabel: '4s' },
           ],
         },
       ],
@@ -3600,6 +3749,8 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-003',
       name: 'PM 到期提醒',
       skill: 'pm-reminder',
+      hasWrite: false,
+      confirmSteps: 0,
       cronLabel: '每日 07:00',
       createdBy: '吳志豪',
       status: 'ok',
@@ -3608,13 +3759,19 @@ const SCHEDULING_DATA = {
         {
           id: 'run-eq-003-1',
           dateLabel: '今日 07:00',
+          startedAt: '今日 07:00:02',
+          finishedAt: '今日 07:00:34',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '32s',
           totalSteps: 2,
           doneSteps: 2,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢本週 PM 排程', status: 'done', result: 'E-203 今日 16:00、E-101 明日 09:00' },
-            { num: 2, title: '推送提醒至 Priority Feed', status: 'done', result: '已推送 2 筆提醒' },
+            { num: 1, title: '查詢本週 PM 排程', status: 'done', result: 'E-203 今日 16:00、E-101 明日 09:00',
+              tool: 'cmms.list_pm', params: 'range=this_week, section=ETC', system: 'CMMS', rows: 2, durationLabel: '9s' },
+            { num: 2, title: '推送提醒至 Priority Feed', status: 'done', result: '已推送 2 筆提醒', durationLabel: '3s' },
           ],
         },
       ],
@@ -3627,6 +3784,8 @@ const SCHEDULING_DATA = {
       id: 'sch-pr-001',
       name: 'OOC 異常日報',
       skill: 'ooc-daily-report',
+      hasWrite: false,
+      confirmSteps: 0,
       cronLabel: '每日 08:00',
       createdBy: '鄭志明',
       status: 'ok',
@@ -3635,27 +3794,39 @@ const SCHEDULING_DATA = {
         {
           id: 'run-pr-001-1',
           dateLabel: '今日 08:00',
+          startedAt: '今日 08:00:04',
+          finishedAt: '今日 08:01:26',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '1m 22s',
           totalSteps: 3,
           doneSteps: 3,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢今日 SPC OOC 資料', status: 'done', result: '2 站失控（HV-03、LV-01）' },
-            { num: 2, title: '生成異常摘要', status: 'done', result: '已彙整根因分析建議' },
-            { num: 3, title: '推送至值班 PE Priority Feed', status: 'done', result: '已推送' },
+            { num: 1, title: '查詢今日 SPC OOC 資料', status: 'done', result: '2 站失控（HV-03、LV-01）',
+              tool: 'spc.query_daily', params: 'date=today, type=ooc', system: 'SPC', rows: 2, durationLabel: '14s' },
+            { num: 2, title: '生成異常摘要', status: 'done', result: '已彙整根因分析建議', durationLabel: '6s' },
+            { num: 3, title: '推送至值班 PE Priority Feed', status: 'done', result: '已推送', durationLabel: '3s' },
           ],
         },
         {
           id: 'run-pr-001-2',
           dateLabel: '04/20 08:00',
+          startedAt: '04/20 08:00:03',
+          finishedAt: '04/20 08:00:51',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '48s',
           totalSteps: 3,
           doneSteps: 3,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢今日 SPC OOC 資料', status: 'done', result: '無失控' },
-            { num: 2, title: '生成異常摘要', status: 'done', result: '正常（略過推送）' },
-            { num: 3, title: '推送至值班 PE Priority Feed', status: 'done', result: '跳過' },
+            { num: 1, title: '查詢今日 SPC OOC 資料', status: 'done', result: '無失控',
+              tool: 'spc.query_daily', params: 'date=2026-04-20, type=ooc', system: 'SPC', rows: 0, durationLabel: '12s' },
+            { num: 2, title: '生成異常摘要', status: 'done', result: '正常（略過推送）', durationLabel: '2s' },
+            { num: 3, title: '推送至值班 PE Priority Feed', status: 'skip', result: '跳過（無異常）' },
           ],
         },
       ],
@@ -3664,6 +3835,8 @@ const SCHEDULING_DATA = {
       id: 'sch-pr-002',
       name: 'Recipe 品質週報',
       skill: 'recipe-quality-weekly',
+      hasWrite: false,
+      confirmSteps: 0,
       cronLabel: '每週一 09:00',
       createdBy: '李佳穎',
       status: 'error',
@@ -3672,14 +3845,27 @@ const SCHEDULING_DATA = {
         {
           id: 'run-pr-002-1',
           dateLabel: '04/14 09:00',
+          startedAt: '04/14 09:00:02',
+          finishedAt: '04/14 09:02:07',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'error',
           duration: '2m 05s',
           totalSteps: 4,
           doneSteps: 1,
-          errorMsg: 'MCP 錯誤：spc_system.get_recipe_stats 連線逾時（timeout 30s）',
+          interventions: [],
+          failure: {
+            stepNum: 2,
+            tool: 'spc_system.get_recipe_stats',
+            kind: 'timeout',
+            message: 'spc_system.get_recipe_stats 連線逾時（timeout 30s）',
+            retryable: true,
+          },
           steps: [
-            { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe' },
-            { num: 2, title: '取得各 Recipe 本週 SPC 數據', status: 'error', result: 'MCP tool 連線逾時（spc_system.get_recipe_stats）' },
+            { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe',
+              tool: 'spc_system.list_recipes', params: 'status=active', system: 'SPC', rows: 12, durationLabel: '18s' },
+            { num: 2, title: '取得各 Recipe 本週 SPC 數據', status: 'error', result: 'MCP tool 連線逾時',
+              tool: 'spc_system.get_recipe_stats', params: 'recipe_ids=12 筆, range=this_week', system: 'SPC', durationLabel: '30s' },
             { num: 3, title: '生成品質週報', status: 'skip', result: '未執行' },
             { num: 4, title: '發送週報至 Section Admin', status: 'skip', result: '未執行' },
           ],
@@ -3687,15 +3873,22 @@ const SCHEDULING_DATA = {
         {
           id: 'run-pr-002-2',
           dateLabel: '04/07 09:00',
+          startedAt: '04/07 09:00:03',
+          finishedAt: '04/07 09:03:17',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '3m 14s',
           totalSteps: 4,
           doneSteps: 4,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe' },
-            { num: 2, title: '取得各 Recipe 本週 SPC 數據', status: 'done', result: '所有 Recipe 數據取得完成' },
-            { num: 3, title: '生成品質週報', status: 'done', result: '週報草稿已生成' },
-            { num: 4, title: '發送週報至 Section Admin', status: 'done', result: '已發送至 李佳穎' },
+            { num: 1, title: '查詢 Active Recipe 清單', status: 'done', result: '共 12 個 Active Recipe',
+              tool: 'spc_system.list_recipes', params: 'status=active', system: 'SPC', rows: 12, durationLabel: '17s' },
+            { num: 2, title: '取得各 Recipe 本週 SPC 數據', status: 'done', result: '所有 Recipe 數據取得完成',
+              tool: 'spc_system.get_recipe_stats', params: 'recipe_ids=12 筆, range=this_week', system: 'SPC', rows: 12, durationLabel: '2m 08s' },
+            { num: 3, title: '生成品質週報', status: 'done', result: '週報草稿已生成', durationLabel: '32s' },
+            { num: 4, title: '發送週報至 Section Admin', status: 'done', result: '已發送至 李佳穎', durationLabel: '5s' },
           ],
         },
       ],
@@ -3708,6 +3901,8 @@ const SCHEDULING_DATA = {
       id: 'sch-mf-001',
       name: '產能落後預警',
       skill: 'capacity-alert',
+      hasWrite: true,
+      confirmSteps: 1,
       cronLabel: '每小時整點',
       createdBy: '陳建宏',
       status: 'pending',
@@ -3716,45 +3911,68 @@ const SCHEDULING_DATA = {
         {
           id: 'run-mf-001-1',
           dateLabel: '今日 11:00',
+          startedAt: '今日 11:00:02',
+          finishedAt: null,
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'pending',
-          duration: '28s（暫停中）',
+          duration: '暫停中',
+          waitingSince: '今日 11:00',
           totalSteps: 3,
           doneSteps: 2,
-          handler: null,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢各 Line 即時產出數據', status: 'done', result: 'Line 1: 正常、Line 2: 正常、Line 3: 落後 8%' },
-            { num: 2, title: '評估落後程度與風險', status: 'done', result: 'Line 3 落後超過 5% 閾值，觸發預警條件' },
+            { num: 1, title: '查詢各 Line 即時產出數據', status: 'done', result: 'Line 1: 正常、Line 2: 正常、Line 3: 落後 8%',
+              tool: 'mes.get_line_output', params: 'lines=1,2,3', system: 'MES', rows: 3, durationLabel: '11s' },
+            { num: 2, title: '評估落後程度與風險', status: 'done', result: 'Line 3 落後超過 5% 閾值，觸發預警條件', durationLabel: '2s' },
             {
-              num: 3, title: '建立緊急應變工單', status: 'waiting', result: '等待確認',
+              num: 3, title: '建立緊急應變工單', status: 'waiting', result: '等待人工決定',
+              needsConfirm: true,
               mcpTool: 'mes.create_urgent_order',
+              mcpParams: 'line=Line 3, priority=P1, notify=班組長',
+              system: 'MES',
               detail: { target: 'Line 3', issue: '產出落後 8%（閾值 5%）', action: '建立 P1 緊急工單並通知班組長' },
+              onConfirm: '已建立 P1 緊急工單 #WO-20260421-033，並通知班組長',
+              onSkip: '人工略過，未建立工單',
             },
           ],
         },
         {
           id: 'run-mf-001-2',
           dateLabel: '今日 10:00',
+          startedAt: '今日 10:00:01',
+          finishedAt: '今日 10:00:23',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '22s',
           totalSteps: 3,
           doneSteps: 3,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢各 Line 即時產出數據', status: 'done', result: '三線均正常' },
-            { num: 2, title: '評估落後程度與風險', status: 'done', result: '未達預警閾值（5%）' },
-            { num: 3, title: '建立緊急應變工單', status: 'done', result: '跳過（無需處理）' },
+            { num: 1, title: '查詢各 Line 即時產出數據', status: 'done', result: '三線均正常',
+              tool: 'mes.get_line_output', params: 'lines=1,2,3', system: 'MES', rows: 3, durationLabel: '10s' },
+            { num: 2, title: '評估落後程度與風險', status: 'done', result: '未達預警閾值（5%）', durationLabel: '2s' },
+            { num: 3, title: '建立緊急應變工單', status: 'skip', result: '跳過（未觸發預警，未觸及確認點）' },
           ],
         },
         {
           id: 'run-mf-001-3',
           dateLabel: '今日 09:00',
+          startedAt: '今日 09:00:02',
+          finishedAt: '今日 09:00:33',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '31s',
           totalSteps: 3,
           doneSteps: 3,
+          interventions: [],
           steps: [
-            { num: 1, title: '查詢各 Line 即時產出數據', status: 'done', result: '三線均正常' },
-            { num: 2, title: '評估落後程度', status: 'done', result: '未達預警閾值' },
-            { num: 3, title: '建立緊急應變工單', status: 'done', result: '跳過' },
+            { num: 1, title: '查詢各 Line 即時產出數據', status: 'done', result: '三線均正常',
+              tool: 'mes.get_line_output', params: 'lines=1,2,3', system: 'MES', rows: 3, durationLabel: '12s' },
+            { num: 2, title: '評估落後程度', status: 'done', result: '未達預警閾值', durationLabel: '2s' },
+            { num: 3, title: '建立緊急應變工單', status: 'skip', result: '跳過（未觸發預警）' },
           ],
         },
       ],
@@ -3763,6 +3981,8 @@ const SCHEDULING_DATA = {
       id: 'sch-mf-002',
       name: '生產日報自動彙整',
       skill: 'daily-report-gen',
+      hasWrite: false,
+      confirmSteps: 0,
       cronLabel: '每日 07:30',
       createdBy: '林組長',
       status: 'ok',
@@ -3771,35 +3991,135 @@ const SCHEDULING_DATA = {
         {
           id: 'run-mf-002-1',
           dateLabel: '今日 07:30',
+          startedAt: '今日 07:30:02',
+          finishedAt: '今日 07:32:12',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '2m 10s',
           totalSteps: 4,
           doneSteps: 4,
+          interventions: [],
           steps: [
-            { num: 1, title: '取得昨日各線產出數據', status: 'done', result: 'Line 1: 98%、Line 2: 102%、Line 3: 87%' },
-            { num: 2, title: '彙整停機事件紀錄', status: 'done', result: 'E-101 停機 2.5h（Line 3）' },
-            { num: 3, title: '生成日報草稿', status: 'done', result: '草稿已生成（含風險預告）' },
-            { num: 4, title: '推送至陳建宏 Priority Feed', status: 'done', result: '已推送（07:31）' },
+            { num: 1, title: '取得昨日各線產出數據', status: 'done', result: 'Line 1: 98%、Line 2: 102%、Line 3: 87%',
+              tool: 'mes.get_line_output', params: 'date=yesterday, lines=1,2,3', system: 'MES', rows: 3, durationLabel: '24s' },
+            { num: 2, title: '彙整停機事件紀錄', status: 'done', result: 'E-101 停機 2.5h（Line 3）',
+              tool: 'mes.list_downtime', params: 'date=yesterday', system: 'MES', rows: 1, durationLabel: '18s' },
+            { num: 3, title: '生成日報草稿', status: 'done', result: '草稿已生成（含風險預告）', durationLabel: '1m 22s' },
+            { num: 4, title: '推送至陳建宏 Priority Feed', status: 'done', result: '已推送（07:31）', durationLabel: '4s' },
           ],
         },
         {
           id: 'run-mf-002-2',
           dateLabel: '04/20 07:30',
+          startedAt: '04/20 07:30:01',
+          finishedAt: '04/20 07:31:56',
+          trigger: 'schedule',
+          triggeredBy: null,
           result: 'success',
           duration: '1m 55s',
           totalSteps: 4,
           doneSteps: 4,
+          interventions: [],
           steps: [
-            { num: 1, title: '取得昨日各線產出數據', status: 'done', result: '三線均達標' },
-            { num: 2, title: '彙整停機事件紀錄', status: 'done', result: '無停機事件' },
-            { num: 3, title: '生成日報草稿', status: 'done', result: '草稿已生成' },
-            { num: 4, title: '推送至陳建宏 Priority Feed', status: 'done', result: '已推送' },
+            { num: 1, title: '取得昨日各線產出數據', status: 'done', result: '三線均達標',
+              tool: 'mes.get_line_output', params: 'date=2026-04-19, lines=1,2,3', system: 'MES', rows: 3, durationLabel: '22s' },
+            { num: 2, title: '彙整停機事件紀錄', status: 'done', result: '無停機事件',
+              tool: 'mes.list_downtime', params: 'date=2026-04-19', system: 'MES', rows: 0, durationLabel: '15s' },
+            { num: 3, title: '生成日報草稿', status: 'done', result: '草稿已生成', durationLabel: '1m 14s' },
+            { num: 4, title: '推送至陳建宏 Priority Feed', status: 'done', result: '已推送', durationLabel: '4s' },
           ],
         },
       ],
     },
   ],
 };
+
+/* ════════════════════════════════════════
+   執行檢視推導 —— 步驟最終狀態由介入紀錄推出，不寫死在資料裡
+
+   規則（與 2026-08-01 決議一致）：
+   · 一個步驟只要有介入紀錄，就依該決定定案，不再是決策點。
+   · 拒絕 → 該步驟終止，其後所有步驟一律不執行。
+   · 略過 → 該步驟不呼叫工具，流程繼續往下走。
+   · 尚未被決定的第一個需確認步驟＝當前決策點；它之後的步驟一律待執行。
+   ════════════════════════════════════════ */
+
+function schInterventionFor(ivs, stepNum) {
+  for (var i = 0; i < ivs.length; i++) {
+    if (ivs[i].stepNum === stepNum) return ivs[i];
+  }
+  return null;
+}
+
+/* run 的完整檢視：steps 已套用介入結果，activeStep 是當前待決定的步驟（沒有就是 null）*/
+function getRunView(run, sessionIvs) {
+  var ivs = (run.interventions || []).concat(sessionIvs || []);
+  var halted = false;   /* 已被拒絕，後面都不執行 */
+  var awaiting = null;  /* 已出現當前決策點，後面都待執行 */
+
+  var steps = (run.steps || []).map(function (s) {
+    if (halted) {
+      return Object.assign({}, s, { status: 'skip', result: '未執行（已拒絕，排程終止）' });
+    }
+    var iv = schInterventionFor(ivs, s.num);
+    if (iv) {
+      if (iv.action === 'reject') {
+        halted = true;
+        return Object.assign({}, s, { status: 'rejected', result: '拒絕執行，排程終止' });
+      }
+      if (iv.action === 'skip') {
+        return Object.assign({}, s, { status: 'skip', result: s.onSkip || '人工略過' });
+      }
+      return Object.assign({}, s, { status: 'done', result: s.onConfirm || s.result });
+    }
+    if (awaiting) {
+      return Object.assign({}, s, { status: 'pending', result: '待執行' });
+    }
+    /* 尚未決定的需確認步驟 → 這是當前決策點 */
+    if (s.status === 'waiting' || (s.needsConfirm && s.status === 'pending')) {
+      awaiting = s;
+      return Object.assign({}, s, { status: 'waiting', result: '等待人工決定' });
+    }
+    return s;
+  });
+
+  var activeStep = awaiting
+    ? steps.filter(function (s) { return s.num === awaiting.num; })[0] || null
+    : null;
+  var hasError = steps.some(function (s) { return s.status === 'error'; });
+
+  var result;
+  if (halted)          result = 'rejected';
+  else if (hasError)   result = 'error';
+  else if (activeStep) result = 'pending';
+  else                 result = 'success';
+
+  var doneSteps = steps.filter(function (s) { return s.status === 'done'; }).length;
+
+  return {
+    steps: steps,
+    activeStep: activeStep,
+    interventions: ivs,
+    result: result,
+    doneSteps: doneSteps,
+    totalSteps: steps.length,
+    hasSkip: ivs.some(function (i) { return i.action === 'skip'; }),
+  };
+}
+
+/* 全課待決定清單 —— Nav 紅點與待確認匯總共用同一份真相 */
+function getPendingDecisions(personaKey, sessionIvsByRun) {
+  var list = (SCHEDULING_DATA && SCHEDULING_DATA[personaKey]) || [];
+  var out = [];
+  list.forEach(function (item) {
+    (item.runs || []).forEach(function (run) {
+      var view = getRunView(run, (sessionIvsByRun || {})[run.id]);
+      if (view.activeStep) out.push({ item: item, run: run, step: view.activeStep });
+    });
+  });
+  return out;
+}
 
 /* 取某課最近一次成功產出的交接報告（Home 課佈告欄與交班 Modal 預填共用同一份）*/
 function getLatestHandoverReport(personaKey) {
@@ -4103,7 +4423,7 @@ var KPI_REPORT_MOCK = {
 /* ── 通知類型 meta：label / 顏色 / 圖示（狀態圓點限規範四色）── */
 const NOTIF_TYPES = {
   N1: { key: 'N1', label: 'Schedule 完成',     short: '完成',   dot: '#22C55E', icon: '✓' },
-  N2: { key: 'N2', label: 'Schedule 需人工介入', short: '需介入', dot: '#F59E0B', icon: '⏸' },
+  N2: { key: 'N2', label: 'Schedule 需人工決定', short: '需決定', dot: '#F59E0B', icon: '⏸' },
   N3: { key: 'N3', label: '被指派 P1 任務',     short: 'P1 指派', dot: '#EF4444', icon: '❗' },
 };
 
@@ -4122,8 +4442,8 @@ const NOTIFICATIONS_BY_PERSONA = {
   equipment: [
     {
       id: 'ntf-eq-1', type: 'N2', read: false, ts: 20260724075000,
-      title: 'SPC 異常日報 需要你確認',
-      desc: 'Step 3「開立異常工單」等待人工確認（E-308 × 3 筆 OOC）。',
+      title: 'SPC 異常日報 等待人工決定',
+      desc: 'Step 3「開立異常工單」等待決定（E-308 × 3 筆 OOC）。本課任何成員都可以決定。',
       timeLabel: '今日 07:50',
       link: { nav: 'scheduling', expandRunId: 'run-eq-001-1' },
     },
@@ -4170,8 +4490,8 @@ const NOTIFICATIONS_BY_PERSONA = {
   mfg: [
     {
       id: 'ntf-mf-1', type: 'N2', read: false, ts: 20260724081000,
-      title: '產能落後預警 需要你確認',
-      desc: 'Line 2 產出落後，等待人工確認是否發出調度通知。',
+      title: '產能落後預警 等待人工決定',
+      desc: 'Line 3 產出落後 8%，Step 3「建立緊急應變工單」等待決定。本課任何成員都可以決定。',
       timeLabel: '今日 08:10',
       link: { nav: 'scheduling', expandRunId: 'run-mf-001-1' },
     },
@@ -16535,20 +16855,26 @@ function TaskManagementPage({ p, initialFilter, initialOpenId }) {
 /* ════════════════════════════════════════
    SCHEDULING PAGE
    AntD 遷移 Phase 4（見 brain/concepts/antd-migration-plan.md）
+
+   2026-08-01 介入機制改寫：
+   · 沒有「我來處理」認領步驟 —— 選項直接攤在決策點上，一次點擊完成決定。
+   · 沒有「延伸討論」—— 本頁不再有任何 AI 對話出口。
+   · 三個選項：確認執行 / 略過此步驟 / 拒絕執行。
+   · 全課成員皆可決定；先送出的決定即定案，不可變更、不可撤回。
+   · 決策點持續等待直到有人決定（逾時升級後期再補）。
    ════════════════════════════════════════ */
 
 /* ── Run result config ── */
 const SCH_RUN_CFG = {
   success:  { label: '完成',    color: '#16A34A', bg: 'rgba(34,197,94,0.1)',    icon: '✓' },
-  pending:  { label: '待確認',  color: '#DC2626', bg: 'rgba(239,68,68,0.1)',    icon: '⏸' },
+  pending:  { label: '待決定',  color: '#DC2626', bg: 'rgba(239,68,68,0.1)',    icon: '⏸' },
   error:    { label: '執行失敗', color: '#DC2626', bg: 'rgba(239,68,68,0.1)',   icon: '✕' },
-  discuss:  { label: '延伸討論', color: '#7C3AED', bg: 'rgba(139,92,246,0.1)',  icon: '💬' },
   rejected: { label: '已拒絕',  color: '#6B7280', bg: 'rgba(107,114,128,0.1)', icon: '✕' },
 };
 
 const SCH_ITEM_STATUS_CFG = {
   ok:      { label: '正常',    color: '#16A34A', bg: 'rgba(34,197,94,0.08)'   },
-  pending: { label: '待確認',  color: '#DC2626', bg: 'rgba(239,68,68,0.08)'  },
+  pending: { label: '待決定',  color: '#DC2626', bg: 'rgba(239,68,68,0.08)'  },
   error:   { label: '執行失敗', color: '#DC2626', bg: 'rgba(239,68,68,0.08)' },
   idle:    { label: '未觸發',  color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
 };
@@ -16561,8 +16887,9 @@ const STEP_ICON_CFG = {
   pending:  { bg: 'rgba(158,158,158,0.15)', color: '#6B7280', text: '○' },
   skip:     { bg: 'rgba(158,158,158,0.1)',  color: '#6B7280', text: '—' },
   rejected: { bg: 'rgba(239,68,68,0.15)',   color: '#DC2626', text: '✕' },
-  discuss:  { bg: 'rgba(139,92,246,0.15)',  color: '#7C3AED', text: '💬' },
 };
+
+const SCH_RESULT_TO_ICON = { success: 'done', pending: 'waiting', error: 'error', rejected: 'rejected' };
 
 function SchStepIcon({ status, size}) {
   const sz = size || 20;
@@ -16590,21 +16917,40 @@ function SchAvatar({ name, avatar, color, size}) {
   );
 }
 
-/* ── 決策者一列（步驟內 / 執行紀錄摘要共用）── */
-function SchActorLine({ actor, text }) {
+/* ── 介入紀錄一列：誰、何時、在哪一步、做了什麼決定、為什麼 ──
+   目標 5 的落點。無論該次執行最後是成功、拒絕還是失敗，這一列都必須留著。 */
+function SchInterventionLine({ iv, showTool }) {
   var { C, fz } = useTheme();
+  var cfg = SCH_DECISION_CFG[iv.action] || SCH_DECISION_CFG.confirm;
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-      <SchAvatar name={actor.name} avatar={actor.avatar} color={actor.color} size={16} />
-      <span style={{ fontSize: fz(11), color: C.textMuted }}>{text}</span>
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+      <SchAvatar name={iv.actor.name} avatar={iv.actor.avatar} color={iv.actor.color} size={20} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: fz(12), color: C.textSub }}>
+          <span style={{ fontWeight: 600, color: C.text }}>{iv.actor.name}</span>
+          {' 於 '}
+          <span style={{ fontFamily: 'monospace' }}>{iv.at}</span>
+          {' 對 Step ' + iv.stepNum + ' 決定：'}
+          <span style={{ color: cfg.color, fontWeight: 600 }}>{cfg.icon + ' ' + cfg.pastLabel}</span>
+        </div>
+        {iv.reason && (
+          <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>理由：{iv.reason}</div>
+        )}
+        {showTool && iv.toolCall && (
+          <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2, fontFamily: 'monospace' }}>
+            {iv.toolCall.tool}({iv.toolCall.params}) → {iv.toolCall.result}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ── 單一步驟內容（Timeline item 的 children；圓點由 Timeline 的 dot 提供）── */
-function SchStepBody({ s, compact}) {
+function SchStepBody({ s, compact, interventions }) {
   var { C, fz } = useTheme();
   const isSkipped = s.status === 'skip' || s.status === 'pending';
+  const iv = (interventions || []).filter(function (i) { return i.stepNum === s.num; })[0];
   return (
     <div>
       <div style={{ fontSize: compact ? fz(12) : fz(13), fontWeight: compact ? 400 : 500, color: isSkipped ? C.textMuted : C.text }}>
@@ -16617,7 +16963,7 @@ function SchStepBody({ s, compact}) {
           {s.result}
         </div>
       )}
-      {/* 待確認步驟的細節卡 */}
+      {/* 待決定步驟的細節卡 */}
       {!compact && s.detail && s.status === 'waiting' && (
         <antd.Card size="small" style={{ marginTop: 8 }}
           styles={{ body: { padding: '8px 16px', fontSize: fz(12), color: C.textSub, lineHeight: 1.8 } }}>
@@ -16635,34 +16981,75 @@ function SchStepBody({ s, compact}) {
           )}
         </antd.Card>
       )}
-      {/* 決策者 */}
-      {s.decisionBy && (
-        <div style={{ marginTop: 4 }}>
-          <SchActorLine actor={s.decisionBy} text={
-            s.decisionBy.name + ' ' + s.decisionBy.action + ' · ' + s.decisionBy.time +
-            (s.decisionBy.note ? '　·　「' + s.decisionBy.note + '」' : '')
-          } />
+      {/* 這一步的介入紀錄跟著步驟走，展開就看得到是誰決定的 */}
+      {iv && (
+        <div style={{ marginTop: 8 }}>
+          <SchInterventionLine iv={iv} showTool={!compact} />
         </div>
       )}
     </div>
   );
 }
 
-/* ── 步驟清單 → Timeline（連接線由 AntD 提供，取代原本手刻的列背景）── */
-function SchStepTimeline({ steps, compact }) {
+/* ── 步驟清單 → Timeline（連接線由 AntD 提供）── */
+function SchStepTimeline({ steps, compact, interventions }) {
   const items = steps.map(function (s) {
     return {
       key: s.num,
       dot: <SchStepIcon status={s.status} size={compact ? 16 : 20} />,
-      children: <SchStepBody s={s} compact={compact} />,
+      children: <SchStepBody s={s} compact={compact} interventions={interventions} />,
     };
   });
   return <antd.Timeline className="sch-timeline" items={items} style={{ marginTop: compact ? 8 : 0, marginBottom: 0 }} />;
 }
 
 /* ════════════════════════════════════════
-   SCHEDULING PAGE MAIN
+   SchDecisionReasonModal — 略過 / 拒絕的理由輸入
+
+   拒絕必填：流程被中止，沒有理由後面沒人查得出為什麼。
+   略過選填：流程沒斷，但那一步確實沒做，能寫還是要寫。
    ════════════════════════════════════════ */
+function SchDecisionReasonModal({ action, step, onCancel, onSubmit }) {
+  var { C, fz } = useTheme();
+  var cfg = SCH_DECISION_CFG[action];
+  var [reason, setReason] = React.useState('');
+  var missing = cfg.reasonRequired && reason.trim() === '';
+
+  return (
+    <antd.Modal
+      open
+      centered
+      width={520}
+      title={<span style={{ fontSize: fz(16), fontWeight: 600 }}>{cfg.label} — Step {step.num}「{step.title}」</span>}
+      onCancel={onCancel}
+      okText={cfg.label}
+      cancelText="取消"
+      okButtonProps={{ danger: action === 'reject', disabled: missing }}
+      onOk={function () { if (!missing) onSubmit(reason.trim()); }}
+    >
+      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.7, marginBottom: 16 }}>
+        {cfg.desc}
+      </div>
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>
+        理由{cfg.reasonRequired ? '（必填）' : '（選填）'}
+      </div>
+      <antd.Input.TextArea
+        rows={3}
+        value={reason}
+        onChange={function (e) { setReason(e.target.value); }}
+        style={{ marginBottom: 16 }}
+      />
+      <antd.Alert
+        type="warning"
+        showIcon
+        message={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>
+          決定送出後會記下你的名字與時間，且無法變更或撤回。
+        </span>}
+      />
+    </antd.Modal>
+  );
+}
+
 /* ════════════════════════════════════════
    SchNewScheduleModal — 新增排程
 
@@ -16759,7 +17146,7 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
               type="warning"
               showIcon
               message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>本 Codify 含 {confirmSteps} 個需確認步驟</span>}
-              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，確認後才會繼續。不是設好就完全不用管。</span>}
+              description={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>排程執行到那幾步會暫停並通知你，任何課員都可以決定，確認後才會繼續。不是設好就完全不用管。</span>}
             />
           : <antd.Alert
               type="success"
@@ -16772,22 +17159,25 @@ function SchNewScheduleModal({ p, onClose, onCreate }) {
   );
 }
 
-function SchedulingPage({ p, onAskAI, expandRunReq}) {
+/* ════════════════════════════════════════
+   SCHEDULING PAGE MAIN
+   ════════════════════════════════════════ */
+function SchedulingPage({ p, expandRunReq, decisions, onDecide }) {
   var { C, fz } = useTheme();
   const baseItems = (SCHEDULING_DATA && SCHEDULING_DATA[p.key]) || [];
   const [extraItems, setExtraItems] = React.useState([]);
   const items = extraItems.concat(baseItems);
+  const ivsByRun = decisions || {};
 
   const [showNew, setShowNew]       = React.useState(false);
   const [selectedId, setSelectedId] = React.useState(items[0]?.id || null);
-  const [lockedRun, setLockedRun]   = React.useState(null);       // { runId, byUser }
+  const [reasonModal, setReasonModal] = React.useState(null);   // { action, run, step }
+  const [conflict, setConflict]     = React.useState(null);     // 決定被搶先時的提示
   const [expandedRuns, setExpandedRuns] = React.useState(() => {
     const init = new Set();
-    // auto-expand the first pending run
     if (items[0]?.runs[0]) init.add(items[0].runs[0].id);
     return init;
   });
-  const [resolvedRuns, setResolvedRuns] = React.useState(new Set());
 
   /* ── 通知 deep-link：展開指定執行紀錄（見 notification 模組）──
      依 runId 找到所屬排程，切換選取並展開該筆 run；nonce 變動即重觸發。 */
@@ -16802,134 +17192,119 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
     setExpandedRuns(function (prev) { const n = new Set(prev); n.add(runId); return n; });
   }, [expandRunReq && expandRunReq.nonce]);
 
-  const selectedItem  = items.find(i => i.id === selectedId);
+  const selectedItem = items.find(i => i.id === selectedId);
 
-  // Find the active pending run for the selected item
-  const pendingRun = selectedItem?.runs.find(
-    r => r.result === 'pending' && !resolvedRuns.has(r.id)
-  );
+  /* 全課待決定：Nav 紅點與左欄匯總共用同一份真相 */
+  const pendingDecisions = getPendingDecisions(p.key, ivsByRun);
 
-  /* ── Handlers ── */
-  const handleClaim = (runId) => {
-    setLockedRun({ runId, byUser: p.user.name });
-    setExpandedRuns(prev => { const n = new Set(prev); n.add(runId); return n; });
+  /* 目前選中排程的決策點（一次只會有一個活著的決策點）*/
+  const activeDecision = pendingDecisions.filter(function (d) {
+    return selectedItem && d.item.id === selectedItem.id;
+  })[0] || null;
+
+  /* ── 送出決定 ──
+     先送出者定案：onDecide 回 false 代表這個決策點已經被別人決定了，
+     本次點擊不成立，畫面轉為對方的結果 —— B 推翻不了 A。 */
+  const nowLabel = () => {
+    const d = new Date();
+    const pad = n => (n < 10 ? '0' + n : '' + n);
+    return '今日 ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   };
 
-  const handleConfirm = (run) => {
-    setResolvedRuns(prev => { const n = new Set(prev); n.add(run.id); return n; });
-    setLockedRun(null);
+  const submitDecision = (run, step, action, reason) => {
+    const iv = {
+      id: 'iv-' + run.id + '-' + step.num,
+      action: action,
+      stepNum: step.num,
+      at: nowLabel(),
+      actor: { name: p.user.name, avatar: p.user.avatar, color: '#2563EB' },
+      reason: reason || '',
+      toolCall: (action === 'confirm' && step.mcpTool)
+        ? { tool: step.mcpTool, params: step.mcpParams || '', result: step.onConfirm || '已執行' }
+        : null,
+    };
+    const accepted = onDecide(run.id, iv);
+    setReasonModal(null);
+    if (!accepted) {
+      setConflict({ runId: run.id, stepNum: step.num });
+    } else {
+      setConflict(null);
+      setExpandedRuns(prev => { const n = new Set(prev); n.add(run.id); return n; });
+    }
   };
 
-  const handleReject = (run) => {
-    setResolvedRuns(prev => { const n = new Set(prev); n.add(run.id); return n; });
-    setLockedRun(null);
-  };
-
-  /* 產出物帶進 AI Chat：trace 要能一鍵變成工程師手上的資產 */
-  const handleAskAboutOutput = (item, run) => {
-    const o = run.output || {};
-    const ctx = `【Scheduling 產出】排程：${item.name}　執行時間：${run.dateLabel}\n\n` +
-      `${o.title || ''}（${o.shiftLabel || ''}）\n` +
-      (o.metrics || []).map(m => `・${m.label}：${m.value}${m.unit}${m.note ? '（' + m.note + '）' : ''}`).join('\n') +
-      `\n\n${o.situation || ''}\n\n${o.pending || ''}\n\n---\n以上是這次排程實際產出的內容，請依此協助分析或回答。`;
-    if (onAskAI) onAskAI({ text: ctx, label: `Scheduling：${item.name}` });
-  };
-
-  const handleDiscuss = (item, run) => {
-    const stepLines = run.steps.map(s => {
-      const icon = { done: '✓', waiting: '⏸', error: '✕', pending: '○', skip: '—', rejected: '✕', discuss: '💬' }[s.status] || '○';
-      let line = `Step ${s.num} ${icon}  ${s.title}\n         → ${s.result}`;
-      if (s.detail) {
-        const d = s.detail;
-        if (d.machine) line += `\n         → 機台：${d.machine}${d.recipe ? ` | 製程：${d.recipe}` : ''}${d.priority ? ` | ${d.priority}` : ''}`;
-        if (d.desc) line += `\n         → 說明：${d.desc}`;
-        if (d.target) line += `\n         → 目標：${d.target}，問題：${d.issue}，建議動作：${d.action}`;
-      }
-      return line;
-    }).join('\n\n');
-
-    const ctx = `【Scheduling 執行紀錄】排程：${item.name}　Skill：${item.skill}　執行時間：${run.dateLabel}\n\n` +
-      `步驟紀錄：\n${stepLines}\n\n---\n以上是此次排程執行的完整紀錄，請根據上述內容協助分析或決策。`;
-
-    setResolvedRuns(prev => { const n = new Set(prev); n.add(run.id); return n; });
-    setLockedRun(null);
-    if (onAskAI) onAskAI({ text: ctx, label: `Scheduling：${item.name}` });
-  };
-
-  /* ── Intervention Banner → Alert（HITL 三重約束的介入點）── */
-  const renderBanner = () => {
-    if (!pendingRun) return null;
-    const isMyLock    = lockedRun?.runId === pendingRun.id && lockedRun?.byUser === p.user.name;
-    const isOtherLock = lockedRun?.runId === pendingRun.id && lockedRun?.byUser !== p.user.name;
-    const waitingStep = pendingRun.steps.find(s => s.status === 'waiting');
+  /* ── 決策點面板 ──
+     沒有認領、沒有 AI 對話出口，選項直接攤開，任何課員都能按。 */
+  const renderDecisionPanel = () => {
+    if (!activeDecision) return null;
+    const run  = activeDecision.run;
+    const step = activeDecision.step;
+    const view = getRunView(run, ivsByRun[run.id]);
 
     return (
       <div>
         <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>
-          ⚠ 當前執行待確認
+          ⚠ 當前執行待人工決定
         </div>
         <antd.Alert
           type="error"
           message={
             <span style={{ fontSize: fz(13), fontWeight: 600 }}>
-              AI 執行至步驟 {waitingStep ? waitingStep.num : '?'}，需要人工確認才能繼續
+              AI 執行至 Step {step.num}「{step.title}」，需要人工決定才能繼續
             </span>
           }
           description={
             <div>
-              {/* MCP call hint */}
-              <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.6, marginBottom: 16 }}>
+              {/* 要決定什麼：AI 準備呼叫哪個工具、帶什麼參數 */}
+              <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.6, marginBottom: 8 }}>
                 AI 準備呼叫{' '}
                 <antd.Typography.Text code style={{ fontSize: fz(12) }}>
-                  {waitingStep?.mcpTool || 'unknown.tool'}
+                  {step.mcpTool || 'unknown.tool'}
                 </antd.Typography.Text>
-                ，請確認是否執行。
+                {step.system ? '（' + step.system + '）' : ''}
+              </div>
+              {step.mcpParams && (
+                <div style={{ fontSize: fz(12), color: C.textMuted, fontFamily: 'monospace', marginBottom: 16 }}>
+                  參數：{step.mcpParams}
+                </div>
+              )}
+
+              {/* 等待狀態：持續等待，不會自動終止 */}
+              <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
+                自 <span style={{ fontFamily: 'monospace' }}>{run.waitingSince || run.startedAt}</span> 起等待中，尚無人決定。排程會一直停在這裡直到有人決定。
               </div>
 
               {/* Steps */}
-              <div style={{ marginBottom: 8 }}>
-                <SchStepTimeline steps={pendingRun.steps} compact={false} />
+              <div style={{ marginBottom: 16 }}>
+                <SchStepTimeline steps={view.steps} compact={false} interventions={view.interventions} />
               </div>
 
-              {/* Action area */}
-              {!isMyLock && !isOtherLock && (
-                <antd.Space size={8} wrap>
-                  <antd.Button type="primary" onClick={() => handleClaim(pendingRun.id)}>✋ 我來處理</antd.Button>
-                  <span style={{ fontSize: fz(12), color: C.textMuted }}>點擊後由你接手此次執行的決策</span>
-                </antd.Space>
+              {/* 決定被搶先 */}
+              {conflict && conflict.runId === run.id && (
+                <antd.Alert
+                  type="info" showIcon style={{ marginBottom: 16 }}
+                  message={<span style={{ fontSize: fz(12), lineHeight: 1.7 }}>
+                    這個決策點已經有人先決定了，你這次的操作沒有生效。上方顯示的是已成立的結果。
+                  </span>}
+                />
               )}
 
-              {isMyLock && (
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <antd.Badge status="success" />
-                    <span style={{ fontSize: fz(12), color: C.textMuted }}>你正在處理此決策，其他成員已暫時無法接手</span>
-                  </div>
-                  <antd.Space size={8} wrap>
-                    <antd.Button type="primary" onClick={() => handleConfirm(pendingRun)}>✓ 確認執行</antd.Button>
-                    <antd.Popconfirm
-                      title="拒絕此次執行？"
-                      description="AI 將停止在當前步驟，不會呼叫後續工具。"
-                      okText="拒絕" cancelText="取消" okButtonProps={{ danger: true }}
-                      onConfirm={() => handleReject(pendingRun)}
-                    >
-                      <antd.Button danger>✕ 拒絕</antd.Button>
-                    </antd.Popconfirm>
-                    <antd.Button
-                      onClick={() => handleDiscuss(selectedItem, pendingRun)}
-                      style={{ color: '#7C3AED', borderColor: '#C4B5FD' }}
-                    >💬 延伸討論</antd.Button>
-                    <span style={{ fontSize: fz(11), color: C.textMuted }}>→ 跳轉 AI Chat，以此次執行為 context 開啟新對話</span>
-                  </antd.Space>
-                </div>
-              )}
+              {/* 選項：直接攤開，一次點擊完成 */}
+              <antd.Space size={8} wrap>
+                <antd.Button type="primary" onClick={() => submitDecision(run, step, 'confirm', '')}>
+                  ✓ 確認執行
+                </antd.Button>
+                <antd.Button onClick={() => setReasonModal({ action: 'skip', run: run, step: step })}>
+                  ⏭ 略過此步驟
+                </antd.Button>
+                <antd.Button danger onClick={() => setReasonModal({ action: 'reject', run: run, step: step })}>
+                  ✕ 拒絕執行
+                </antd.Button>
+              </antd.Space>
 
-              {isOtherLock && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <antd.Badge status="success" />
-                  <span style={{ fontSize: fz(12), color: C.textMuted }}>{lockedRun.byUser} 正在處理此決策</span>
-                </div>
-              )}
+              <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, lineHeight: 1.7 }}>
+                本課任何成員都可以決定，不需要先認領。<strong>先送出的決定即定案，會記下決定者與時間，且無法變更或撤回。</strong>
+              </div>
             </div>
           }
         />
@@ -16940,62 +17315,46 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
   /* ── 執行紀錄 → Collapse（摘要列＝panel header，步驟＝panel body）── */
   const renderRunPanels = () => {
     return (selectedItem.runs || []).map(function (run) {
-      const isResolved  = resolvedRuns.has(run.id);
-      const displayResult = (isResolved && run.result === 'pending') ? 'success' : run.result;
-      const cfg = SCH_RUN_CFG[displayResult] || SCH_RUN_CFG.success;
+      const view = getRunView(run, ivsByRun[run.id]);
+      const cfg  = SCH_RUN_CFG[view.result] || SCH_RUN_CFG.success;
 
-      // Collect decision actors from steps
-      const stepActors = (run.steps || []).filter(s => s.decisionBy).map(s => ({
-        ...s.decisionBy, stepNum: s.num,
-      }));
+      /* 完成但中間有人略過，要在摘要就看得出來 */
+      const resultLabel = view.result === 'success' && view.hasSkip
+        ? '完成（含人工略過）'
+        : cfg.label;
 
       return {
         key: run.id,
         style: {
           background: C.bg, borderRadius: 6, marginBottom: 8,
-          border: '1px solid ' + (displayResult === 'pending' && !isResolved ? '#FCA5A5' : C.border),
+          border: '1px solid ' + (view.result === 'pending' ? '#FCA5A5' : C.border),
         },
         label: (
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-            <SchStepIcon status={{ success: 'done', pending: 'waiting', error: 'error', discuss: 'discuss', rejected: 'rejected' }[displayResult] || 'done'} size={24} />
+            <SchStepIcon status={SCH_RESULT_TO_ICON[view.result] || 'done'} size={24} />
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: fz(13), fontWeight: 500, color: C.text, marginBottom: 2 }}>
-                {run.dateLabel} — {
-                  isResolved && run.result === 'pending'
-                    ? '完成（人工確認）'
-                    : `${cfg.label}（${run.doneSteps}/${run.totalSteps} 步驟）`
-                }
+                {run.dateLabel} — {resultLabel}（{view.doneSteps}/{view.totalSteps} 步驟）
               </div>
               <div style={{ fontSize: fz(11), color: C.textMuted }}>
-                排程自動觸發 · 執行時長：{run.duration}
+                {run.trigger === 'manual' ? '人工觸發' : run.trigger === 'retry' ? '失敗重跑' : '排程自動觸發'}
+                {run.triggeredBy ? '（' + run.triggeredBy + '）' : ''}
+                　·　執行時長：{run.duration}
               </div>
 
-              {/* Handler actor (top-level: pending/discuss/rejected) */}
-              {run.handler && run.result !== 'success' && !isResolved && (
-                <div style={{ marginTop: 8 }}>
-                  <SchActorLine actor={run.handler} text={
-                    run.handler.name +
-                    (run.result === 'pending' ? ' 介入處理中'
-                      : run.result === 'discuss' ? ' 選擇延伸討論 · ' + run.handler.time
-                      : ' ' + run.handler.action + ' · ' + run.handler.time) +
-                    (run.handler.note ? '　·　「' + run.handler.note + '」' : '')
-                  } />
+              {/* 介入紀錄：無論最後結果為何都固定顯示，不會因為決定完就消失 */}
+              {view.interventions.length > 0 && (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {view.interventions.map(function (iv) {
+                    return <SchInterventionLine key={iv.id} iv={iv} showTool={false} />;
+                  })}
                 </div>
               )}
 
-              {/* Step-level actors (multiple decision points) */}
-              {stepActors.length > 0 && run.result === 'success' && (
-                <antd.Space size={16} wrap style={{ marginTop: 8 }}>
-                  {stepActors.map((a, i) => (
-                    <SchActorLine key={i} actor={a} text={a.name + ' ' + a.action + ' Step ' + a.stepNum + ' · ' + a.time} />
-                  ))}
-                </antd.Space>
-              )}
-
-              {/* Error message */}
-              {run.errorMsg && (
+              {/* 失敗資訊 */}
+              {run.failure && (
                 <div style={{ marginTop: 8, fontSize: fz(11), color: '#DC2626', fontFamily: 'monospace', background: 'rgba(239,68,68,0.05)', padding: '4px 8px', borderRadius: 4 }}>
-                  {run.errorMsg}
+                  Step {run.failure.stepNum} · {run.failure.message}
                 </div>
               )}
             </div>
@@ -17003,7 +17362,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
         ),
         extra: (
           <antd.Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: cfg.bg, color: cfg.color, borderColor: 'transparent' }}>
-            {isResolved && run.result === 'pending' ? '完成' : cfg.label}
+            {cfg.label}
           </antd.Tag>
         ),
         children: (
@@ -17012,17 +17371,15 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
                 這裡是檔案櫃：可回溯所有班次；今天那份同時在 Home 課佈告欄。 */}
             {run.output && (
               <div style={{ marginBottom: 16, border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
-                <div style={{ padding: '8px 16px', background: C.bgPanel, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ padding: '8px 16px', background: C.bgPanel }}>
                   <span style={{ fontSize: fz(12), fontWeight: 700, color: C.textMuted, letterSpacing: '0.06em', textTransform: 'uppercase' }}>本次產出</span>
-                  <div style={{ flex: 1 }} />
-                  <antd.Button size="small" onClick={function(e) { e.stopPropagation(); handleAskAboutOutput(selectedItem, run); }}>💬 針對這份問 AI</antd.Button>
                 </div>
                 <div style={{ padding: 16, background: C.bg }}>
                   <DryRunOutput output={run.output} />
                 </div>
               </div>
             )}
-            {run.steps ? <SchStepTimeline steps={run.steps} compact={true} /> : null}
+            <SchStepTimeline steps={view.steps} compact={true} interventions={view.interventions} />
           </div>
         ),
       };
@@ -17042,6 +17399,24 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
           background: C.bg, borderRight: '1px solid ' + C.border,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
+          {/* 全課待決定匯總：不必逐一點排程才發現有東西卡住 */}
+          {pendingDecisions.length > 0 && (
+            <div
+              onClick={function () { setSelectedId(pendingDecisions[0].item.id); }}
+              style={{
+                padding: '8px 16px', borderBottom: '1px solid ' + C.border,
+                background: 'rgba(239,68,68,0.06)', cursor: 'pointer',
+              }}
+            >
+              <div style={{ fontSize: fz(12), fontWeight: 600, color: '#DC2626' }}>
+                ⚠ 本課有 {pendingDecisions.length} 件待人工決定
+              </div>
+              <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
+                {pendingDecisions.map(function (d) { return d.item.name; }).join('、')}
+              </div>
+            </div>
+          )}
+
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
             <antd.Button type="primary" size="small" onClick={function() { setShowNew(true); }}>＋ 新增</antd.Button>
@@ -17053,7 +17428,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
               locale={{ emptyText: <antd.Empty style={{ padding: 24 }} description={<span style={{ fontSize: fz(13), color: C.textMuted }}>尚無排程項目</span>} /> }}
               renderItem={function (item) {
                 const isActive = selectedId === item.id;
-                const isPending = item.runs.some(r => r.result === 'pending' && !resolvedRuns.has(r.id));
+                const isPending = pendingDecisions.some(function (d) { return d.item.id === item.id; });
                 const effectiveStatus = isPending ? 'pending' : item.status;
                 const statusCfg = SCH_ITEM_STATUS_CFG[effectiveStatus] || SCH_ITEM_STATUS_CFG.ok;
                 return (
@@ -17110,7 +17485,7 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
                 {typeof selectedItem.confirmSteps === 'number' && (
                   <div style={{ fontSize: fz(12), color: selectedItem.confirmSteps > 0 ? '#F59E0B' : '#22C55E', marginTop: 4, fontWeight: 600 }}>
                     {selectedItem.confirmSteps > 0
-                      ? '⚠️ 本 Codify 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知你'
+                      ? '⚠️ 本 Codify 含 ' + selectedItem.confirmSteps + ' 個需確認步驟，執行到會暫停並通知，任何課員都可以決定'
                       : '只讀取資料，時間到就有產出，不會異動任何系統'}
                   </div>
                 )}
@@ -17124,24 +17499,33 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
             {/* Right Body */}
             <div style={{ flex: 1, overflowY: 'auto', padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-              {/* Intervention Banner */}
-              {renderBanner()}
+              {/* 決策點 */}
+              {renderDecisionPanel()}
 
-              {/* Divider (only when banner is shown) */}
-              {pendingRun && <antd.Divider style={{ margin: 0 }} />}
+              {/* Divider (only when panel is shown) */}
+              {activeDecision && <antd.Divider style={{ margin: 0 }} />}
 
               {/* Execution History */}
               <div>
                 <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 12 }}>
                   執行紀錄
                 </div>
-                <antd.Collapse
-                  bordered={false}
-                  activeKey={Array.from(expandedRuns)}
-                  onChange={function (keys) { setExpandedRuns(new Set(keys)); }}
-                  items={renderRunPanels()}
-                  style={{ background: 'transparent' }}
-                />
+                {(selectedItem.runs || []).length === 0 ? (
+                  <antd.Empty
+                    style={{ padding: 24 }}
+                    description={<span style={{ fontSize: fz(13), color: C.textMuted }}>
+                      尚未執行過，下次執行時間：{selectedItem.cronLabel}
+                    </span>}
+                  />
+                ) : (
+                  <antd.Collapse
+                    bordered={false}
+                    activeKey={Array.from(expandedRuns)}
+                    onChange={function (keys) { setExpandedRuns(new Set(keys)); }}
+                    items={renderRunPanels()}
+                    style={{ background: 'transparent' }}
+                  />
+                )}
               </div>
 
             </div>
@@ -17153,6 +17537,18 @@ function SchedulingPage({ p, onAskAI, expandRunReq}) {
         )}
 
       </div>
+
+      {/* 略過 / 拒絕的理由輸入 */}
+      {reasonModal && (
+        <SchDecisionReasonModal
+          action={reasonModal.action}
+          step={reasonModal.step}
+          onCancel={function () { setReasonModal(null); }}
+          onSubmit={function (reason) {
+            submitDecision(reasonModal.run, reasonModal.step, reasonModal.action, reason);
+          }}
+        />
+      )}
 
       {/* 新增排程：只選得到已上線的 Codify */}
       {showNew && (
@@ -18025,6 +18421,22 @@ function App() {
   /* scheduling deep-link 請求：{ runId, nonce }，nonce 每次點擊遞增以重觸發 effect */
   const [expandRunReq, setExpandRunReq] = React.useState({ runId: null, nonce: 0 });
 
+  /* ── 排程的人工介入決定：{ [runId]: [intervention, ...] } ──
+     放在 App 而不是 SchedulingPage，因為 Nav 紅點也要用同一份真相。
+     先送出者定案：同一個決策點只收第一筆，之後的一律不受理（B 推翻不了 A）。 */
+  const [schedDecisions, setSchedDecisions] = React.useState({});
+  const decideSchedulingStep = React.useCallback(function (runId, iv) {
+    var existing = schedDecisions[runId] || [];
+    var taken = existing.some(function (x) { return x.stepNum === iv.stepNum; });
+    if (taken) return false;                    /* 已經有人決定過，本次不成立 */
+    setSchedDecisions(function (prev) {
+      var cur = prev[runId] || [];
+      if (cur.some(function (x) { return x.stepNum === iv.stepNum; })) return prev;
+      return Object.assign({}, prev, { [runId]: cur.concat([iv]) });
+    });
+    return true;
+  }, [schedDecisions]);
+
   /* ── Home Layout（Seed 可設定，per-persona 獨立） ── */
   const [homeLayoutByPersona, setHomeLayoutByPersona] = React.useState(
     typeof DEFAULT_HOME_LAYOUT !== 'undefined' ? DEFAULT_HOME_LAYOUT : { equipment: [], process: [], mfg: [] }
@@ -18135,14 +18547,11 @@ function App() {
     });
   }, [persona]);
 
-  // Scheduling nav 紅點：收編為單一未讀真相來源 = 站內開啟的未讀 N2（需人工介入）
+  /* Scheduling nav 紅點：綁「實際還有未決定的決策點」，不綁通知已讀狀態。
+     通知讀過不代表事情處理了 —— 紅點要跟著排程本身的狀態走。 */
   const schedulingHasPending = React.useMemo(function () {
-    return currentNotifs.some(function (n) {
-      if (n.type !== 'N2' || n.read) return false;
-      const p = currentNotifPrefs[n.type];
-      return p ? p.inApp : true;
-    });
-  }, [currentNotifs, currentNotifPrefs]);
+    return getPendingDecisions(persona, schedDecisions).length > 0;
+  }, [persona, schedDecisions]);
 
   const handleAskAI = React.useCallback(({ text, label }) => {
     setAiDraft({ text, label });
@@ -18367,7 +18776,16 @@ function App() {
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}
-        {nav === 'scheduling' && <SchedulingPage p={p} onAskAI={handleAskAI} expandRunReq={expandRunReq} />}
+        {/* key={persona} 讓切課時重置頁內狀態：新增的排程不會殘留到別的課，選取項目也會歸位 */}
+        {nav === 'scheduling' && (
+          <SchedulingPage
+            key={persona}
+            p={p}
+            expandRunReq={expandRunReq}
+            decisions={schedDecisions}
+            onDecide={decideSchedulingStep}
+          />
+        )}
       </div>
     </div>
     </AppConfigProvider>

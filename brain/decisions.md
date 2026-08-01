@@ -40,4 +40,6 @@ status: current
 
 | — | 2026-07-31 | **類型再改名 `Guide → Skill`、`Flow → Codify`，並升成 Skill 管理的兩個分頁**。決議 15 用「撞名面」挑字，這輪補上第二個標準「**先驗認知**」——`Skill` 是 Agentic AI 的通用詞使用者本來就懂，`Codify` 不是，所以**進入預設站 Skill、讓使用者自己去點 Codify**，而不是塞說明。分頁取代原本工具列上的類型 Segmented（語意從「可篩的一份清單」變成「兩件不同的事」），「全部類型」消失，換來每個分頁掛一句小標題；Skill 那句尾巴的「升級 Codify」是飛輪 1 第一次在 UI 上以一句話出現。**已知代價：容器「Skill 管理」與類型「Skill」父子同名**，PO 接受，要修的方向是動容器名。code key `guided`／`sop` 仍不改 | [agent-skill-tiering](concepts/agent-skill-tiering.md)、[setting](entities/modules/setting.md) |
 
+| — | 2026-08-01 | **Schedule 介入機制改寫（決議 17）**：取消「✋ 我來處理」認領步驟與「💬 延伸討論」——**這一段未來不引入 AI 對話**，選項直接攤在決策點上，一次點擊完成決定。選項改為**確認執行／略過此步驟／拒絕執行**（拒絕即終止），**全課成員皆可決定**，**先送出者定案、不可變更撤回**（B 推翻不了 A），拒絕必填理由。`run.interventions[]` 成為唯一稽核序列，取代 `handler`／`decisionBy`——舊 UI 在按下確認後介入者那一列反而消失，是**目標「記錄誰在何時介入」的直接破口**。Nav 紅點改綁實際未決定的決策點（原本綁未讀 N2，通知一讀紅點就沒了但事情還卡著）。逾時依 PO 指示**先做持續等待** | [scheduling](entities/modules/scheduling.md)、[notification](entities/modules/notification.md) |
+
 **模式觀察**（PM 視角）：決議多次走「先做 → 發現雙頭管理/定位混淆 → 收斂單一入口」路徑（v2.8 釘選、v3.6 Nav）；引用舊版行為時務必先查本表確認未被推翻。

@@ -38,6 +38,34 @@ UI 已於 2026-07-25 完成 **AntD 遷移 Phase 4**（見 [antd-migration-plan](
 
 前四項已落地：`SchNewScheduleModal`（只選得到 Production 的 SOP；知識與輔助判斷仍列出但鎖住並寫明原因）、執行紀錄展開先顯示「本次產出」再顯示步驟（沿用知識管理頁的產出渲染，兩邊長一樣）、右上依 `confirmSteps` 顯示需確認步驟數或「可完全自動執行」。資料面 `scheduling.js` 新增 `sch-eq-004`「當班交接報告」（綁 `sm-eq-007`，含一筆設備監控 timeout 的失敗紀錄）與 `getLatestHandoverReport()`。**尚未實作**：結果異常偵測、定期自動重跑 dry run、SOP 詳情的「設為定期執行」入口。
 
+## 2026-08-01 決議：介入機制改寫（決議 17）
+
+PO 指出兩件事：**未來這一段不打算引入 AI 對話**，而且**「舉手認領」根本不該存在**——該做的是把選項直接攤在介入畫面上，誰點了就記下誰、什麼時候點的。
+
+**新的介入模型**：
+
+| 項目 | 舊 | 新 |
+|---|---|---|
+| 認領 | 先按「✋ 我來處理」搶鎖，才看得到選項 | **取消**。選項直接攤開，一次點擊完成決定 |
+| 選項 | 確認執行 / 拒絕 / 💬 延伸討論 | **確認執行 / 略過此步驟 / 拒絕執行**（拒絕即終止整次執行） |
+| AI 出口 | 介入可跳 AI Chat；產出物有「針對這份問 AI」 | **全部移除**，本頁不再有任何 AI 對話出口 |
+| 誰能決定 | 搶到鎖的人 | **全課成員（Seed + member）皆可**，不需認領、不指定人 |
+| 併發 | 畫面上的暫時鎖，重整即失效，不寫進紀錄 | **先送出者定案（first-write-wins）**。後送出者不受理，畫面轉為已成立的結果 —— **B 推翻不了 A** |
+| 可否反悔 | 未定義 | **決定不可變更、不可撤回**。要改只能重跑或另做補救動作 |
+| 逾時 | SCH-OQ-1 Claim timeout（建議 15 分鐘） | **不做**。決策點持續等待直到有人決定；升級通知與自動終止後期再補 |
+| 理由 | 無輸入 | **拒絕必填**、略過選填 |
+
+**資料模型**：`run.interventions[]` 成為唯一的介入稽核序列，取代舊的 `run.handler` 與 `steps[].decisionBy`（兩者語意重疊、且舊 UI 在決定完成後反而不顯示）。每筆記 `{ actor, action, stepNum, at, reason, toolCall }`，`toolCall` 記下「因為誰的確認，AI 呼叫了哪個 tool、帶什麼參數、回什麼」。**步驟的最終狀態不寫死在資料裡**，改由 `getRunView(run, sessionIvs)` 從介入紀錄推導（拒絕 → 其後全部不執行；略過 → 流程繼續；未決定的第一個需確認步驟＝當前決策點）。`getPendingDecisions(personaKey, decisions)` 是 Nav 紅點與左欄待決定匯總的單一真相。
+
+### 實作狀態（2026-08-01 完成，Phase A + B）
+
+- **Phase A 資料層**：`run` 補 `startedAt / finishedAt / trigger / triggeredBy / failure{stepNum,tool,kind,message,retryable} / interventions[]`；`step` 補 `tool / params / system / rows / durationLabel / mcpParams / needsConfirm / onConfirm / onSkip`；歷史 run 的 `handler`／`decisionBy` 全數遷移成 `interventions`。新增 `SCH_DECISION_CFG`、`getRunView()`、`getPendingDecisions()`。
+- **Phase B 介入層**：決策點面板攤開三個選項（確認單擊、略過／拒絕走理由 Modal）、`SchInterventionLine` 讓介入痕跡**固定顯示且不再因為決定完成而消失**（舊 UI 的破口）、左欄「本課有 N 件待人工決定」匯總、**Nav 紅點改綁實際未決定的決策點**（原本綁未讀 N2 通知，通知一讀紅點就沒了但事情還卡著）。
+- 順手修掉兩個 bug：在 A 課新增的排程會殘留到 B 課；切課後右欄掉回空白（`SchedulingPage` 加 `key={persona}`）。
+- **未做（留給後續 Phase）**：C 跨排程執行總覽／只看異常／失敗通知／重跑；D 可加入的 Codify 可發現性（已掛排程不排除、無搜尋、無反向入口）；E 節點明細呈現與 Graph 實走路徑（欄位已進資料層，畫面尚未用上）。
+
+⚠️ 本輪**無法做瀏覽器實測**——`shell.html` 依賴 unpkg CDN，本 session 網路政策擋住外連。改以 Babel 本地編譯（等價於瀏覽器內 `@babel/standalone`）＋ 對 `getRunView`／`getPendingDecisions` 的 23 項行為驗證通過。
+
 ## 專屬 OQ
 
-SCH-OQ-1 Claim timeout 機制（高）；SCH-OQ-2 Skill 編寫介面與 MCP tool 授權（高）；SCH-OQ-3 執行 context 持久化規格（高）；SCH-OQ-4 延伸討論結果是否回寫執行紀錄；SCH-OQ-5 失敗重試策略；SCH-OQ-6 排程建立/編輯 UI。彙整見 [open-questions](../../open-questions.md)。
+~~SCH-OQ-1 Claim timeout 機制~~ **作廢**（2026-08-01：不再有認領鎖）→ 改為新題 **SCH-OQ-7 決策等待逾時策略**（升級通知門檻、是否自動終止）；SCH-OQ-2 Skill 編寫介面與 MCP tool 授權（高）；SCH-OQ-3 執行 context 持久化規格（高）；~~SCH-OQ-4 延伸討論結果是否回寫執行紀錄~~ **作廢**（延伸討論已移除）；SCH-OQ-5 失敗重試策略；SCH-OQ-6 排程建立/編輯 UI。彙整見 [open-questions](../../open-questions.md)。

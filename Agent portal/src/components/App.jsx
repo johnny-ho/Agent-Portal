@@ -346,6 +346,22 @@ function App() {
   /* scheduling deep-link 請求：{ runId, nonce }，nonce 每次點擊遞增以重觸發 effect */
   const [expandRunReq, setExpandRunReq] = React.useState({ runId: null, nonce: 0 });
 
+  /* ── 排程的人工介入決定：{ [runId]: [intervention, ...] } ──
+     放在 App 而不是 SchedulingPage，因為 Nav 紅點也要用同一份真相。
+     先送出者定案：同一個決策點只收第一筆，之後的一律不受理（B 推翻不了 A）。 */
+  const [schedDecisions, setSchedDecisions] = React.useState({});
+  const decideSchedulingStep = React.useCallback(function (runId, iv) {
+    var existing = schedDecisions[runId] || [];
+    var taken = existing.some(function (x) { return x.stepNum === iv.stepNum; });
+    if (taken) return false;                    /* 已經有人決定過，本次不成立 */
+    setSchedDecisions(function (prev) {
+      var cur = prev[runId] || [];
+      if (cur.some(function (x) { return x.stepNum === iv.stepNum; })) return prev;
+      return Object.assign({}, prev, { [runId]: cur.concat([iv]) });
+    });
+    return true;
+  }, [schedDecisions]);
+
   /* ── Home Layout（Seed 可設定，per-persona 獨立） ── */
   const [homeLayoutByPersona, setHomeLayoutByPersona] = React.useState(
     typeof DEFAULT_HOME_LAYOUT !== 'undefined' ? DEFAULT_HOME_LAYOUT : { equipment: [], process: [], mfg: [] }
@@ -456,14 +472,11 @@ function App() {
     });
   }, [persona]);
 
-  // Scheduling nav 紅點：收編為單一未讀真相來源 = 站內開啟的未讀 N2（需人工介入）
+  /* Scheduling nav 紅點：綁「實際還有未決定的決策點」，不綁通知已讀狀態。
+     通知讀過不代表事情處理了 —— 紅點要跟著排程本身的狀態走。 */
   const schedulingHasPending = React.useMemo(function () {
-    return currentNotifs.some(function (n) {
-      if (n.type !== 'N2' || n.read) return false;
-      const p = currentNotifPrefs[n.type];
-      return p ? p.inApp : true;
-    });
-  }, [currentNotifs, currentNotifPrefs]);
+    return getPendingDecisions(persona, schedDecisions).length > 0;
+  }, [persona, schedDecisions]);
 
   const handleAskAI = React.useCallback(({ text, label }) => {
     setAiDraft({ text, label });
@@ -688,7 +701,16 @@ function App() {
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}
-        {nav === 'scheduling' && <SchedulingPage p={p} onAskAI={handleAskAI} expandRunReq={expandRunReq} />}
+        {/* key={persona} 讓切課時重置頁內狀態：新增的排程不會殘留到別的課，選取項目也會歸位 */}
+        {nav === 'scheduling' && (
+          <SchedulingPage
+            key={persona}
+            p={p}
+            expandRunReq={expandRunReq}
+            decisions={schedDecisions}
+            onDecide={decideSchedulingStep}
+          />
+        )}
       </div>
     </div>
     </AppConfigProvider>
