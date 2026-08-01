@@ -282,30 +282,25 @@ function countSchedulableSkills(p, mounts) {
     .filter(function (s) { return !schBlockReason(s, mounts); }).length;
 }
 
-function SchScheduleModal({ p, mounts, presetSkillId, editItem, pendingCount, onClose, onSubmit, onJumpSchedule }) {
+function SchScheduleModal({ p, mounts, presetSkillId, editItem, pendingCount, onClose, onSubmit }) {
   var { C, fz } = useTheme();
   var all = ((p.knowledge || {}).sopManagement) || [];
   var isEdit = !!editItem;
 
-  var [query, setQuery]     = React.useState('');
   var [picked, setPicked]   = React.useState(isEdit ? editItem.skillId : (presetSkillId || null));
   var [cron, setCron]       = React.useState(isEdit ? editItem.cronLabel : SCH_CRON_OPTIONS[2]);
   var [name, setName]       = React.useState(isEdit ? editItem.name : '');
   var [renamed, setRenamed] = React.useState(false);   /* 自己動過名稱之後就不再被 Codify 標題蓋掉 */
 
-  /* 可掛：Production 且尚未掛上排程的 Codify。
-     其餘全部列出來但不能選，並寫明為什麼 —— 看得到邊界，Seed 才知道界線在哪 */
-  var options = all.map(function(s) { return { skill: s, block: schBlockReason(s, mounts) }; })
-    .filter(function(o) {
-      if (!query.trim()) return true;
-      var q = query.trim().toLowerCase();
-      return (o.skill.title || '').toLowerCase().indexOf(q) >= 0
-          || (o.skill.purpose || '').toLowerCase().indexOf(q) >= 0
-          || (o.skill.tags || []).some(function(t) { return t.toLowerCase().indexOf(q) >= 0; });
-    })
-    .sort(function(a, b) { return (a.block ? 1 : 0) - (b.block ? 1 : 0); });
-
-  var available = all.filter(function(s) { return !schBlockReason(s, mounts); }).length;
+  /* 清單只列真的選得到的：Production 且尚未掛上排程的 Codify。
+     2026-08-01 決議 20 推翻「不可用的也列出來、標明原因」——實測三個課是
+     設備 0 可選 / 7 鎖、製程 1/4、製造 1/3，打開幾乎整片是明知不可點的鎖頭。
+     三種鎖住的性質不同，處置也不同：
+       · 已掛排程 → 隱藏。事情已經完成，左欄排程清單本來就列著它（同畫面講兩次）
+       · Skill 型 → 隱藏。這是類型邊界不是狀態，永遠不會變；該教的地方是 Skill 管理的分頁
+       · 尚未生效 → 隱藏列，改用清單下方一句常駐規則說明，解釋「為什麼我的那份沒出現」 */
+  var options = all.filter(function(s) { return !schBlockReason(s, mounts); })
+    .map(function(s) { return { skill: s }; });
 
   /* 編輯模式的 Codify 是既定的，不能套 schBlockReason —— 它已經掛在「自己」身上 */
   var pickedSkill = isEdit
@@ -363,7 +358,7 @@ function SchScheduleModal({ p, mounts, presetSkillId, editItem, pendingCount, on
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>
         {isEdit
           ? '可以改名稱與執行時間。掛的是哪一份 Codify 不能改 —— 底下的執行紀錄都是它累積的。'
-          : '排程只掛得上已上線、且還沒被掛走的 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。'}
+          : '排程只掛得上 Codify —— 每次步驟都一樣、結果可重現，沒人看著也不會出事。'}
       </div>
 
       {isEdit ? (
@@ -386,63 +381,40 @@ function SchScheduleModal({ p, mounts, presetSkillId, editItem, pendingCount, on
         </div>
       ) : (
       <React.Fragment>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub }}>
-          選一個 Codify（可加入 {available} 份）
-        </span>
-        <div style={{ flex: 1 }} />
-        <antd.Input
-          allowClear
-          size="small"
-          aria-label="搜尋 Codify 名稱、用途或標籤"
-          placeholder="搜尋名稱、用途或標籤"
-          value={query}
-          onChange={function(e) { setQuery(e.target.value); }}
-          style={{ width: 224 }}
-        />
+      <div style={{ fontSize: fz(12), fontWeight: 600, color: C.textSub, marginBottom: 8 }}>
+        選一個 Codify
       </div>
-      <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8, marginBottom: 16 }} className="scrollbar-thin">
+      <div style={{ maxHeight: 288, overflowY: 'auto', border: '1px solid ' + C.border, borderRadius: 8 }} className="scrollbar-thin">
         {options.length === 0 && (
           <div style={{ padding: 16, fontSize: fz(13), color: C.textMuted }}>
-            {query.trim() ? '沒有符合「' + query.trim() + '」的項目。' : '本課目前沒有任何 Skill。'}
+            本課目前沒有可加入排程的 Codify。
           </div>
         )}
         {options.map(function(o) {
-          var disabled = !!o.block;
-          var active   = picked === o.skill.id;
+          var active = picked === o.skill.id;
           return (
             <div
               key={o.skill.id}
-              onClick={function() { if (!disabled) setPicked(o.skill.id); }}
+              onClick={function() { setPicked(o.skill.id); }}
               style={{
                 padding: '8px 16px', borderBottom: '1px solid ' + C.border,
-                cursor: disabled ? 'not-allowed' : 'pointer',
+                cursor: 'pointer',
                 background: active ? 'rgba(37,99,235,0.08)' : 'transparent',
-                opacity: disabled ? 0.6 : 1,
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <SkillTierTag tier={o.skill.tier} />
                 <span style={{ fontSize: fz(13), color: C.text, fontWeight: 500, flex: 1, minWidth: 0 }}>{o.skill.title}</span>
-                {disabled
-                  ? <span style={{ fontSize: fz(12) }}>🔒</span>
-                  : <StatusTag stage={o.skill.stage} />
-                }
+                <StatusTag stage={o.skill.stage} />
               </div>
-              {o.block && (
-                <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 4 }}>
-                  {o.block.text}
-                  {o.block.jumpTo && onJumpSchedule && (
-                    <a
-                      onClick={function(e) { e.stopPropagation(); onJumpSchedule(o.block.jumpTo); }}
-                      style={{ marginLeft: 8 }}
-                    >去看那個排程</a>
-                  )}
-                </div>
-              )}
             </div>
           );
         })}
+      </div>
+      {/* 常駐的規則說明，取代整排鎖頭。
+          講的是規則不是筆數 —— 它要回答的是「我剛寫好的那份為什麼沒出現在這裡」。 */}
+      <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8, marginBottom: 16 }}>
+        尚未生效的 Codify 無法設定排程。
       </div>
       </React.Fragment>
       )}
@@ -939,7 +911,13 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
           <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
-              <antd.Button type="primary" size="small" onClick={function() { setPreset(null); setShowNew(true); }}>＋ 新增</antd.Button>
+              {/* 全掛滿時停用 —— 鎖住的項目已從清單移除，打開會是一片空白，
+                  理由就寫在下面那行常駐副標上，不必開了才知道 */}
+              <antd.Button
+                type="primary" size="small"
+                disabled={schedulableCount === 0}
+                onClick={function() { setPreset(null); setShowNew(true); }}
+              >＋ 新增</antd.Button>
             </div>
             {/* 不必打開 Modal 才知道還有東西可以加 */}
             <div
@@ -952,7 +930,7 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
             >
               {schedulableCount > 0
                 ? '還有 ' + schedulableCount + ' 份 Codify 可加入排程'
-                : '本課已上線的 Codify 都掛上排程了'}
+                : '本課已生效的 Codify 都掛上排程了'}
             </div>
           </div>
           <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
@@ -1128,7 +1106,7 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
       )}
 
       {/* 新增／編輯排程：同一個表單的兩種模式。
-          新增只選得到已上線的 Codify；編輯不讓換 Codify（理由見 SchScheduleModal 的註解）。 */}
+          新增只列得出真的選得到的 Codify；編輯不讓換 Codify（理由見 SchScheduleModal 的註解）。 */}
       {(showNew || editingItem) && (
         <SchScheduleModal
           p={p}
@@ -1137,7 +1115,6 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
           editItem={editingItem}
           pendingCount={editingItem ? pendingDecisions.filter(function(d) { return d.item.id === editingItem.id; }).length : 0}
           onClose={function() { setShowNew(false); setPreset(null); setEditingId(null); }}
-          onJumpSchedule={function(scheduleId) { setShowNew(false); setPreset(null); setSelectedId(scheduleId); }}
           onSubmit={function(out) {
             var stamp = { by: p.user.name, at: nowLabel(), summary: out.summary };
 
