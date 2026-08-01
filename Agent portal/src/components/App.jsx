@@ -366,10 +366,23 @@ function App() {
     });
   }, [persona]);
 
-  /* Codify → 它掛在哪個排程。Schedule 與 Skill 管理共用同一份對照，不會兩邊講不一樣的話 */
+  /* ── 本 session 的排程設定變更：{ [personaKey]: { [itemId]: patch } } ──
+     基準排程來自唯讀的 SCHEDULING_DATA，編輯以 patch 疊上去；
+     放在 App 是因為 SchedulingPage 有 key={persona} 會重置，改過的設定不能跟著蒸發。 */
+  const [schedItemEdits, setSchedItemEdits] = React.useState({});
+  const handleUpdateSchedule = React.useCallback(function (itemId, patch) {
+    setSchedItemEdits(function (prev) {
+      const cur = prev[persona] || {};
+      const merged = Object.assign({}, cur[itemId], patch);
+      return Object.assign({}, prev, { [persona]: Object.assign({}, cur, { [itemId]: merged }) });
+    });
+  }, [persona]);
+
+  /* Codify → 它掛在哪個排程。Schedule 與 Skill 管理共用同一份對照，不會兩邊講不一樣的話。
+     帶上變更層：排程改名或改時間之後，Skill 管理那邊的徽章要跟著改 */
   const schedMounts = React.useMemo(function () {
-    return getSkillScheduleMap(persona, schedExtraItems[persona]);
-  }, [persona, schedExtraItems]);
+    return getSkillScheduleMap(persona, schedExtraItems[persona], schedItemEdits[persona]);
+  }, [persona, schedExtraItems, schedItemEdits]);
 
   /* Codify 詳情「設為定期執行」→ 跳排程頁並預開新增 Modal（nonce 每次遞增以重觸發）*/
   const [newScheduleReq, setNewScheduleReq] = React.useState({ skillId: null, nonce: 0 });
@@ -744,7 +757,9 @@ function App() {
             extraRuns={schedExtraRuns}
             onRetry={handleSchedRetry}
             extraItems={schedulingExtraItems}
+            itemEdits={schedItemEdits[persona]}
             onCreateSchedule={handleCreateSchedule}
+            onUpdateSchedule={handleUpdateSchedule}
             newScheduleReq={newScheduleReq}
             onNewScheduleHandled={clearNewScheduleReq}
           />
