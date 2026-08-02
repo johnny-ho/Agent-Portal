@@ -17951,11 +17951,27 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
     const filtered = allRuns.filter(e => matchRunFilter(e, runFilter));
     return (
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', background: C.bgPanel }}>
+        {/* 總覽的 header 與「單一排程詳情」的 header 原本幾乎同構（白底 + 15px 標題 +
+            下面一整排執行紀錄），差別只有「詳情多了麵包屑」—— 靠某個東西不存在來辨識，
+            辨識度本來就低，也是誤讀成詳情的一部分。這裡把原本 12px 灰色副標那三個數字
+            升成一排統計，用字級差異把兩個 header 分開。
+            ⚠️ 資訊沒有增加、只是換了視覺權重，所以不觸犯決議 18 的溝通疲勞；
+            「待決定」刻意不放進來 —— 那是下方 Alert 的職責，放這裡就是同一畫面講兩次。 */}
         <div style={{ padding: '16px 24px', background: C.bg, borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
           <div style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>執行總覽</div>
-          <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
-            本課 {items.length} 個排程　·　{allRuns.length} 次執行　·
-            <span style={{ color: errorRuns.length > 0 ? '#DC2626' : C.textMuted }}>{errorRuns.length} 次失敗</span>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 32, marginTop: 8 }}>
+            {[
+              { n: items.length,     label: '個排程' },
+              { n: allRuns.length,   label: '次執行' },
+              { n: errorRuns.length, label: '次失敗', danger: errorRuns.length > 0 },
+            ].map(function (s) {
+              return (
+                <div key={s.label}>
+                  <div style={{ fontSize: fz(20), fontWeight: 600, lineHeight: 1.2, color: s.danger ? '#DC2626' : C.text }}>{s.n}</div>
+                  <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>{s.label}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
@@ -17964,16 +17980,30 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
           {pendingDecisions.length > 0 && (
             <antd.Alert
               type="error"
-              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>有 {pendingDecisions.length} 件待人工決定</span>}
+              /* 「全課」二字是刻意的：只有一件待決定時，這塊與「單一排程詳情」的決策點面板
+                 長得幾乎一樣，講明它是跨排程的匯總才不會被讀成某一個排程的東西。
+                 排程名改用膠囊標籤而不是句首藍字連結 —— 它回答的是「這是哪一個排程的事」，
+                 不是這一頁的標題；改成整列可點，點擊區反而比原本的一段文字大。 */
+              message={<span style={{ fontSize: fz(13), fontWeight: 600 }}>全課有 {pendingDecisions.length} 件待人工決定</span>}
               description={
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {pendingDecisions.map(function (d) {
                     return (
-                      <div key={d.run.id} style={{ fontSize: fz(12), color: C.textSub }}>
-                        <a onClick={function () { setSelectedId(d.item.id); }} style={{ fontWeight: 600 }}>{d.item.name}</a>
-                        {'　Step ' + d.step.num + '「' + d.step.title + '」·　自 '}
-                        <span style={{ fontFamily: 'monospace' }}>{d.run.waitingSince || d.run.startedAt}</span>
-                        {' 起等待中'}
+                      <div
+                        key={d.run.id}
+                        onClick={function () { setSelectedId(d.item.id); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+                          fontSize: fz(12), color: C.textSub, cursor: 'pointer',
+                        }}
+                      >
+                        <antd.Tag style={{ marginInlineEnd: 0, borderRadius: 999, background: C.bg, color: C.textSub, borderColor: C.border }}>
+                          {d.item.name}
+                        </antd.Tag>
+                        <span>Step {d.step.num}「{d.step.title}」</span>
+                        <span style={{ color: C.textMuted }}>
+                          自 <span style={{ fontFamily: 'monospace' }}>{d.run.waitingSince || d.run.startedAt}</span> 起等待中
+                        </span>
                       </div>
                     );
                   })}
@@ -18013,12 +18043,44 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
           background: C.bg, borderRight: '1px solid ' + C.border,
           display: 'flex', flexDirection: 'column', overflow: 'hidden',
         }}>
-          {/* 左欄只做一件事：切換單一排程。
-              跨排程的警示與入口都在總覽（右欄主頁），不在這裡重複講一次 ——
-              原本的「本課有 N 件待人工決定」橫幅與「執行總覽」入口已移除。 */}
-          <div style={{ padding: '12px 16px', borderBottom: '1px solid ' + C.border }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: fz(13), fontWeight: 600, color: C.textSub }}>排程清單</span>
+          {/* 左欄只放「去哪裡」，不放「出了什麼事」。
+              導覽只有兩類：一個總覽 + N 個排程；警示（橫幅）不進左欄。
+
+              決議 18 把「執行總覽」入口連同警示橫幅一起刪掉，右欄主畫面因此失去左欄來源
+              —— 三欄式的隱含契約是「右欄有內容就有一個選中的左欄項目」，契約一斷，
+              使用者會自動把最靠近的第一張卡片讀成右欄的來源。這裡只把「導覽入口」補回來，
+              「警示橫幅」不補（那一半決議 18 是對的）。
+
+              當時那版難用的原因不在「有兩種層級」，在於層級沒有被畫出來：
+              ① 總覽用「左藍邊條」、排程用「整張卡變藍框」，同一欄兩套選中語彙，
+                 認不出彼此是同一組互斥選項 → 本版統一成「藍框 + 淡藍底」一套；
+              ② 總覽那列自己帶著「N 次執行 · M 次失敗」紅字，於是它不是導覽是第二條警示
+                 → 本版不帶任何數字，統計全部移到右欄總覽的 header；
+              ③ 層級差異只靠一條分隔線，跟卡片間距一樣重
+                 → 本版改用留白（24px）+ 分組小標題，用分組的語言而不是警示的語言。
+              形態不同（扁列 vs 卡片）負責「這不是第 0 個排程」，
+              選中語彙相同負責「這兩者是同一組選項」。 */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
+            {/* 執行總覽：純導覽，不帶數字、不帶紅點 */}
+            <div
+              onClick={function () { setSelectedId(SCH_ALL); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 16px', borderRadius: 8, cursor: 'pointer',
+                border: '1px solid ' + (isOverview ? '#2563EB' : 'transparent'),
+                background: isOverview ? 'rgba(37,99,235,0.04)' : 'transparent',
+              }}
+            >
+              <span style={{ fontSize: fz(13), color: isOverview ? '#2563EB' : C.textMuted }}>▤</span>
+              <span style={{ fontSize: fz(13), fontWeight: 600, color: isOverview ? '#2563EB' : C.text }}>執行總覽</span>
+            </div>
+
+            {/* 分組小標：層級差異靠留白與小標，不靠顏色 */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginTop: 24, marginBottom: 8,
+            }}>
+              <span style={{ fontSize: fz(11), fontWeight: 600, color: C.textMuted, letterSpacing: '0.06em' }}>排程清單</span>
               {/* 沒東西可加時停用，理由改成 hover／點擊才出現的 Tooltip。
                   不做常駐副標的兩個理由：
                   ① 一句常駐的話得同時涵蓋「完全沒有 Codify」「有但都沒生效」「都掛上排程了」
@@ -18046,13 +18108,11 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
             {schedulableCount > 0 && (
               <div
                 onClick={function() { setPreset(null); setShowNew(true); }}
-                style={{ fontSize: fz(11), marginTop: 8, color: '#2563EB', cursor: 'pointer' }}
+                style={{ fontSize: fz(11), marginBottom: 8, color: '#2563EB', cursor: 'pointer' }}
               >
                 還有 {schedulableCount} 份 Codify 可加入排程
               </div>
             )}
-          </div>
-          <div style={{ flex: 1, overflowY: 'auto', padding: 8 }}>
             <antd.List
               dataSource={items}
               split={false}
@@ -18064,13 +18124,17 @@ function SchedulingPage({ p, expandRunReq, decisions, onDecide, extraRuns, onRet
                 const statusCfg = SCH_ITEM_STATUS_CFG[effectiveStatus] || SCH_ITEM_STATUS_CFG.ok;
                 return (
                   <antd.List.Item style={{ padding: '0 0 8px', borderBlockEnd: 'none' }}>
+                    {/* 邊框與底色這個視覺通道只表示「選中」，不兼差表示狀態。
+                        待決定原本額外吃掉紅框＋粉底，於是未被選中的卡片比真正選中的那一項還搶眼，
+                        眼睛會先落在它身上 —— 這正是「右欄總覽被讀成第一張卡片的詳情」的推力之一。
+                        狀態改由紅點與「待決定」標籤表達（兩者都還在，已經夠了）。 */}
                     <antd.Card
                       size="small" hoverable
                       onClick={() => setSelectedId(item.id)}
                       style={{
                         width: '100%',
-                        borderColor: isActive ? '#2563EB' : isPending ? '#FCA5A5' : C.border,
-                        backgroundColor: isActive ? 'rgba(37,99,235,0.04)' : isPending ? 'rgba(239,68,68,0.04)' : undefined,
+                        borderColor: isActive ? '#2563EB' : C.border,
+                        backgroundColor: isActive ? 'rgba(37,99,235,0.04)' : undefined,
                       }}
                       styles={{ body: { padding: 12 } }}
                     >
