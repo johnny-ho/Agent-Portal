@@ -578,3 +578,27 @@ PO 否決了我提的「排程卡片相對總覽縮排」（312px 欄寬太緊�
 ⚠️ 實測方法補一條：`shell.html` 的 react script 帶 `crossorigin`，**用 `file://` 開會被 CORS 擋掉整包 vendor**（畫面全白、`React is not defined`）。要起一個 `python3 -m http.server` 從 http 開，curl 驗證時記得 `--noproxy '*'`。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-03] decision | Schedule 改成決策收件匣（決議 23，來源 Claude Design IA 方向 B）
+
+PO 先要一份「總覽與左欄互動」的摘要拿去 Claude Design 出樣式，回來帶了 `排程中心 樣式方向.dc.html`（IA 方向 B「決策收件匣」，七個狀態 4a–4g）＋一段架構說明，指示「閱讀並修改」。
+
+⚠️ **取檔過程**：`claude.ai/design` 需登入（WebFetch 403），DesignSync 在本環境無法取得 design 授權（`/design-login` 需要互動式終端）。PO 直接把 `.dc.html` 上傳，我讀原始碼比對 —— **設計檔本身就是規格**（inline style 全部寫死，量得出 312/480/24/32 與每一個色碼），比截圖精確。之後遇到同一情況照這個順序走。
+
+**這輪的關鍵不是版面，是主詞**。決議 18～22 一路在調「排程清單 + 總覽」怎麼擺，方向 B 把頁面主詞換成「**等人的事**」：左欄上半是佇列（類型＋件數）、下半是排程健康（監看清單），右欄是決策台。決定一件事從「進排程 → 找到決策點面板 → 決定」變成「**進門第一屏就能決定**」。
+
+**我在實作前提出、值得記住的四個落差**（PO 看過後指示照做）：
+1. **設計檔的動作列只有三顆**（同意並繼續／改參數／略過此步）→ **「拒絕執行」失去 UI 入口**，卡住的執行沒有辦法被人為終止。資料層與歷史紀錄的 reject 都還在，補只是加一顆按鈕。**列為下一棒要 PO 拍板的第一件事**。
+2. **「改參數」是決議 17 沒有的第四種介入** → 補 `paramsBefore/paramsAfter` 進 `interventions[]`，介入列顯示改前改後。人改寫了 AI 要送出去的參數卻不留痕，稽核序列就斷在這裡。工具本身不可換（換工具＝改流程，不是介入）。
+3. **「失敗待確認」是新概念** → 新增 `acks`（本 session），與 `interventions` **分開存**：它不是對 AI 的決定，是「我看過了、別再提醒我」。確認後那筆失敗仍留在執行紀錄。
+4. **PO 口述與設計檔不一致的一項**：口述說「哪些步驟要人工確認」是開關（關掉＝AI 直接做），但 4d 畫的是**唯讀＋「不可關閉；由 Codify 的 Skill 定義」**。**依設計檔** —— 那個開關等於允許課級自行解除 HITL，而 HITL 是本頁三重約束第 2 條。
+
+**沿用未推翻的**：決議 22 的「選中語彙一套、邊框底色只表示選中、警示不進左欄」、決議 19 的「掛的 Codify 不可改 + `lastChange` 變更留痕」、決議 20/21 的「新增只列選得到的 + 沒得選時 Tooltip 說明」（都搬進抽屜，文案用產品定稿的「尚未生效的 Codify 無法設定排程。」而不是設計檔 mock 的字）。
+
+**順手做掉的**：**「停用」從死按鈕變成可逆開關**（決議 19 掛了兩天的缺口），停用後仍可「手動執行一次」，且**不釋放 Codify**（沿用決議 19 的前置決策）。
+
+**資料層**：`enabled/disabledBy/disabledAt`、`SCH_NOW` + `getWaitedLabel()`（等待時間是本頁最重要的催辦訊號，mock 全是字串標籤故釘一個現在時刻）、`getDecisionQueue/getFailureQueue/getScheduleStats/buildManualRun`。移除 `getRecentHealth()`（左欄不再顯示失敗數）。**平均時長排除「（含等待）」那幾筆** —— 混進去會算出「平均 10m 49s」這種看不出機器快慢的數字（實測時抓到的）。mock 補一筆 FDC 待決定執行（第二件才測得到「第一件展開、其餘收合」）並把 PM 到期提醒設為已停用（停用態才有得看）。
+
+**瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：4a–4g 七個狀態逐一比對，另 20 項互動全過、無 console error。實測抓到三個自己的 bug：失敗卡寫「中止在 0/5 步驟」（doneSteps 不等於卡在第幾步）、平均時長被等待時間污染、決定完的執行在時長欄位仍寫「暫停中」。
+
+受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[decisions.md](decisions.md)、index.md。

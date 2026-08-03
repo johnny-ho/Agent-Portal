@@ -349,6 +349,17 @@ function App() {
      放在 App 而不是 SchedulingPage，因為 Nav 紅點也要用同一份真相。
      先送出者定案：同一個決策點只收第一筆，之後的一律不受理（B 推翻不了 A）。 */
   const [schedDecisions, setSchedDecisions] = React.useState({});
+  /* ── 失敗待確認的「已確認」：{ [runId]: { by, at } } ──
+     它不是對 AI 的決定（那是 interventions），是「人看過了、不用再提醒我」，
+     所以與介入紀錄分開存：確認掉之後那筆失敗仍留在執行紀錄裡，只是離開待處理佇列。 */
+  const [schedAcks, setSchedAcks] = React.useState({});
+  const handleSchedAck = React.useCallback(function (runId, meta) {
+    setSchedAcks(function (prev) {
+      if (prev[runId]) return prev;
+      return Object.assign({}, prev, { [runId]: meta });
+    });
+  }, []);
+
   /* 重跑產生的執行：{ [scheduleId]: [run, ...] }。重跑是新增一筆，不覆蓋原本那筆失敗 */
   const [schedExtraRuns, setSchedExtraRuns] = React.useState({});
   const handleSchedRetry = React.useCallback(function (scheduleId, newRun) {
@@ -754,6 +765,8 @@ function App() {
             expandRunReq={expandRunReq}
             decisions={schedDecisions}
             onDecide={decideSchedulingStep}
+            acks={schedAcks}
+            onAck={handleSchedAck}
             extraRuns={schedExtraRuns}
             onRetry={handleSchedRetry}
             extraItems={schedulingExtraItems}
