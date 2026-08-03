@@ -375,14 +375,50 @@ const SCHEDULING_DATA = {
       id: 'sch-eq-002',
       name: 'FDC 異常摘要',
       skill: 'fdc-daily-summary',
-      hasWrite: false,
-      confirmSteps: 0,
+      hasWrite: true,
+      confirmSteps: 1,
       cronLabel: '每日 08:00',
       createdBy: '王志明',
       lastChange: { by: '王志明', at: '03/30 11:05', summary: '建立排程' },
-      status: 'ok',
-      lastRun: '今日 08:01',
+      status: 'pending',
+      lastRun: '今日 15:12',
       runs: [
+        /* 第二個待決定 —— 收件匣要成立，「一類底下有多件」必須是真的看得到的狀態：
+           第一件展開成可決定的卡片、其餘收合成一行（設計檔 4a）。
+           只有一件的話那個版型永遠測不到，也看不出「最久已等待」在比什麼。 */
+        {
+          id: 'run-eq-002-0',
+          dateLabel: '今日 15:10',
+          startedAt: '今日 15:10:04',
+          finishedAt: null,
+          trigger: 'schedule',
+          triggeredBy: null,
+          result: 'pending',
+          duration: '暫停中',
+          waitingSince: '今日 15:12',
+          totalSteps: 3,
+          doneSteps: 2,
+          interventions: [],
+          steps: [
+            { num: 1, title: '查詢今日 FDC 異常事件', status: 'done', result: '共 3 筆 Level-2 異常',
+              tool: 'fdc.list_alarms', params: 'date=today, level=2', system: 'FDC', rows: 3, durationLabel: '11s' },
+            { num: 2, title: '彙整異常摘要', status: 'done', result: 'E-308 × 2、E-201 × 1', durationLabel: '3s' },
+            {
+              num: 3, title: '發佈至 Dashboard 公告欄', status: 'waiting', result: '等待人工決定',
+              needsConfirm: true,
+              mcpTool: 'dashboard.publish_notice', system: 'Dashboard 公告欄',
+              mcpParams: 'board=ETC-設備課, level=2, items=3',
+              onConfirm: '已發佈至課公告欄',
+              onSkip: '人工略過，本次未發佈',
+              detail: {
+                desc: '將今日 3 筆 Level-2 異常摘要發佈到課公告欄，全課看得到。',
+                target: 'ETC 設備課公告欄',
+                issue: 'E-308 連續兩班出現同型異常，摘要內含跨班說明',
+                action: '確認內容無誤後發佈；若異常仍在處理中可先略過，等結案再發',
+              },
+            },
+          ],
+        },
         {
           id: 'run-eq-002-1',
           dateLabel: '今日 08:00',
@@ -431,7 +467,13 @@ const SCHEDULING_DATA = {
       confirmSteps: 0,
       cronLabel: '每日 07:00',
       createdBy: '吳志豪',
-      lastChange: { by: '吳志豪', at: '04/15 08:20', summary: '名稱 PM 提醒 → PM 到期提醒' },
+      /* 停用＝不再自動觸發，但排程還在、歷史還在，那份 Codify 仍算「已掛排程」
+         （不會回到可新增清單，要放回去只能刪除排程 —— 見 brain 決議 19 的前置決策）。
+         留一個已停用的 mock，停用態才有得看：灰點灰字、下次執行「—」、只剩歷史。 */
+      enabled: false,
+      disabledBy: '吳志豪',
+      disabledAt: '今日 15:20',
+      lastChange: { by: '吳志豪', at: '今日 15:20', summary: '停用排程' },
       status: 'ok',
       lastRun: '今日 07:01',
       runs: [
@@ -867,18 +909,6 @@ function matchRunFilter(entry, filterKey) {
   return true;
 }
 
-/* 單一排程近 N 次的失敗次數 —— 讓不穩定的排程在左欄自己浮出來 */
-function getRecentHealth(item, sessionIvsByRun, n) {
-  var take = n || 7;
-  var runs = (item.runs || []).slice()
-    .sort(function (a, b) { return getRunTs(b) - getRunTs(a); })
-    .slice(0, take);
-  var failed = runs.filter(function (r) {
-    return getRunView(r, (sessionIvsByRun || {})[r.id]).result === 'error';
-  }).length;
-  return { total: runs.length, failed: failed };
-}
-
 /* 由失敗紀錄產生一筆「重跑」執行 —— 新增一筆，不覆蓋原本那筆失敗 */
 function buildRetryRun(run, actorName, atLabel) {
   var tpl = run.retry || {};
@@ -931,6 +961,143 @@ function getRunPath(view) {
   });
   return { taken: taken, notTaken: notTaken };
 }
+
+/* ════════════════════════════════════════
+   決策收件匣 —— 頁面的主詞是「事」，不是「排程」
+
+   左欄上半是「等人的事」，依類型分組、只給件數；是哪一個排程、卡在哪一步
+   全部留到右欄講（在 312px 裡兩件事就會撐爆，件數多時更明顯）。
+   兩類事的動作語彙不同，所以不是同一個清單的兩個篩選，是兩類：
+   · 待人工決定：AI 停在那裡等人，決定了才會往下走
+   · 失敗待確認：執行已中止，沒有等待中的 AI 步驟，只需要有人看過並收掉
+   ════════════════════════════════════════ */
+const SCH_QUEUE_CFG = {
+  decision: {
+    key: 'decision', label: '待人工決定', dot: '#D97706',
+    desc: '排程會一直停在該步驟直到有人決定',
+  },
+  failure: {
+    key: 'failure', label: '失敗待確認', dot: '#DC2626',
+    desc: '執行已中止，確認後這筆會留在紀錄但不再提醒',
+  },
+};
+
+/* mock 的「現在」。等待時間是本頁最重要的催辦訊號（誰等最久先處理），
+   而 mock 的時間全是字串標籤，沒有真的 timestamp，所以這裡釘一個現在時刻，
+   讓「已等待 7h 42m」算得出來、也不會每次重整就跳動。 */
+const SCH_NOW = { hh: 15, mm: 34 };
+
+/* '今日 07:52' → 已等待幾分鐘；跨日的（昨日／MM/DD）用 getRunTs 的日期推算 */
+function getWaitedMinutes(sinceLabel) {
+  if (!sinceLabel) return 0;
+  var t = /(\d{1,2}):(\d{2})/.exec(sinceLabel);
+  if (!t) return 0;
+  var mins = (SCH_NOW.hh * 60 + SCH_NOW.mm) - (+t[1] * 60 + +t[2]);
+  /* 跨日等待要看得出來是「昨天就卡住了」。日期差用 Date 算，
+     不能直接減 YYYYMMDD（跨月會變成 71 天）。 */
+  var today = Date.UTC(SCH_TODAY.y, SCH_TODAY.m - 1, SCH_TODAY.d);
+  var day = today;
+  var md = /^(\d{2})\/(\d{2})/.exec(sinceLabel);
+  if (md) day = Date.UTC(SCH_TODAY.y, +md[1] - 1, +md[2]);
+  else if (sinceLabel.indexOf('昨日') === 0) day = today - 86400000;
+  mins += Math.round((today - day) / 60000);
+  return mins > 0 ? mins : 0;
+}
+
+function getWaitedLabel(sinceLabel) {
+  var m = getWaitedMinutes(sinceLabel);
+  if (m < 60) return m + 'm';
+  return Math.floor(m / 60) + 'h ' + schPad(m % 60) + 'm';
+}
+
+/* 待人工決定佇列：等最久的排在最前面（催辦的順序就是等待時間的順序）*/
+function getDecisionQueue(items, sessionIvsByRun) {
+  return getPendingDecisions(items, sessionIvsByRun)
+    .map(function (d) {
+      var since = d.run.waitingSince || d.run.startedAt;
+      return Object.assign({}, d, { since: since, waitedMin: getWaitedMinutes(since), waited: getWaitedLabel(since) });
+    })
+    .sort(function (a, b) { return b.waitedMin - a.waitedMin; });
+}
+
+/* 失敗待確認佇列 ──
+   「確認過了」是本 session 的狀態（acks: { [runId]: {by, at} }），與介入紀錄分開：
+   它不是對 AI 的決定，是人看過了、不用再提醒我。時間倒序，最新的失敗在最前面。 */
+function getFailureQueue(items, sessionIvsByRun, acks) {
+  var out = [];
+  (items || []).forEach(function (item) {
+    (item.runs || []).forEach(function (run) {
+      var view = getRunView(run, (sessionIvsByRun || {})[run.id]);
+      if (view.result !== 'error') return;
+      if ((acks || {})[run.id]) return;
+      /* 已經補跑過的失敗：那一筆失敗仍留著，但要講得出「後來補跑完成了」*/
+      var retry = null;
+      (item.runs || []).forEach(function (r) { if (r.retryOf === run.id) retry = r; });
+      out.push({ item: item, run: run, view: view, retry: retry, ts: getRunTs(run) });
+    });
+  });
+  return out.sort(function (a, b) { return b.ts - a.ts; });
+}
+
+/* '1m 21s' / '58s' / '暫停中' → 秒；算不出來的回 null，不要污染平均。
+   ⚠️「（含等待）」那幾筆一律不算：那是人隔了多久才來按，不是這支排程跑多久，
+   混進平均會得出「平均 10m 49s」這種看不出機器快慢的數字。 */
+function schDurationSec(label) {
+  if (!label) return null;
+  if (label.indexOf('含等待') >= 0 || label.indexOf('暫停') >= 0) return null;
+  var m = /(?:(\d+)m\s*)?(\d+)s/.exec(label);
+  if (!m) return null;
+  return (+(m[1] || 0)) * 60 + (+m[2]);
+}
+
+/* 單一排程近 N 次的體檢：完成／待決定／失敗各幾次、平均花多久。
+   右欄該排程 header 用它回答「這支穩不穩」，不必一筆一筆點開看。 */
+function getScheduleStats(item, sessionIvsByRun, n) {
+  var take = n || 7;
+  var runs = (item.runs || []).slice()
+    .sort(function (a, b) { return getRunTs(b) - getRunTs(a); })
+    .slice(0, take);
+  var acc = { total: runs.length, success: 0, pending: 0, error: 0, rejected: 0, avgLabel: null };
+  var secs = [];
+  runs.forEach(function (r) {
+    var res = getRunView(r, (sessionIvsByRun || {})[r.id]).result;
+    acc[res] = (acc[res] || 0) + 1;
+    var s = schDurationSec(r.duration);
+    if (s != null) secs.push(s);
+  });
+  if (secs.length) {
+    var avg = Math.round(secs.reduce(function (a, b) { return a + b; }, 0) / secs.length);
+    acc.avgLabel = avg >= 60 ? Math.floor(avg / 60) + 'm ' + schPad(avg % 60) + 's' : avg + 's';
+  }
+  return acc;
+}
+
+/* 停用的排程仍可「手動執行一次」——停用只停掉自動觸發，不是把東西鎖死。
+   拿最近一次成功的執行當樣板，與 buildRetryRun 同一套作法（mock 沒有引擎）。 */
+function buildManualRun(item, actorName, atLabel) {
+  var runs = (item.runs || []).slice().sort(function (a, b) { return getRunTs(b) - getRunTs(a); });
+  var tpl = null;
+  runs.forEach(function (r) { if (!tpl && r.result === 'success') tpl = r; });
+  var steps = (tpl && tpl.steps) || (runs[0] && runs[0].steps) || [];
+  return {
+    id: item.id + '-manual-' + Date.now(),
+    dateLabel: atLabel,
+    startedAt: atLabel,
+    finishedAt: atLabel,
+    trigger: 'manual',
+    triggeredBy: actorName,
+    result: 'success',
+    duration: (tpl && tpl.duration) || '—',
+    totalSteps: steps.length,
+    doneSteps: steps.length,
+    interventions: [],
+    steps: steps.map(function (s) { return Object.assign({}, s, { status: 'done' }); }),
+    output: (tpl && tpl.output) || null,
+  };
+}
+
+/* 停用是可逆開關，不是刪除 —— 沒有 enabled 欄位的排程一律視為啟用中 */
+function isScheduleEnabled(item) { return !item || item.enabled !== false; }
 
 /* ── 排程設定的變更層 ──
    基準排程來自 SCHEDULING_DATA（唯讀），本 session 的編輯以 patch 疊上去；
