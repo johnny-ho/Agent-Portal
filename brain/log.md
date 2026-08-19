@@ -602,3 +602,17 @@ PO 先要一份「總覽與左欄互動」的摘要拿去 Claude Design 出樣�
 **瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：4a–4g 七個狀態逐一比對，另 20 項互動全過、無 console error。實測抓到三個自己的 bug：失敗卡寫「中止在 0/5 步驟」（doneSteps 不等於卡在第幾步）、平均時長被等待時間污染、決定完的執行在時長欄位仍寫「暫停中」。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-19] decision | Skill Marketplace 跨課流通：定調 + 決策 A–F 拍板
+
+PO 提出跨課情境需求（課級發布 → 他課下載測試 → 依原流程簽核生效 → Marketplace 需揭露風險資訊）。先做現況盤點，抓到六個硬事實：`sopManagement[]` 掛 persona 無全域池；`scope` 比對 `EQUIPMENT_MASTER[personaKey]`，設備課 `E-101`／製程課 `R-501`／製造課 `LINE-1` **連命名空間都不同**；`knowledgeRefs` 指向課內 `KNOWLEDGE_DOCS`；`tools[].system/mode/hasWrite` 已存在（MCP 揭露不用新增資料）；`acceptance`／`scenarioRun` 是課內證據不可跨課沿用；五階段已存在可直接接回。
+
+**定調**：Marketplace 流動的是**定義文本**，不是執行權限——執行仍用自己課的機台、MCP 權限、簽核人。`SkillManagementPage.jsx:339` 的「不可跨課使用」要改成「跨課可下載、下載後重走簽核」。
+
+**PO 拍板六案**：A 副本不訂閱（訂閱＝別課改動我已簽核生效的東西）；B 下載一律落 Draft 且**不做自動 scope remap**（系統猜錯比留白危險，同決議 14）；C 只有 Production 能發布；D **不做五星**，改行為三數字「N 課下載 · N 課已生效 · N 課棄用」——廠內樣本太小、且「下載了但沒生效」是唯一誠實反映水土不服的訊號；E MCP 不只揭露還要**當場比對本課權限**，`hasWrite` 上卡片層；F 發布前檢視，系統只標出偵測到的識別碼（`規格下限 520`／`LOT-2207`／`E-101`），**不自動遮蔽**。
+
+連帶：適用範圍在 Marketplace 上降解析度（只給類別＋台數＋觸發，不給機台 ID）；原課驗收紀錄可看但標「不計入本課簽核」；IA 定為 Header 入口按鈕 → 全頁替換（不做第三個分頁——現有兩顆 Segmented 的軸是「類型」，Marketplace 是「來源」，兩軸混一顆會壞）。
+
+接點：Marketplace 的採用數據正好是**飛輪 2**（課級 → 平台級標準件）的升級門檻判準；OQ-3（多廠 Skill 共享或獨立）與本題同源不同層。
+
+新增頁 [concepts/skill-marketplace.md](concepts/skill-marketplace.md)（`status: needs-review`，流程與資料模型為提案未實作）；新增 MP-OQ-1~4。受影響 wiki 頁：index.md、[open-questions.md](open-questions.md)。
