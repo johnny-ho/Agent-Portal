@@ -602,3 +602,21 @@ PO 先要一份「總覽與左欄互動」的摘要拿去 Claude Design 出樣�
 **瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：4a–4g 七個狀態逐一比對，另 20 項互動全過、無 console error。實測抓到三個自己的 bug：失敗卡寫「中止在 0/5 步驟」（doneSteps 不等於卡在第幾步）、平均時長被等待時間污染、決定完的執行在時長欄位仍寫「暫停中」。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[decisions.md](decisions.md)、index.md。
+
+---
+
+## 2026-08-19 — 對內推廣官網（`website/`）
+
+PO 要求做一個官網，對公司內部設備／製程／製造**值班人員**說明 Agent Portal 是什麼，雙語中文優先，CTA 點下去進 Portal 首頁。新頁：[marketing-site](entities/marketing-site.md)。
+
+**這輪最重要的一件事：第一版被退回。** 我把 AI 當招牌（主標「值班的例行工作，讓 Agent 先跑完」，四大特色三個在講 AI），PO 回「太限縮在 AI，沒有講出課的 workspace 的概念」。回頭讀 wiki 才發現三個支柱我一個都沒講：**課是資料邊界**（原則 1）、**工作站不是儀表板**（原則 2 + home-dashboard 的「進來就可以開始工作」）、**Seed 自治**（四層治理，加東西不用開單等 IT —— 這是對 ECP 最有力的差異化）。改版後主標換成「你的課，有一個自己的工作站」，**AI 降為六個去處之一**，HITL 那格從全站主張變成「一個班裡的一個時刻」。教訓：overview 的第一句話就是定位，不該被最亮眼的功能蓋過去。
+
+**問 PO 的四題**：位置與 CTA（→ `website/` 獨立目錄、相對路徑）、雙語（→ 中英同頁並陳）、素材（→ 真實截圖 + 手刻對話流）、主標（→ 要我建議）。第五題問成熟度語氣時**我的前提是錯的** —— 我依 repo 現況判斷是原型，PO 澄清實際系統已可動，mock 只是 repo 狀態，官網當正式產品賣。
+
+**截圖封鎖再次確認可解**：本環境 `unpkg.com` 與 `cdn.tailwindcss.com` 皆回 000、npm registry 通。沿用 vendor 手法（`shell.html` 不動，只改副本）拍到 Home／Schedule／App Center 三張。新踩到的兩個坑記在 marketing-site 頁：預裝 Chromium 版本與 npm playwright 不合要用 `executablePath`；截圖前不移開游標會拍到 Nav tooltip。另外我 CSS 裡的 `scroll-behavior: smooth` 讓驗證腳本的捲動沒到底，誤判 lazy 圖片 404 —— 是假警報。
+
+**自我稽核抓到自己的違規**：初版 CSS 有 `4px / 2px / 7px / 12px` 六處違反 CLAUDE.md 的 8px 硬性規定，已全數修正並加掃描確認。全站零漸層零 box-shadow。
+
+⚠️ **待 PO 確認**：截圖含示範人名（張文凱、陳育民等），若為真實同事需換成通用名。
+
+受影響 wiki 頁：新增 [marketing-site](entities/marketing-site.md)、index.md、本頁。

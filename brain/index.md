@@ -23,6 +23,7 @@
 - [entities/teams.md](entities/teams.md) — AI 團隊 / Dashboard 團隊分工與跨隊依賴
 - [entities/architecture.md](entities/architecture.md) — Prototype 系統架構：Python 拼裝 build、React UMD + Babel CDN
 - [entities/sitemap.md](entities/sitemap.md) — 產品地圖：sitemap、四層堆疊、三股跨模組互動流
+- [entities/marketing-site.md](entities/marketing-site.md) — **對內推廣官網**（`website/`）：主詞是「課的工作站」不是 AI；八段結構、真實截圖產製流程
 
 ### 模組
 

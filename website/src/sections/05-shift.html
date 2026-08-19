@@ -1,0 +1,152 @@
+<section id="shift">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">A day on shift</p>
+      <h2>一個班的一天</h2>
+      <p class="en">What one shift actually looks like.</p>
+      <p class="lead" style="margin-top:16px">
+        三種角色看到的預設內容不一樣 —— 指標、任務、常用系統都依你的職務排好。
+      </p>
+    </div>
+
+    <div data-tabgroup>
+      <div class="tabs" role="tablist" aria-label="選擇角色">
+        <button class="tab" role="tab" aria-selected="true"  aria-controls="tl-ee"  id="tab-ee">EE　設備工程師</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="tl-pe"  id="tab-pe">PE　製程工程師</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="tl-mfg" id="tab-mfg">MFG　製造工程師</button>
+      </div>
+
+      <div role="tabpanel" id="tl-ee" aria-labelledby="tab-ee">
+        <ol class="timeline">
+          <li><span class="t">07:50</span><div><h4>交接報告已經產好了</h4><p>「當班交接報告」排程跑完 5 個步驟：取稼動資料、取警報並分級、算稼動率與異常密度、取未結案 Case、套課內格式。<strong>數字機器算，判斷你給</strong> —— 你補上交代事項再送出。</p></div></li>
+          <li><span class="t">08:10</span><div><h4>開班掃課況</h4><p>Tool Status 3 台 Down、2 台 Monitoring；未結案 Case 7 件，其中 1 件逾期。要看細節就點下去，不用另開系統。</p></div></li>
+          <li class="hl"><span class="t">09:20</span><div><h4>E-101 跳 ERR-4421，你沒看過這個碼</h4><p>問一句就好。AI 依課內指引給研判與依據，並附上它查了哪些數據、引用哪份文件第幾版。<a href="#zoom-ai">↓ 放大看這一段</a></p></div></li>
+          <li class="hl"><span class="t">14:00</span><div><h4>SPC 異常日報要開單了，它停下來問你</h4><p>排程跑到「開立異常工單」這一步就停住 —— 因為這一步會異動系統。<a href="#zoom-hitl">↓ 放大看這一段</a></p></div></li>
+          <li><span class="t">16:30</span><div><h4>課長派了一件 P1 給你</h4><p>直接出現在 My Tasks 置頂，附機台號、期限與發起人。交接時它還在，不會口頭交代完就消失。</p></div></li>
+        </ol>
+      </div>
+
+      <div role="tabpanel" id="tl-pe" aria-labelledby="tab-pe" hidden>
+        <ol class="timeline">
+          <li><span class="t">08:00</span><div><h4>每日 SPC 巡檢摘要已產出</h4><p>排程自動彙整今日各 Recipe 的 OOC 狀況，開班就在佈告欄看得到。</p></div></li>
+          <li><span class="t">08:20</span><div><h4>開班掃課況</h4><p>SPC OOC 2 筆、待審 DCR 3 件、再發 Alarm 1 件 —— 都是你這個角色的預設指標。</p></div></li>
+          <li class="hl"><span class="t">10:15</span><div><h4>R-512 CP 值一直掉，該怎麼辦</h4><p>問 AI 拿趨勢研判與可能原因，附它查過的量測數據，並帶著 Recipe 參數直接跳進 SPC Console。</p></div></li>
+          <li><span class="t">13:40</span><div><h4>EE 移交過來的製程評估</h4><p>出現在 My Tasks，附原始 Case 與 EE 已經查過的數據 —— 不用再問一次「你查到什麼」。</p></div></li>
+          <li><span class="t">15:00</span><div><h4>Recipe 品質週報排程跑完</h4><p>產出直接進課佈告欄，全課看得到，不用再寄一封信。</p></div></li>
+        </ol>
+      </div>
+
+      <div role="tabpanel" id="tl-mfg" aria-labelledby="tab-mfg" hidden>
+        <ol class="timeline">
+          <li><span class="t">07:45</span><div><h4>生產日報自動彙整完成</h4><p>昨日各線產出、達成率、異常停機事件，排程跑完直接進佈告欄。</p></div></li>
+          <li><span class="t">08:15</span><div><h4>開班掃課況</h4><p>Line 3 產能落後 8%、Priority Lot 4 批、WIP 分布與線體稼動率一頁看完。</p></div></li>
+          <li class="hl"><span class="t">09:30</span><div><h4>W26-042 這批該不該插隊</h4><p>問 AI 拿影響評估 —— 交期、線體稼動、被擠掉的批次分別會怎樣，決定還是你下。</p></div></li>
+          <li><span class="t">11:00</span><div><h4>產能落後預警觸發</h4><p>排程偵測到落後，把提醒推送到值班人員的 Priority Feed，不用等到會議上才發現。</p></div></li>
+          <li><span class="t">15:30</span><div><h4>下午生產協調會議</h4><p>課的排程衝突與停機影響已經彙整好，開會直接談決策，不用現場翻系統。</p></div></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="zoom-ai" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">09:20　放大看</p>
+      <h2>問一句，它連「憑什麼」一起給你</h2>
+      <p class="en">Every answer comes with the evidence behind it.</p>
+    </div>
+
+    <div class="chat">
+      <div class="msg msg-user"><p>E-101 跳 ERR-4421，怎麼辦？</p></div>
+
+      <div class="msg msg-ai">
+        <div class="msg-meta">
+          <span class="tag">Skill · ERR-4421 冷卻異常研判</span>
+          <span class="tag tag-plain">引用知識《ERR-4421 冷卻系統異常排除 v2》</span>
+        </div>
+        <p>這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你查了現場數據。</p>
+        <p><strong>研判：冷卻水路阻塞</strong></p>
+        <p>依據有三：過濾器壓差 0.07 MPa，超過 0.05 的判斷門檻；水壓是緩降不是跳動，形態符合阻塞而非感測器老化；同機台近 7 天沒有其他同碼警報，不像感測器問題。</p>
+        <p><strong>建議處置</strong></p>
+        <ol class="msg-steps">
+          <li>先執行冷卻水路疏通程序（清洗過濾器）</li>
+          <li>疏通後觀察 30 分鐘，水壓應回到 0.18 MPa 以上</li>
+          <li>若 30 分鐘內未回升，再開緊急工單請廠務支援</li>
+        </ol>
+        <p class="msg-foot">這是依指引研判的建議，不是已核准的流程，最後判斷仍在你身上。</p>
+
+        <div class="evidence">
+          <h4>查過的現場數據</h4>
+          <ul>
+            <li><span class="dot dot-ok"></span><div><b>比對適用範圍</b><span>E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合</span></div></li>
+            <li><span class="dot dot-ok"></span><div><b>查警報明細　<code class="mono">fdc.get_alarm_detail</code></b><span>冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa</span></div></li>
+            <li><span class="dot dot-ok"></span><div><b>查感測器趨勢　<code class="mono">eqp.get_sensor_trend</code></b><span>近 2 小時水壓由 0.19 緩降至 0.11，非跳動</span></div></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="msg msg-user"><p>了解。那你順便幫我把 E-101 的 SPC 管制上限放寬一點，不然等一下又會跳。</p></div>
+
+      <div class="msg msg-ai">
+        <p><strong>這個我不能幫你做。</strong>我綁的是「ERR-4421 冷卻異常研判」，屬 Skill 型，只拿得到唯讀工具。我確實試著呼叫了變更管制界限的工具，被擋下來了 —— 就是下面這一行。</p>
+        <div class="blocked">
+          <span class="dot dot-err"></span>
+          <div>
+            <b>已擋下：變更 SPC 管制界限　<code class="mono">spc.update_control_limit</code></b>
+            <span>類型為「Skill」，允許清單內只有唯讀工具</span>
+          </div>
+        </div>
+        <p>而且就算做得到也不該這樣做 —— 水壓異常時放寬上限等於把警報關掉，異常還在。管制界限變更屬製程參數異動，要走 DCR 程序由製程課核准。你要自己做的話，路徑在下面，參數都幫你帶好了：</p>
+        <div class="msg-links">
+          <a class="btn btn-ghost" href="../index.html">開啟 SPC Console</a>
+          <a class="btn btn-ghost" href="../index.html">開 DCR 申請</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      它沒有照著做，也沒有只回一句「無法執行」—— 而是說明為什麼不行、應該走哪條路，並把你送到那條路的入口。
+      <span class="en" style="display:block;margin-top:8px">It refuses, explains why, and hands you the correct path.</span>
+    </p>
+  </div>
+</section>
+
+<section id="zoom-hitl">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">14:00　放大看</p>
+      <h2>會動到系統的那一步，它停下來等你</h2>
+      <p class="en">Every write stops and waits for a human.</p>
+    </div>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <img src="assets/shot-schedule.png" alt="排程決策收件匣：SPC 異常日報停在第 3 步「開立異常工單」，等待人工決定" width="2000" height="700" loading="lazy">
+      </div>
+    </figure>
+
+    <div class="grid grid-3 hitl-grid">
+      <div class="card">
+        <h4>停在哪一步，寫得很清楚</h4>
+        <p>SPC 異常日報跑到 Step 3「開立異常工單」。前兩步（查詢今日 SPC 資料、篩選 OOC 異常）已經跑完，結果都攤開給你看。</p>
+      </div>
+      <div class="card">
+        <h4>它打算做什麼，先講明白</h4>
+        <p>要呼叫哪個工具、帶什麼參數、依據是什麼，一行一行列出來 —— 不是叫你盲目按確認。</p>
+      </div>
+      <div class="card">
+        <h4>三個選項，你挑一個</h4>
+        <p>同意並繼續、改參數、略過此步。全課任何成員都能決定，不用先認領；先送出的決定即定案，並記下決定者與時間。</p>
+      </div>
+    </div>
+
+    <p class="note">
+      這道關卡是在<strong>執行的當下</strong>把關，不是靠事前審查流程內容。
+      所以不管那個流程裡寫了什麼，只要那一步會寫入，就一定會停在這裡。
+      <span class="en" style="display:block;margin-top:8px">
+        The gate runs at execution time, so no flow can slip a write past it.
+      </span>
+    </p>
+  </div>
+</section>

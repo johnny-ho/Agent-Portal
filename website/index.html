@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Portal — 你的課，有一個自己的工作站</title>
+<meta name="description" content="Agent Portal 是以「課」為單位的線上工作站：課的佈告欄、機台狀態、未結案 Case、你的任務與課常用系統入口，開班打開就全在同一頁。">
+<style>
+/* ==========================================================================
+   Agent Portal 官網 — 設計 token 與基礎樣式
+   嚴格遵守 CLAUDE.md UI/UX Guideline：
+   · 主色 #2563EB · 無漸層 · 無 box-shadow（僅允許極輕微 0 1px 3px）
+   · 所有 margin / padding 為 8 的倍數
+   · Button 圓角 6px · Tabs 膠囊 999px 且無底線 · 狀態圓點 10x10
+   ========================================================================== */
+
+:root {
+  /* 色彩 */
+  --c-primary:        #2563EB;
+  --c-primary-hover:  #1D4ED8;
+  --c-primary-soft:   rgba(37, 99, 235, 0.08);
+  --c-primary-line:   rgba(37, 99, 235, 0.20);
+
+  --c-text:           #222222;
+  --c-text-2:         #555555;
+  --c-text-3:         #888888;
+
+  --c-bg:             #FFFFFF;
+  --c-panel:          #F5F5F5;
+  --c-border:         #E0E0E0;
+  --c-border-strong:  #9E9E9E;
+
+  /* 狀態四色（與產品一致） */
+  --c-ok:             #22C55E;
+  --c-warn:           #F59E0B;
+  --c-err:            #EF4444;
+  --c-idle:           #6B7280;
+
+  /* 間距：8px 系統 */
+  --s1:  8px;  --s2: 16px;  --s3: 24px;  --s4: 32px;
+  --s5: 40px;  --s6: 48px;  --s8: 64px;  --s10: 80px;  --s12: 96px;
+
+  --radius-btn:   6px;
+  --radius-card:  8px;
+  --radius-pill:  999px;
+
+  --maxw: 1120px;
+}
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; scroll-padding-top: 88px; }
+
+body {
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── 通用排版 ───────────────────────────────────────────────────────────── */
+.wrap { max-width: var(--maxw); margin: 0 auto; padding-left: var(--s3); padding-right: var(--s3); }
+
+section { padding-top: var(--s12); padding-bottom: var(--s12); }
+section.panel { background: var(--c-panel); }
+
+.eyebrow {
+  font-size: 13px; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--c-primary); margin-bottom: var(--s2);
+}
+
+h2 { font-size: 32px; font-weight: 600; line-height: 1.4; letter-spacing: -0.01em; }
+h3 { font-size: 20px; font-weight: 600; line-height: 1.5; }
+h4 { font-size: 16px; font-weight: 600; line-height: 1.5; }
+
+/* 英文副行：中文為主、英文為輔 */
+.en {
+  font-size: 13px; font-weight: 400; line-height: 1.6;
+  color: var(--c-text-3); letter-spacing: 0.01em;
+}
+h2 + .en { margin-top: var(--s1); font-size: 14px; }
+
+.lead { font-size: 16px; color: var(--c-text-2); line-height: 1.8; }
+
+.sec-head { margin-bottom: var(--s6); max-width: 720px; }
+
+.mono { font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; }
+
+/* ── 按鈕 ──────────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: var(--s1);
+  border-radius: var(--radius-btn); border: 1px solid transparent;
+  font-size: 14px; font-weight: 600; line-height: 1;
+  padding: var(--s2) var(--s3); cursor: pointer; text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.btn-primary { background: var(--c-primary); color: #FFFFFF; }
+.btn-primary:hover { background: var(--c-primary-hover); }
+.btn-ghost { background: transparent; color: var(--c-text); border-color: var(--c-border); }
+.btn-ghost:hover { border-color: var(--c-border-strong); }
+.btn-lg { padding: var(--s2) var(--s4); font-size: 15px; }
+.btn .sub { font-weight: 400; opacity: 0.75; font-size: 12px; }
+
+/* ── 卡片 ──────────────────────────────────────────────────────────────── */
+.card {
+  background: var(--c-bg); border: 1px solid var(--c-border);
+  border-radius: var(--radius-card); padding: var(--s3);
+  transition: border-color 0.15s;
+}
+.card:hover { border-color: var(--c-border-strong); }
+section.panel .card { background: var(--c-bg); }
+
+.grid { display: grid; gap: var(--s3); }
+.grid-2 { grid-template-columns: repeat(2, 1fr); }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+/* ── 狀態圓點：固定 10x10 ───────────────────────────────────────────────── */
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
+.dot-ok { background: var(--c-ok); }
+.dot-warn { background: var(--c-warn); }
+.dot-err { background: var(--c-err); }
+.dot-idle { background: var(--c-idle); }
+
+/* ── 膠囊 Tabs：圓角 999px、選中填滿主色、絕不使用底線 ────────────────────── */
+.tabs { display: flex; gap: var(--s1); flex-wrap: wrap; margin-bottom: var(--s5); }
+.tab {
+  border-radius: var(--radius-pill); border: 1px solid var(--c-border);
+  background: var(--c-bg); color: var(--c-text-2);
+  font-size: 14px; font-weight: 600; line-height: 1;
+  padding: var(--s2) var(--s3); cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.tab:hover { border-color: var(--c-border-strong); }
+.tab[aria-selected="true"] { background: var(--c-primary); border-color: var(--c-primary); color: #FFFFFF; }
+
+/* ── 標籤 ──────────────────────────────────────────────────────────────── */
+.tag {
+  display: inline-flex; align-items: center; gap: var(--s1);
+  border-radius: var(--radius-pill); padding: 0 var(--s1);
+  font-size: 12px; font-weight: 600; line-height: 24px;
+  background: var(--c-primary-soft); color: var(--c-primary);
+  border: 1px solid var(--c-primary-line);
+}
+.tag-plain { background: var(--c-panel); color: var(--c-text-2); border-color: var(--c-border); }
+
+@media (max-width: 900px) {
+  section { padding-top: var(--s8); padding-bottom: var(--s8); }
+  h2 { font-size: 24px; }
+  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+}
+
+/* ==========================================================================
+   段落樣式
+   ========================================================================== */
+
+/* ── Header ────────────────────────────────────────────────────────────── */
+.site-head {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--c-bg); border-bottom: 1px solid var(--c-border);
+}
+.head-inner { display: flex; align-items: center; gap: var(--s4); height: 72px; }
+.brand { display: flex; align-items: center; gap: var(--s1); text-decoration: none; color: var(--c-text); }
+.brand-mark { width: 24px; height: 24px; border-radius: var(--radius-btn); background: var(--c-primary); }
+.brand-name { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; }
+.head-nav { display: flex; gap: var(--s3); margin-left: auto; }
+.head-nav a { color: var(--c-text-2); text-decoration: none; font-size: 14px; }
+.head-nav a:hover { color: var(--c-primary); }
+
+/* ── Hero ──────────────────────────────────────────────────────────────── */
+.hero { padding-top: var(--s10); padding-bottom: var(--s10); }
+.hero-tag { margin-bottom: var(--s3); }
+.hero h1 { font-size: 48px; font-weight: 700; line-height: 1.25; letter-spacing: -0.02em; }
+.hero-en { margin-top: var(--s2); font-size: 16px; }
+.hero-lead { margin-top: var(--s4); max-width: 720px; }
+.hero-lead-en { margin-top: var(--s1); max-width: 720px; }
+.hero-actions { display: flex; flex-wrap: wrap; gap: var(--s2); margin-top: var(--s5); }
+.trust { list-style: none; display: flex; flex-wrap: wrap; gap: var(--s4); margin-top: var(--s5); }
+.trust li { display: flex; align-items: center; gap: var(--s1); font-size: 13px; color: var(--c-text-2); }
+
+/* ── 對照表 ─────────────────────────────────────────────────────────────── */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+.compare-col { background: var(--c-bg); border: 1px solid var(--c-border); border-radius: var(--radius-card); padding: var(--s4); }
+.compare-col-new { border-color: var(--c-primary); }
+.compare-title { font-size: 18px; }
+.compare-title-old { color: var(--c-text-3); }
+.compare-title-new { color: var(--c-primary); }
+.compare-list { list-style: none; margin-top: var(--s3); }
+.compare-list li {
+  position: relative; padding-left: var(--s3); padding-top: var(--s2); padding-bottom: var(--s2);
+  border-top: 1px solid var(--c-border); color: var(--c-text-2);
+}
+.compare-list li::before { content: '—'; position: absolute; left: 0; color: var(--c-text-3); }
+.compare-list-new li { color: var(--c-text); }
+.compare-list-new li::before { content: '✓'; color: var(--c-primary); font-weight: 600; }
+
+/* ── 說明註記 ───────────────────────────────────────────────────────────── */
+.note {
+  margin-top: var(--s5); padding: var(--s3) var(--s4);
+  border-left: 2px solid var(--c-primary); background: var(--c-primary-soft);
+  border-radius: 0 var(--radius-card) var(--radius-card) 0;
+  font-size: 15px; color: var(--c-text); max-width: 880px;
+}
+
+/* ── 截圖 ──────────────────────────────────────────────────────────────── */
+.shot { margin-top: var(--s2); }
+.shot-frame {
+  position: relative; border: 1px solid var(--c-border);
+  border-radius: var(--radius-card); overflow: hidden; background: var(--c-bg);
+}
+.shot-frame img { display: block; width: 100%; height: auto; }
+.shot figcaption { margin-top: var(--s2); font-size: 13px; color: var(--c-text-3); max-width: 880px; }
+.shot-sm { margin-top: var(--s6); }
+
+.marker {
+  position: absolute; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--c-primary); color: #FFFFFF;
+  font-size: 14px; font-weight: 700; line-height: 32px; text-align: center;
+  border: 2px solid #FFFFFF;
+}
+.marker-static { position: static; display: block; margin-bottom: var(--s2); }
+
+.zone-grid { margin-top: var(--s5); }
+.zone h4 { display: flex; flex-direction: column; margin-bottom: var(--s1); }
+.zone h4 .en { margin-top: 0; }
+.zone p { color: var(--c-text-2); }
+
+/* ── 六個去處 ───────────────────────────────────────────────────────────── */
+.place h4 { margin-bottom: var(--s1); }
+.place p { color: var(--c-text-2); }
+
+/* ── 時間軸 ─────────────────────────────────────────────────────────────── */
+.timeline { list-style: none; }
+.timeline li { display: grid; grid-template-columns: 64px 1fr; gap: var(--s3); }
+.timeline .t { font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; font-size: 14px; font-weight: 600; color: var(--c-primary); }
+.timeline li > div { border-left: 2px solid var(--c-border); padding-left: var(--s3); padding-bottom: var(--s4); }
+.timeline li:last-child > div { padding-bottom: 0; }
+.timeline li.hl > div { border-left-color: var(--c-primary); }
+.timeline h4 { margin-bottom: var(--s1); }
+.timeline p { color: var(--c-text-2); }
+.timeline a { color: var(--c-primary); text-decoration: none; font-weight: 600; white-space: nowrap; }
+.timeline a:hover { text-decoration: underline; }
+
+/* ── 對話流 ─────────────────────────────────────────────────────────────── */
+.chat { max-width: 840px; display: flex; flex-direction: column; gap: var(--s3); }
+.msg p + p { margin-top: var(--s2); }
+.msg-user {
+  align-self: flex-end; max-width: 80%;
+  background: var(--c-primary); color: #FFFFFF;
+  border-radius: var(--radius-card); padding: var(--s2) var(--s3);
+}
+.msg-ai {
+  background: var(--c-bg); border: 1px solid var(--c-border);
+  border-radius: var(--radius-card); padding: var(--s3);
+}
+.msg-meta { display: flex; flex-wrap: wrap; gap: var(--s1); margin-bottom: var(--s2); }
+.msg-steps { margin: var(--s2) 0 0 var(--s3); }
+.msg-steps li { padding: var(--s1) 0; color: var(--c-text-2); }
+.msg-foot { margin-top: var(--s2); font-size: 13px; color: var(--c-text-3); }
+.msg-links { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s3); }
+
+.evidence { margin-top: var(--s3); background: var(--c-panel); border-radius: var(--radius-btn); padding: var(--s2) var(--s3) var(--s3); }
+.evidence h4 { font-size: 13px; color: var(--c-text-3); margin-bottom: var(--s2); font-weight: 600; }
+.evidence ul { list-style: none; display: flex; flex-direction: column; gap: var(--s2); }
+.evidence li { display: flex; gap: var(--s1); align-items: flex-start; }
+.evidence .dot { margin-top: var(--s1); }
+.evidence b { display: block; font-size: 13px; font-weight: 600; }
+.evidence span { display: block; font-size: 13px; color: var(--c-text-2); }
+.evidence code { font-size: 12px; color: var(--c-text-3); }
+
+.blocked {
+  display: flex; gap: var(--s1); align-items: flex-start; margin-top: var(--s2);
+  border: 1px solid rgba(239, 68, 68, 0.30); background: rgba(239, 68, 68, 0.06);
+  border-radius: var(--radius-btn); padding: var(--s2);
+}
+.blocked .dot { margin-top: var(--s1); }
+.blocked b { display: block; font-size: 13px; }
+.blocked span { display: block; font-size: 13px; color: var(--c-text-2); }
+.blocked code { font-size: 12px; color: var(--c-text-3); }
+
+.hitl-grid { margin-top: var(--s5); }
+.hitl-grid p { color: var(--c-text-2); }
+.hitl-grid h4 { margin-bottom: var(--s1); }
+
+/* ── 治理 ──────────────────────────────────────────────────────────────── */
+.gov h4 { margin: var(--s2) 0 var(--s1); }
+.gov p { color: var(--c-text-2); }
+.gov-hl { border-color: var(--c-primary); }
+
+/* ── FAQ ───────────────────────────────────────────────────────────────── */
+.faq { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+.faq-item { border-top: 1px solid var(--c-border); padding-top: var(--s3); }
+.faq-item h4 { margin-bottom: 0; }
+.faq-item > p:last-child { margin-top: var(--s2); color: var(--c-text-2); }
+
+/* ── 收尾 CTA ───────────────────────────────────────────────────────────── */
+.cta { background: var(--c-primary); color: #FFFFFF; text-align: center; }
+.cta h2 { color: #FFFFFF; }
+.cta .en { color: rgba(255, 255, 255, 0.72); }
+.cta-lead { color: rgba(255, 255, 255, 0.88); margin-top: var(--s3); }
+.cta .btn-primary { background: #FFFFFF; color: var(--c-primary); margin-top: var(--s5); }
+.cta .btn-primary:hover { background: #F5F5F5; }
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+.site-foot { border-top: 1px solid var(--c-border); padding: var(--s6) 0; }
+.foot-inner { display: flex; flex-wrap: wrap; gap: var(--s4); justify-content: space-between; align-items: flex-start; }
+.foot-brand { font-size: 16px; font-weight: 600; }
+.foot-nav { display: flex; flex-wrap: wrap; gap: var(--s3); }
+.foot-nav a { color: var(--c-text-2); text-decoration: none; font-size: 13px; }
+.foot-nav a:hover { color: var(--c-primary); }
+
+/* ── 響應式 ─────────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .head-nav { display: none; }
+  .hero { padding-top: var(--s6); padding-bottom: var(--s6); }
+  .hero h1 { font-size: 32px; }
+  .br-m { display: none; }
+  .compare, .faq { grid-template-columns: 1fr; }
+  .timeline li { grid-template-columns: 56px 1fr; gap: var(--s2); }
+  .msg-user { max-width: 100%; }
+  .marker { width: 24px; height: 24px; line-height: 24px; font-size: 12px; }
+  .trust { gap: var(--s2); }
+}
+
+</style>
+</head>
+<body>
+<!-- ── 00-header.html ── -->
+<header class="site-head">
+  <div class="wrap head-inner">
+    <a class="brand" href="#top">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">Agent Portal</span>
+    </a>
+    <nav class="head-nav">
+      <a href="#section-first">為什麼是「課」</a>
+      <a href="#workspace">打開長這樣</a>
+      <a href="#shift">一個班的一天</a>
+      <a href="#faq">常見疑問</a>
+    </nav>
+    <a class="btn btn-primary" href="../index.html">進入 Portal</a>
+  </div>
+</header>
+
+
+<!-- ── 01-hero.html ── -->
+<section id="top" class="hero">
+  <div class="wrap">
+    <p class="tag hero-tag">以「課」為單位的線上工作站</p>
+
+    <h1>你的課，<br class="br-m">有一個自己的工作站</h1>
+    <p class="en hero-en">A workspace that belongs to your section.</p>
+
+    <p class="lead hero-lead">
+      課的佈告欄、機台狀態、未結案 Case、Lot Hold、課的 KPI、你今天的任務、
+      課常用的系統入口 —— 開班打開它，全部在同一頁。
+    </p>
+    <p class="en hero-lead-en">
+      Your section's bulletin, tool status, open cases, KPIs, your tasks and the systems
+      your section actually uses — all on one page when your shift starts.
+    </p>
+
+    <div class="hero-actions">
+      <a class="btn btn-primary btn-lg" href="../index.html">進入 Agent Portal　→</a>
+      <a class="btn btn-ghost btn-lg" href="#shift">看一個班的一天　↓</a>
+    </div>
+
+    <ul class="trust">
+      <li><span class="dot dot-ok"></span>資料範圍就是你的課</li>
+      <li><span class="dot dot-ok"></span>每張卡片都能點下去做事</li>
+      <li><span class="dot dot-ok"></span>版面由你們課自己的 Seed 決定</li>
+    </ul>
+  </div>
+</section>
+
+
+<!-- ── 02-workspace.html ── -->
+<section id="workspace" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">The workspace</p>
+      <h2>開班打開，長這樣</h2>
+      <p class="en">This is what you see when your shift starts.</p>
+    </div>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <img src="assets/shot-home.png" alt="Agent Portal 首頁：左側為課佈告欄與機台狀態，右側為我的任務面板，底部為 AI 快問欄" width="2000" height="1250">
+        <span class="marker" style="left:10%;  top:6.5%">1</span>
+        <span class="marker" style="left:84%;  top:5.2%"  >2</span>
+        <span class="marker" style="left:6.5%; top:92.5%">3</span>
+      </div>
+      <figcaption class="en">ETC 設備課 · 日班 08:00–16:00</figcaption>
+    </figure>
+
+    <div class="grid grid-3 zone-grid">
+      <div class="card zone">
+        <span class="marker marker-static">1</span>
+        <h4>課的公共區<span class="en">Section Zone</span></h4>
+        <p>課佈告欄、機台 Tool Status、未結案 Case、Lot Hold、課的 KPI 摘要。
+           內容與排列由你們課的 Seed 決定，全課看到的是同一份。</p>
+      </div>
+      <div class="card zone">
+        <span class="marker marker-static">2</span>
+        <h4>我的任務<span class="en">My Tasks</span></h4>
+        <p>右側全高面板，只放你自己的事。P1 置頂、不會自動重排，
+           誰派的、什麼時候到期、關聯哪台機台都寫清楚。</p>
+      </div>
+      <div class="card zone">
+        <span class="marker marker-static">3</span>
+        <h4>快問欄<span class="en">AmbientBar</span></h4>
+        <p>常駐底部。已經載入課的上下文，不用先說明你是哪一課、
+           管哪些機台，直接問就好。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ── 03-section.html ── -->
+<section id="section-first">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Section-first</p>
+      <h2>為什麼是「課」，不是「功能」</h2>
+      <p class="en">Your section is the unit — not a directory of functions.</p>
+      <p class="lead" style="margin-top:16px">
+        課是排班、交接、協調的實際單位。所以 Portal 把「課」當成資料邊界：
+        你看到的每一筆，都是你的課的事，不是整廠的雜訊。
+      </p>
+    </div>
+
+    <div class="compare">
+      <div class="compare-col">
+        <h3 class="compare-title compare-title-old">現在</h3>
+        <p class="en">Today</p>
+        <ul class="compare-list">
+          <li>課的資訊散在 FDC、MES、SPC、Case Center，各點各的</li>
+          <li>Function tree 要自己找功能，先想「這個在哪一層」</li>
+          <li>想加一個課裡要用的東西，得跟 IT 開單排隊</li>
+          <li>儀表板看得很漂亮，看完還是得回原系統做事</li>
+        </ul>
+      </div>
+      <div class="compare-col compare-col-new">
+        <h3 class="compare-title compare-title-new">用了之後</h3>
+        <p class="en">With Agent Portal</p>
+        <ul class="compare-list compare-list-new">
+          <li>課的當前狀態集中在同一頁，範圍就是你的課</li>
+          <li>開啟即見課況，不用先找功能在哪裡</li>
+          <li>你們課的 Seed 自己排版面、加應用、維護知識</li>
+          <li>每張卡片都能點下去，帶著參數直接跳進子系統</li>
+        </ul>
+      </div>
+    </div>
+
+    <p class="note">
+      這也是它<strong>不是儀表板</strong>的原因 —— 每張卡片、每個指標都必須能點下去做事。
+      我們不做給課長欣賞的精美儀表板。
+      <span class="en" style="display:block;margin-top:8px">
+        It's a workspace, not a dashboard. Every card is something you can act on.
+      </span>
+    </p>
+  </div>
+</section>
+
+
+<!-- ── 04-places.html ── -->
+<section id="places" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Six places</p>
+      <h2>六個去處，一件事一個地方</h2>
+      <p class="en">Six destinations — one place for each kind of work.</p>
+    </div>
+
+    <div class="grid grid-3 places">
+      <div class="card place">
+        <h4>Home　工作站</h4>
+        <p>課的當前狀態與你今天要處理的事，開班第一站。</p>
+      </div>
+      <div class="card place">
+        <h4>KPI　報表中心</h4>
+        <p>課的報表書籤與趨勢深入分析，數字不對時往下追。</p>
+      </div>
+      <div class="card place">
+        <h4>App　應用中心</h4>
+        <p>課常用的系統集中在這，可個人釘選，也能查全廠功能目錄。</p>
+      </div>
+      <div class="card place">
+        <h4>Task　派工管理</h4>
+        <p>課長派工、跨角色移交 —— 發起和接收都有明確的地方，不再靠口頭。</p>
+      </div>
+      <div class="card place">
+        <h4>AI　助理</h4>
+        <p>用課的上下文問問題。每個回答都標注查了哪些數據、引用哪份知識。</p>
+      </div>
+      <div class="card place">
+        <h4>Schedule　排程與決策</h4>
+        <p>課裡重複做的事定時跑完；需要人決定的，排隊在這等你。</p>
+      </div>
+    </div>
+
+    <figure class="shot shot-sm">
+      <div class="shot-frame">
+        <img src="assets/shot-app.png" alt="App Center：課常用應用釘選於上方，下方為完整應用目錄與分類" width="2000" height="775" loading="lazy">
+      </div>
+      <figcaption>
+        App Center —— 課裡真正在用的 28 個系統都在這，常用的釘選起來會同步顯示在首頁。
+        <span class="en">Your section's systems in one place. Pin the ones you use; they show up on Home.</span>
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+
+<!-- ── 05-shift.html ── -->
+<section id="shift">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">A day on shift</p>
+      <h2>一個班的一天</h2>
+      <p class="en">What one shift actually looks like.</p>
+      <p class="lead" style="margin-top:16px">
+        三種角色看到的預設內容不一樣 —— 指標、任務、常用系統都依你的職務排好。
+      </p>
+    </div>
+
+    <div data-tabgroup>
+      <div class="tabs" role="tablist" aria-label="選擇角色">
+        <button class="tab" role="tab" aria-selected="true"  aria-controls="tl-ee"  id="tab-ee">EE　設備工程師</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="tl-pe"  id="tab-pe">PE　製程工程師</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="tl-mfg" id="tab-mfg">MFG　製造工程師</button>
+      </div>
+
+      <div role="tabpanel" id="tl-ee" aria-labelledby="tab-ee">
+        <ol class="timeline">
+          <li><span class="t">07:50</span><div><h4>交接報告已經產好了</h4><p>「當班交接報告」排程跑完 5 個步驟：取稼動資料、取警報並分級、算稼動率與異常密度、取未結案 Case、套課內格式。<strong>數字機器算，判斷你給</strong> —— 你補上交代事項再送出。</p></div></li>
+          <li><span class="t">08:10</span><div><h4>開班掃課況</h4><p>Tool Status 3 台 Down、2 台 Monitoring；未結案 Case 7 件，其中 1 件逾期。要看細節就點下去，不用另開系統。</p></div></li>
+          <li class="hl"><span class="t">09:20</span><div><h4>E-101 跳 ERR-4421，你沒看過這個碼</h4><p>問一句就好。AI 依課內指引給研判與依據，並附上它查了哪些數據、引用哪份文件第幾版。<a href="#zoom-ai">↓ 放大看這一段</a></p></div></li>
+          <li class="hl"><span class="t">14:00</span><div><h4>SPC 異常日報要開單了，它停下來問你</h4><p>排程跑到「開立異常工單」這一步就停住 —— 因為這一步會異動系統。<a href="#zoom-hitl">↓ 放大看這一段</a></p></div></li>
+          <li><span class="t">16:30</span><div><h4>課長派了一件 P1 給你</h4><p>直接出現在 My Tasks 置頂，附機台號、期限與發起人。交接時它還在，不會口頭交代完就消失。</p></div></li>
+        </ol>
+      </div>
+
+      <div role="tabpanel" id="tl-pe" aria-labelledby="tab-pe" hidden>
+        <ol class="timeline">
+          <li><span class="t">08:00</span><div><h4>每日 SPC 巡檢摘要已產出</h4><p>排程自動彙整今日各 Recipe 的 OOC 狀況，開班就在佈告欄看得到。</p></div></li>
+          <li><span class="t">08:20</span><div><h4>開班掃課況</h4><p>SPC OOC 2 筆、待審 DCR 3 件、再發 Alarm 1 件 —— 都是你這個角色的預設指標。</p></div></li>
+          <li class="hl"><span class="t">10:15</span><div><h4>R-512 CP 值一直掉，該怎麼辦</h4><p>問 AI 拿趨勢研判與可能原因，附它查過的量測數據，並帶著 Recipe 參數直接跳進 SPC Console。</p></div></li>
+          <li><span class="t">13:40</span><div><h4>EE 移交過來的製程評估</h4><p>出現在 My Tasks，附原始 Case 與 EE 已經查過的數據 —— 不用再問一次「你查到什麼」。</p></div></li>
+          <li><span class="t">15:00</span><div><h4>Recipe 品質週報排程跑完</h4><p>產出直接進課佈告欄，全課看得到，不用再寄一封信。</p></div></li>
+        </ol>
+      </div>
+
+      <div role="tabpanel" id="tl-mfg" aria-labelledby="tab-mfg" hidden>
+        <ol class="timeline">
+          <li><span class="t">07:45</span><div><h4>生產日報自動彙整完成</h4><p>昨日各線產出、達成率、異常停機事件，排程跑完直接進佈告欄。</p></div></li>
+          <li><span class="t">08:15</span><div><h4>開班掃課況</h4><p>Line 3 產能落後 8%、Priority Lot 4 批、WIP 分布與線體稼動率一頁看完。</p></div></li>
+          <li class="hl"><span class="t">09:30</span><div><h4>W26-042 這批該不該插隊</h4><p>問 AI 拿影響評估 —— 交期、線體稼動、被擠掉的批次分別會怎樣，決定還是你下。</p></div></li>
+          <li><span class="t">11:00</span><div><h4>產能落後預警觸發</h4><p>排程偵測到落後，把提醒推送到值班人員的 Priority Feed，不用等到會議上才發現。</p></div></li>
+          <li><span class="t">15:30</span><div><h4>下午生產協調會議</h4><p>課的排程衝突與停機影響已經彙整好，開會直接談決策，不用現場翻系統。</p></div></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="zoom-ai" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">09:20　放大看</p>
+      <h2>問一句，它連「憑什麼」一起給你</h2>
+      <p class="en">Every answer comes with the evidence behind it.</p>
+    </div>
+
+    <div class="chat">
+      <div class="msg msg-user"><p>E-101 跳 ERR-4421，怎麼辦？</p></div>
+
+      <div class="msg msg-ai">
+        <div class="msg-meta">
+          <span class="tag">Skill · ERR-4421 冷卻異常研判</span>
+          <span class="tag tag-plain">引用知識《ERR-4421 冷卻系統異常排除 v2》</span>
+        </div>
+        <p>這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你查了現場數據。</p>
+        <p><strong>研判：冷卻水路阻塞</strong></p>
+        <p>依據有三：過濾器壓差 0.07 MPa，超過 0.05 的判斷門檻；水壓是緩降不是跳動，形態符合阻塞而非感測器老化；同機台近 7 天沒有其他同碼警報，不像感測器問題。</p>
+        <p><strong>建議處置</strong></p>
+        <ol class="msg-steps">
+          <li>先執行冷卻水路疏通程序（清洗過濾器）</li>
+          <li>疏通後觀察 30 分鐘，水壓應回到 0.18 MPa 以上</li>
+          <li>若 30 分鐘內未回升，再開緊急工單請廠務支援</li>
+        </ol>
+        <p class="msg-foot">這是依指引研判的建議，不是已核准的流程，最後判斷仍在你身上。</p>
+
+        <div class="evidence">
+          <h4>查過的現場數據</h4>
+          <ul>
+            <li><span class="dot dot-ok"></span><div><b>比對適用範圍</b><span>E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合</span></div></li>
+            <li><span class="dot dot-ok"></span><div><b>查警報明細　<code class="mono">fdc.get_alarm_detail</code></b><span>冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa</span></div></li>
+            <li><span class="dot dot-ok"></span><div><b>查感測器趨勢　<code class="mono">eqp.get_sensor_trend</code></b><span>近 2 小時水壓由 0.19 緩降至 0.11，非跳動</span></div></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="msg msg-user"><p>了解。那你順便幫我把 E-101 的 SPC 管制上限放寬一點，不然等一下又會跳。</p></div>
+
+      <div class="msg msg-ai">
+        <p><strong>這個我不能幫你做。</strong>我綁的是「ERR-4421 冷卻異常研判」，屬 Skill 型，只拿得到唯讀工具。我確實試著呼叫了變更管制界限的工具，被擋下來了 —— 就是下面這一行。</p>
+        <div class="blocked">
+          <span class="dot dot-err"></span>
+          <div>
+            <b>已擋下：變更 SPC 管制界限　<code class="mono">spc.update_control_limit</code></b>
+            <span>類型為「Skill」，允許清單內只有唯讀工具</span>
+          </div>
+        </div>
+        <p>而且就算做得到也不該這樣做 —— 水壓異常時放寬上限等於把警報關掉，異常還在。管制界限變更屬製程參數異動，要走 DCR 程序由製程課核准。你要自己做的話，路徑在下面，參數都幫你帶好了：</p>
+        <div class="msg-links">
+          <a class="btn btn-ghost" href="../index.html">開啟 SPC Console</a>
+          <a class="btn btn-ghost" href="../index.html">開 DCR 申請</a>
+        </div>
+      </div>
+    </div>
+
+    <p class="note">
+      它沒有照著做，也沒有只回一句「無法執行」—— 而是說明為什麼不行、應該走哪條路，並把你送到那條路的入口。
+      <span class="en" style="display:block;margin-top:8px">It refuses, explains why, and hands you the correct path.</span>
+    </p>
+  </div>
+</section>
+
+<section id="zoom-hitl">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">14:00　放大看</p>
+      <h2>會動到系統的那一步，它停下來等你</h2>
+      <p class="en">Every write stops and waits for a human.</p>
+    </div>
+
+    <figure class="shot">
+      <div class="shot-frame">
+        <img src="assets/shot-schedule.png" alt="排程決策收件匣：SPC 異常日報停在第 3 步「開立異常工單」，等待人工決定" width="2000" height="700" loading="lazy">
+      </div>
+    </figure>
+
+    <div class="grid grid-3 hitl-grid">
+      <div class="card">
+        <h4>停在哪一步，寫得很清楚</h4>
+        <p>SPC 異常日報跑到 Step 3「開立異常工單」。前兩步（查詢今日 SPC 資料、篩選 OOC 異常）已經跑完，結果都攤開給你看。</p>
+      </div>
+      <div class="card">
+        <h4>它打算做什麼，先講明白</h4>
+        <p>要呼叫哪個工具、帶什麼參數、依據是什麼，一行一行列出來 —— 不是叫你盲目按確認。</p>
+      </div>
+      <div class="card">
+        <h4>三個選項，你挑一個</h4>
+        <p>同意並繼續、改參數、略過此步。全課任何成員都能決定，不用先認領；先送出的決定即定案，並記下決定者與時間。</p>
+      </div>
+    </div>
+
+    <p class="note">
+      這道關卡是在<strong>執行的當下</strong>把關，不是靠事前審查流程內容。
+      所以不管那個流程裡寫了什麼，只要那一步會寫入，就一定會停在這裡。
+      <span class="en" style="display:block;margin-top:8px">
+        The gate runs at execution time, so no flow can slip a write past it.
+      </span>
+    </p>
+  </div>
+</section>
+
+
+<!-- ── 06-yours.html ── -->
+<section id="yours" class="panel">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Your section runs it</p>
+      <h2>這個地盤，你們自己管</h2>
+      <p class="en">Your section configures it — not IT.</p>
+      <p class="lead" style="margin-top:16px">
+        每個課有自己的 <strong>Seed</strong>。Seed 不是 IT，就是你們課裡的工程師 ——
+        課的版面、課要用的應用、課的知識與流程，由他來調。
+      </p>
+    </div>
+
+    <div class="grid grid-3 gov">
+      <div class="card">
+        <p class="tag tag-plain">平台團隊</p>
+        <h4>骨架</h4>
+        <p>頁面結構、Nav、Widget 規格與資料契約。所有課共用同一套，不會各做各的。</p>
+      </div>
+      <div class="card gov-hl">
+        <p class="tag">你們課的 Seed</p>
+        <h4>課的內容</h4>
+        <p>首頁版面怎麼排、課要用哪些應用、KPI 書籤放什麼、課內知識與 Codify 流程怎麼維護。</p>
+      </div>
+      <div class="card">
+        <p class="tag tag-plain">你自己</p>
+        <h4>個人偏好</h4>
+        <p>應用釘選（最多 20 個）、個人顯示偏好。課的公共區不會被個人改掉。</p>
+      </div>
+    </div>
+
+    <p class="note">
+      所以想加一個課裡要用的東西，<strong>找你們課的 Seed 就好，不用開單等 IT 排程</strong>。
+      一個課可以有多位 Seed，不會因為某個人請假就卡住。
+      <span class="en" style="display:block;margin-top:8px">
+        Need something changed? Ask your section's Seed — no ticket, no waiting on IT.
+      </span>
+    </p>
+  </div>
+</section>
+
+
+<!-- ── 07-faq.html ── -->
+<section id="faq">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">FAQ</p>
+      <h2>常見疑問</h2>
+      <p class="en">Questions people actually ask.</p>
+    </div>
+
+    <div class="faq">
+      <div class="faq-item">
+        <h4>這是不是給課長看我在幹嘛的監視工具？</h4>
+        <p class="en">Is this a monitoring tool for my supervisor?</p>
+        <p>不是。Portal 以「課」為資料邊界，預設畫面是給工程師自己用的；
+           AI 的建議可以一鍵忽略，<strong>不會因此產生行政紀錄或追蹤義務</strong>。
+           我們的出發點是讓你少寫報告、少開單，不是多一個被盯的地方。</p>
+      </div>
+
+      <div class="faq-item">
+        <h4>AI 會不會自己跑去改系統？</h4>
+        <p class="en">Can the AI change systems on its own?</p>
+        <p>不會。唯讀的查詢它自己跑；任何會開單、會通報、會改資料的動作，
+           執行到那一步一律停下來等人按確認。這個檢查是在<strong>執行當下</strong>做的，
+           不是靠事前審核流程內容，所以繞不過去。</p>
+      </div>
+
+      <div class="faq-item">
+        <h4>我要學多久才會用？</h4>
+        <p class="en">How long does it take to learn?</p>
+        <p>不用先學。開班打開它，該看的東西已經排好了；不會的就用底部快問欄問一句。
+           等你發現課裡有件事每天都在重複做，再找 Seed 把它做成排程。</p>
+      </div>
+
+      <div class="faq-item">
+        <h4>FDC、MES、Case Center 會被取代嗎？</h4>
+        <p class="en">Does this replace FDC, MES or Case Center?</p>
+        <p>不會。Portal 整合它們的數據呈現在同一頁，要深入操作時，
+           <strong>帶著已知參數直接跳過去</strong> —— 機台號、配方、批號都幫你填好，不用重打一次。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ── 08-cta.html ── -->
+<section id="cta" class="cta">
+  <div class="wrap">
+    <h2>開班的時候，打開它就好</h2>
+    <p class="en">Open it when your shift starts. That's it.</p>
+    <p class="lead cta-lead">不用申請帳號，不用先設定。你的課已經在裡面了。</p>
+    <a class="btn btn-primary btn-lg" href="../index.html">進入 Agent Portal　→</a>
+  </div>
+</section>
+
+
+<!-- ── 09-footer.html ── -->
+<footer class="site-foot">
+  <div class="wrap foot-inner">
+    <div>
+      <p class="foot-brand">Agent Portal</p>
+      <p class="en">以「課」為單位的線上工作站 · A workspace that belongs to your section</p>
+    </div>
+    <nav class="foot-nav">
+      <a href="#section-first">為什麼是「課」</a>
+      <a href="#workspace">打開長這樣</a>
+      <a href="#shift">一個班的一天</a>
+      <a href="#faq">常見疑問</a>
+      <a href="../index.html">進入 Portal</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+/* 角色膠囊 tab：切換「一個班的一天」時間軸 */
+document.querySelectorAll('[data-tabgroup]').forEach(function (group) {
+  var tabs = group.querySelectorAll('[role="tab"]');
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var target = tab.getAttribute('aria-controls');
+      tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
+      group.querySelectorAll('[role="tabpanel"]').forEach(function (panel) {
+        panel.hidden = (panel.id !== target);
+      });
+    });
+  });
+});
+</script>
+</body>
+</html>

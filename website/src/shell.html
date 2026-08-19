@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Portal — 你的課，有一個自己的工作站</title>
+<meta name="description" content="Agent Portal 是以「課」為單位的線上工作站：課的佈告欄、機台狀態、未結案 Case、你的任務與課常用系統入口，開班打開就全在同一頁。">
+{{STYLES}}
+</head>
+<body>
+{{CONTENT}}
+<script>
+/* 角色膠囊 tab：切換「一個班的一天」時間軸 */
+document.querySelectorAll('[data-tabgroup]').forEach(function (group) {
+  var tabs = group.querySelectorAll('[role="tab"]');
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      var target = tab.getAttribute('aria-controls');
+      tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
+      group.querySelectorAll('[role="tabpanel"]').forEach(function (panel) {
+        panel.hidden = (panel.id !== target);
+      });
+    });
+  });
+});
+</script>
+</body>
+</html>
