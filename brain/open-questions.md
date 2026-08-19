@@ -29,7 +29,7 @@ status: current
 - **Task**（TM-OQ-1~5）：AI 標記閾值（高）、Case 關聯、成員視角、逾期通知、三課欄位 → [task-management](entities/modules/task-management.md)
 - **Scheduling**（SCH-OQ-1~7）：~~Claim timeout~~ **作廢（2026-08-01 取消認領鎖）** → 新題 **SCH-OQ-7 決策等待逾時策略**（PO 指示先做「持續等待」，升級通知與自動終止後期再補）、~~Skill 編寫與 tool 授權（高）~~ **✅ 已有解方待實作** → [agent-skill-tiering](concepts/agent-skill-tiering.md)、context 持久化（高）、~~延伸討論回寫~~ **作廢（延伸討論已移除）**、失敗重試、建立/編輯 UI → [scheduling](entities/modules/scheduling.md)
 
-- **Skill Marketplace**（MP-OQ-1~4）：發布權限（Seed vs 課長會簽）、`scope` 缺「貨／產品」維度、上游下架後副本是否標示、原課驗收紀錄可看範圍 → [skill-marketplace](concepts/skill-marketplace.md)
+- **Skill Marketplace**（MP-OQ-1~6）：~~發布權限~~ **✅ 決策 H 結案（Seed 送出＋課長簽准）**、`scope` 缺「貨／產品」維度、~~上游下架後副本是否標示~~ **✅ 決策 G 結案（標注＋確認續用＋留痕）**、原課驗收紀錄可看範圍、**MP-OQ-5 通知需擴充 N5 上游下架待確認／N6 發布申請待簽核**、**MP-OQ-6 課長 persona 尚未實作（baseline §13.4 P2 缺口），決策 H 的課長視角在原型上做不出來** → [skill-marketplace](concepts/skill-marketplace.md)
   - ⚠️ 與 **OQ-3（多廠複製時 Skill 共享或獨立）** 同源不同層（跨廠 vs 跨課）；決策 A（副本不訂閱）若成立，OQ-3 大機率沿用同一答案
 
 ## Wiki 追蹤中的新缺口（ingest 時發現，baseline 尚未收錄）

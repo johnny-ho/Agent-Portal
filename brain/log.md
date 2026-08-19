@@ -616,3 +616,15 @@ PO 提出跨課情境需求（課級發布 → 他課下載測試 → 依原流�
 接點：Marketplace 的採用數據正好是**飛輪 2**（課級 → 平台級標準件）的升級門檻判準；OQ-3（多廠 Skill 共享或獨立）與本題同源不同層。
 
 新增頁 [concepts/skill-marketplace.md](concepts/skill-marketplace.md)（`status: needs-review`，流程與資料模型為提案未實作）；新增 MP-OQ-1~4。受影響 wiki 頁：index.md、[open-questions.md](open-questions.md)。
+
+## [2026-08-19] decision | Skill Marketplace 決策 G（下架連動）、H（課長簽准）
+
+**決策 G — 刪除連動下架**：刪除已發布的 Skill 時，Modal 詢問是否一併從 Marketplace 下架，**下架原因必填**。前提先立：下架 ≠ 資料消失，已下載過的課仍可讀唯讀封存頁——要人做決定就不能把做決定的材料收走。下游課三個表面標注（鈴鐺 N5／清單列徽章／詳情頁置頂），**不彈阻斷式 Modal**（那份 Codify 可能正掛排程在跑），詢問續用與否，決定寫進 `origin.delisted` 並**永久留一行常駐標記**（同決議 17 `interventions[]` 的稽核序列思路）。「不再使用」**只表態不代為停用或刪除**（同決議 19：掛排程的 Codify 不可被系統改動），只給「前往停用排程」的入口指路。決定同時回寫 `adoption.downloads[].postDelist`，讓下架者看得到「7 課裡有 5 課選擇繼續用」。
+
+⚠️ 設計關鍵：**下架原因必填**。沒有它，下游收到的只有「上游沒了」這種無法據以判斷的訊號，「我們不用了」與「這流程有問題」差很多，確認機制會退化成純儀式。
+
+**決策 H — 發布需課長簽准**：與課內生效簽核是**兩件事**——課內簽「能不能在本課用」（Production 時已完成），**課長簽的是曝光**（能不能給別課看）。故課長那一屏的版面順序＝判斷順序：會外流哪些課內資訊（含 Seed 每一處選保留或改寫＋說明）→ 別人看到的卡片 →（想看才展開）流程細節。退回必填理由，回到抽屜第二步（內容檢視）。新版本要重簽但**只看 diff**，沒有新增外流資訊時把這句話寫出來，課長一眼知道是低風險簽核。**下架不需簽**（收回曝光、風險方向相反），但通知課長。
+
+連帶：`Popconfirm` → Modal（僅已發布者）；發布項 `status` 加 `pending`；MP-OQ-1／3 結案；**新增 MP-OQ-5**（通知需擴充 N5／N6，既有四類都涵蓋不了，是通知中心第一次為 Skill 模組長出東西）、**MP-OQ-6**（課長 persona 尚未實作，baseline §13.4 P2 缺口 → 決策 H 的課長視角原型上做不出來，建議 Phase 2 先做 Seed 端＋mock 簽准接通流程）。
+
+受影響 wiki 頁：[skill-marketplace](concepts/skill-marketplace.md)、[open-questions.md](open-questions.md)、index.md。
