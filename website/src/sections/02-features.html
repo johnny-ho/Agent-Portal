@@ -7,17 +7,23 @@
       <p class="lead" style="margin-top:16px">點任一個，看它實際長什麼樣。</p>
     </div>
 
-    <div data-tabgroup>
-      <div class="tabs" role="tablist" aria-label="選擇功能">
-        <button class="tab" role="tab" aria-selected="true"  aria-controls="f-home" id="t-home">Home 工作站</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="f-kpi"  id="t-kpi">KPI 報表</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="f-app"  id="t-app">應用中心</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="f-task" id="t-task">AR 派工</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="f-ai"   id="t-ai">AI 助理</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="f-sch"  id="t-sch">排程與決策</button>
+    <div class="ftabs" role="group" aria-label="選擇功能">
+        <input class="fradio" type="radio" name="feature" id="r-home" checked>
+        <input class="fradio" type="radio" name="feature" id="r-kpi">
+        <input class="fradio" type="radio" name="feature" id="r-app">
+        <input class="fradio" type="radio" name="feature" id="r-task">
+        <input class="fradio" type="radio" name="feature" id="r-ai">
+        <input class="fradio" type="radio" name="feature" id="r-sch">
+      <div class="tabs">
+        <label class="tab" for="r-home">Home 工作站</label>
+        <label class="tab" for="r-kpi">KPI 報表</label>
+        <label class="tab" for="r-app">應用中心</label>
+        <label class="tab" for="r-task">AR 派工</label>
+        <label class="tab" for="r-ai">AI 助理</label>
+        <label class="tab" for="r-sch">排程與決策</label>
       </div>
 
-      <div role="tabpanel" id="f-home" aria-labelledby="t-home">
+      <div class="fpanel" id="p-home">
         <div class="f-head">
           <h3>Home 工作站<span class="en">Your section at shift start</span></h3>
           <p class="lead">開班第一眼，課上今天的狀況全在這頁。</p>
@@ -34,7 +40,7 @@
         <p class="f-role"><b>各角色看到的不同</b>EE 先看機台與未結案 Case，PE 先看 SPC OOC，MFG 先看線體產出</p>
       </div>
 
-      <div role="tabpanel" id="f-kpi" aria-labelledby="t-kpi" hidden>
+      <div class="fpanel" id="p-kpi">
         <div class="f-head">
           <h3>KPI 報表<span class="en">Reports in one place</span></h3>
           <p class="lead">課上要看的報表集中在這頁。</p>
@@ -51,7 +57,7 @@
         <p class="f-role"><b>各角色看到的不同</b>EE 看稼動率與 MTTR，PE 看良率與 SPC OOC，MFG 看產出達成率</p>
       </div>
 
-      <div role="tabpanel" id="f-app" aria-labelledby="t-app" hidden>
+      <div class="fpanel" id="p-app">
         <div class="f-head">
           <h3>應用中心<span class="en">Your section's systems</span></h3>
           <p class="lead">課上在用的 28 個系統，都在這頁。</p>
@@ -68,7 +74,7 @@
         <p class="f-role"><b>各角色釘的不同</b>EE 常釘 FDC Console 與 Tool Center，PE 常釘 SPC Console 與 DCR，MFG 常釘 MES 與 WIP Tracker</p>
       </div>
 
-      <div role="tabpanel" id="f-task" aria-labelledby="t-task" hidden>
+      <div class="fpanel" id="p-task">
         <div class="f-head">
           <h3>AR 派工<span class="en">Task dispatch</span></h3>
           <p class="lead">誰在做什麼、誰逾期了，一頁看完。</p>
@@ -85,7 +91,7 @@
         <p class="f-role"><b>各角色收到的不同</b>EE 收設備工單，PE 收 DCR 審核，MFG 收排程協調</p>
       </div>
 
-      <div role="tabpanel" id="f-ai" aria-labelledby="t-ai" hidden>
+      <div class="fpanel" id="p-ai">
         <div class="f-head">
           <h3>AI 助理<span class="en">Ask, with evidence</span></h3>
           <p class="lead">不熟的異常碼，問一句就有研判。</p>
@@ -102,7 +108,7 @@
         <p class="f-role"><b>各角色問的不同</b>EE 問異常碼處置，PE 問 CP 值下滑，MFG 問插單影響</p>
       </div>
 
-      <div role="tabpanel" id="f-sch" aria-labelledby="t-sch" hidden>
+      <div class="fpanel" id="p-sch">
         <div class="f-head">
           <h3>排程與決策<span class="en">Scheduled runs, human decisions</span></h3>
           <p class="lead">例行報表定時跑完，要動系統的停下來等你。</p>

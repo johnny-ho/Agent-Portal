@@ -86,7 +86,7 @@ PO 對第一版與第二版的批評都是**語言**：「太饒口、太 AI」�
 website/
 ├── build.py          # 比照 Agent portal/build.py；另會把 src/assets 複製到輸出檔旁
 ├── src/
-│   ├── shell.html    # {{STYLES}} {{CONTENT}} + 膠囊 tab 的 30 行 inline JS
+│   ├── shell.html    # {{STYLES}} {{CONTENT}}；**全站零 JavaScript**
 │   ├── styles.css    # 設計 token，無框架
 │   ├── sections/     # 00-header … 09-footer，一段一檔，順序由 build.py 的 SECTIONS 決定
 │   └── assets/       # 三張截圖
@@ -94,6 +94,10 @@ website/
 ```
 
 - 建置：`cd website && python3 build.py`（可 `--output`）
+- **六大功能的 tab 是 CSS-only**（隱藏 radio + `:checked ~` 兄弟選擇器），不依賴 JavaScript。
+  ⚠️ **原本用 inline JS，PO 回報「點下去沒反應」** —— 因為預覽檔是在應用內建檢視器的沙箱 iframe 裡渲染，script 被擋掉。
+  實測 `javaScriptEnabled:false` 重現後改成 CSS-only，順帶賺到鍵盤方向鍵切換（radio group 原生行為）。
+  **教訓：靜態行銷頁不要為了互動而引入 JS**，沙箱、檢視器、郵件預覽都可能擋掉，CSS 一定會跑。
 - **不用 Tailwind**：靜態單頁效益低，且可少一個外部 CDN 依賴（本環境 `cdn.tailwindcss.com` 與 `unpkg.com` 皆被擋）。與產品端「UI 優先 Tailwind」不同，屬刻意分歧
 - 嚴守 CLAUDE.md UI Guideline：`#2563EB`、8px 系統（實測全站 margin/padding 皆 8 倍數）、圓角 6px、膠囊 tab 無底線、狀態圓點 10×10 四色、**零漸層零 box-shadow**
 - CTA 一律指向 `../index.html`（Portal build 產出）

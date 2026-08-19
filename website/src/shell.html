@@ -9,20 +9,5 @@
 </head>
 <body>
 {{CONTENT}}
-<script>
-/* 角色膠囊 tab：切換「一個班的一天」時間軸 */
-document.querySelectorAll('[data-tabgroup]').forEach(function (group) {
-  var tabs = group.querySelectorAll('[role="tab"]');
-  tabs.forEach(function (tab) {
-    tab.addEventListener('click', function () {
-      var target = tab.getAttribute('aria-controls');
-      tabs.forEach(function (t) { t.setAttribute('aria-selected', String(t === tab)); });
-      group.querySelectorAll('[role="tabpanel"]').forEach(function (panel) {
-        panel.hidden = (panel.id !== target);
-      });
-    });
-  });
-});
-</script>
 </body>
 </html>

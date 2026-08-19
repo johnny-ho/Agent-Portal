@@ -118,7 +118,38 @@ section.panel .card { background: var(--c-bg); }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .tab:hover { border-color: var(--c-border-strong); }
-.tab[aria-selected="true"] { background: var(--c-primary); border-color: var(--c-primary); color: #FFFFFF; }
+/* CSS-only tabs：不依賴 JavaScript，沙箱／檢視器內同樣可點 */
+.fradio { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.tab { user-select: none; }
+
+/* 選中的膠囊 */
+#r-home:checked ~ .tabs > label[for="r-home"],
+#r-kpi:checked ~ .tabs > label[for="r-kpi"],
+#r-app:checked ~ .tabs > label[for="r-app"],
+#r-task:checked ~ .tabs > label[for="r-task"],
+#r-ai:checked ~ .tabs > label[for="r-ai"],
+#r-sch:checked ~ .tabs > label[for="r-sch"] {
+  background: var(--c-primary); border-color: var(--c-primary); color: #FFFFFF;
+}
+
+/* 鍵盤焦點可見（radio 本身隱藏，焦點畫在對應膠囊上） */
+#r-home:focus-visible ~ .tabs > label[for="r-home"],
+#r-kpi:focus-visible ~ .tabs > label[for="r-kpi"],
+#r-app:focus-visible ~ .tabs > label[for="r-app"],
+#r-task:focus-visible ~ .tabs > label[for="r-task"],
+#r-ai:focus-visible ~ .tabs > label[for="r-ai"],
+#r-sch:focus-visible ~ .tabs > label[for="r-sch"] {
+  outline: 2px solid var(--c-primary); outline-offset: 2px;
+}
+
+/* 面板顯示 */
+.ftabs > .fpanel { display: none; }
+#r-home:checked ~ #p-home,
+#r-kpi:checked ~ #p-kpi,
+#r-app:checked ~ #p-app,
+#r-task:checked ~ #p-task,
+#r-ai:checked ~ #p-ai,
+#r-sch:checked ~ #p-sch { display: block; }
 
 /* ── 標籤 ──────────────────────────────────────────────────────────────── */
 .tag {

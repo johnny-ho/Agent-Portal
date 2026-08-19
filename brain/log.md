@@ -666,3 +666,15 @@ PO 要求對標兩家的 workspace 介紹方式。⚠️ 環境網路政策擋�
 ⚠️ **仍缺社會證明**：兩家對標對象都重用客戶背書，本站零。需 PO 提供素材，無法自行產出。
 
 受影響 wiki 頁：[marketing-site](entities/marketing-site.md)、本頁。
+
+### 2026-08-19（第五輪）— tab 改 CSS-only，全站零 JavaScript
+
+PO 回報「六大功能點下去沒反應」。**不是程式有 bug，是我送錯了東西** —— 我用 SendUserFile 送自包含預覽檔，那是在應用內建檢視器的沙箱 iframe 裡渲染的，**script 被擋掉**，而我的 tab 完全依賴 inline JS。我先用 `javaScriptEnabled:false` 重現（JS 關 → 點擊後面板停在 f-home，與 PO 描述完全一致），確認後才動手。
+
+修法不是換傳遞方式，而是**讓 tab 根本不需要 JS**：隱藏 radio + `#r-x:checked ~ #p-x` 兄弟選擇器。實測 JS 開／關、桌機點擊、手機觸控、鍵盤方向鍵四種操作全過，**整頁 `document.scripts.length === 0`**。
+
+順帶收穫：radio group 的原生鍵盤行為（方向鍵切換）比原本的 JS 版更好用，焦點樣式用 `:focus-visible` 畫在對應膠囊上。
+
+**教訓（已寫進 [marketing-site](entities/marketing-site.md)）：靜態行銷頁不要為了互動引入 JS。** 沙箱 iframe、檢視器、郵件預覽都可能擋 script，CSS 一定會跑。這條同樣適用於未來任何要傳給 PO 預覽的 HTML 產出。
+
+受影響 wiki 頁：[marketing-site](entities/marketing-site.md)、本頁。
