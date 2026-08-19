@@ -634,3 +634,15 @@ PO 五點意見，全部照做。**兩次退稿的共同原因都是語言，不
 ⚠️ **待 PO 確認**：FAQ 的「AI 在哪裡用、可以做什麼」與「AI 會做到哪些事情」語意接近，我的區分是前者答入口與用途、後者答邊界。另截圖示範人名一事仍未回覆。
 
 受影響 wiki 頁：[marketing-site](entities/marketing-site.md)、本頁。
+
+### 2026-08-19（第三輪）— 權限模型與 AR 用語回填 wiki
+
+PO 對三個待確認項給出答覆，官網文案無需再改，本輪只做 wiki 同步。
+
+1. **FAQ ②③ 的區分正確** —— ②答入口與用途、③答邊界。[marketing-site](entities/marketing-site.md) 的警告改為已確認。
+2. **Seed／Member／Viewer 照 PO 說法納入** —— 寫進 [widget-governance](concepts/widget-governance.md)，並釐清它與四層治理的關係：**四層講「什麼設定歸哪一層管」，三角色講「哪個人有哪一層的權限」**，Seed ↔ Section、Member ↔ Personal，互補不衝突。⚠️ **Viewer 是新增角色**，UI 與資料層尚未實作，該頁列出落地時要決定的三件事（看不看得到 Priority Feed、能不能看他人 My Tasks、跨課支援者如何授予）。
+3. **「Task = AR」是公司獨特用法** —— 記入 [task-management](entities/modules/task-management.md) 頁首：程式碼與 UI 維持 Task 命名，**面向使用者的文案一律用 AR**。這條容易被下一棒改回去，所以放在頁首而非內文。
+
+⚠️ **仍未回覆**：官網截圖含示範人名（張文凱、陳育民、林課長），若為真實同事需重拍替換。已詢問兩次，不再追問，留在此處備查。
+
+受影響 wiki 頁：[widget-governance](concepts/widget-governance.md)、[task-management](entities/modules/task-management.md)、[marketing-site](entities/marketing-site.md)、index.md、本頁。

@@ -3,12 +3,14 @@ type: entity
 title: Task 派工管理
 description: 課長派工 / 平面列表 + Drawer / 歷史 7 天；PE/MFG 資料與 AI 自動標記為主要缺口
 tags: [module, task]
-updated: 2026-07-25
+updated: 2026-08-19
 sources: [PRODUCT_BASELINE.md §13.6, scrum_teaming.md F-DB-05, src/components/TaskManagementPage.jsx]
 status: current
 ---
 
 # Task 派工管理（v2.5）
+
+> **用語**：對內溝通一律稱「**AR 派工**」——「Task = AR」是公司既有的獨特用法（PO 定案 2026-08-19）。產品 UI 與程式碼維持 Task／TaskManagementPage 不變，但**所有面向使用者的文案用 AR**，見[官網](../marketing-site.md)。
 
 **定位**：跨角色任務執行（Nav 第 4 位）。課長總覽 / 快速派工（AssignPanel，多人多行）/ 平面列表 + 右側 Drawer / 歷史記錄 7 天。資料在 `src/data/tasks.js`。
 
