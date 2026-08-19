@@ -205,6 +205,15 @@ section.panel .card { background: var(--c-bg); }
 .f-points li { border-top: 1px solid var(--c-border); padding-top: var(--s2); color: var(--c-text-2); }
 .f-points b { display: block; color: var(--c-text); font-weight: 600; margin-bottom: var(--s1); }
 
+/* 接的系統／各角色差異 */
+.f-sys { margin-top: var(--s1); font-size: 13px; color: var(--c-text-2); }
+.f-sys b, .f-role b { color: var(--c-primary); font-weight: 600; margin-right: var(--s1); }
+.f-role {
+  margin-top: var(--s3); padding: var(--s2);
+  background: var(--c-primary-soft); border-radius: var(--radius-btn);
+  font-size: 13px; color: var(--c-text-2);
+}
+
 /* ── 治理 ──────────────────────────────────────────────────────────────── */
 .gov h4 { margin: var(--s2) 0 var(--s1); }
 .gov p { color: var(--c-text-2); }
@@ -237,7 +246,6 @@ section.panel .card { background: var(--c-bg); }
   .head-nav { display: none; }
   .hero { padding-top: var(--s6); padding-bottom: var(--s6); }
   .hero h1 { font-size: 32px; }
-  .br-m { display: none; }
   .compare, .faq, .f-points { grid-template-columns: 1fr; }
   .timeline li { grid-template-columns: 56px 1fr; gap: var(--s2); }
   .trust { gap: var(--s2); }

@@ -20,91 +20,103 @@
       <div role="tabpanel" id="f-home" aria-labelledby="t-home">
         <div class="f-head">
           <h3>Home 工作站<span class="en">Your section at shift start</span></h3>
-          <p class="lead">開班第一眼，課上今天的狀況都在這一頁。</p>
+          <p class="lead">開班第一眼，課上今天的狀況全在這頁。</p>
+          <p class="f-sys"><b>接的系統</b>設備監控系統、Case Center、Lot Center，加上排程產出</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-home.png" alt="Home 工作站：左側課佈告欄與機台狀態，右側個人任務清單" width="2000" height="1145">
         </div></figure>
         <ul class="f-points">
           <li><b>課佈告欄</b>交接報告、課長公告、待確認事項，全課同一份</li>
-          <li><b>機台狀態</b>Down／Monitoring／PM 一覽，可直接借機或轉 FOUP</li>
-          <li><b>我的任務</b>右側清單只放你自己的事，P1 置頂，不受其他人的任務干擾</li>
+          <li><b>機台狀態</b>Down、Monitoring、PM 一覽，點了就能借機或轉 FOUP</li>
+          <li><b>我的任務</b>右側只放你的任務，P1 置頂</li>
         </ul>
+        <p class="f-role"><b>各角色看到的不同</b>EE 先看機台與未結案 Case，PE 先看 SPC OOC，MFG 先看線體產出</p>
       </div>
 
       <div role="tabpanel" id="f-kpi" aria-labelledby="t-kpi" hidden>
         <div class="f-head">
           <h3>KPI 報表<span class="en">Reports in one place</span></h3>
-          <p class="lead">課上要看的報表集中在這，不用一個一個系統開。</p>
+          <p class="lead">課上要看的報表集中在這頁。</p>
+          <p class="f-sys"><b>接的系統</b>FDC、SPC、PBI，加上課上自建的報表</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-kpi.png" alt="KPI 報表中心：左側書籤清單，右側稼動率、MTTR 等指標與趨勢圖" width="2000" height="662">
         </div></figure>
         <ul class="f-points">
-          <li><b>書籤清單</b>依設備效能、維修管理、停機分析分組，由課上自己決定放什麼</li>
-          <li><b>對照目標值</b>稼動率、MTTR、FDC 異常台數、Unclose Case 都標出目標與差距</li>
-          <li><b>要細看就跳過去</b>「在原系統開啟」帶著查詢條件進 FDC 或 PBI，不用重設</li>
+          <li><b>書籤清單</b>依設備效能、維修管理、停機分析分組，課上自己決定放什麼</li>
+          <li><b>對照目標</b>稼動率、MTTR、FDC 異常台數、Unclose Case 都標出差距</li>
+          <li><b>原系統直達</b>一鍵開啟，查詢條件已經帶好</li>
         </ul>
+        <p class="f-role"><b>各角色看到的不同</b>EE 看稼動率與 MTTR，PE 看良率與 SPC OOC，MFG 看產出達成率</p>
       </div>
 
       <div role="tabpanel" id="f-app" aria-labelledby="t-app" hidden>
         <div class="f-head">
           <h3>應用中心<span class="en">Your section's systems</span></h3>
-          <p class="lead">課上常用的系統都在這，釘選的會同步顯示在首頁。</p>
+          <p class="lead">課上在用的 28 個系統，都在這頁。</p>
+          <p class="f-sys"><b>接的系統</b>FDC Console、SPC Console、MES、Case Center、Tool Center、Lot Center、Recipe Manager、WIP Tracker 等</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-app.png" alt="應用中心：上方為已釘選應用，下方為完整應用目錄與分類" width="2000" height="775">
         </div></figure>
         <ul class="f-points">
-          <li><b>依用途分類</b>值班管理、機台參數、裝機維修、製程監控、良率分析等</li>
-          <li><b>個人釘選</b>最多 20 個，釘了就出現在首頁「課的應用」</li>
-          <li><b>找不到就搜尋</b>用名稱、描述或所屬系統查，也能瀏覽全廠功能目錄</li>
+          <li><b>依用途分類</b>值班管理、機台參數、裝機維修、製程監控、良率分析</li>
+          <li><b>個人釘選</b>最多 20 個，釘了就出現在首頁</li>
+          <li><b>搜尋</b>用名稱、描述或所屬系統查，也能瀏覽全廠功能目錄</li>
         </ul>
+        <p class="f-role"><b>各角色釘的不同</b>EE 常釘 FDC Console 與 Tool Center，PE 常釘 SPC Console 與 DCR，MFG 常釘 MES 與 WIP Tracker</p>
       </div>
 
       <div role="tabpanel" id="f-task" aria-labelledby="t-task" hidden>
         <div class="f-head">
           <h3>AR 派工<span class="en">Task dispatch</span></h3>
           <p class="lead">誰在做什麼、誰逾期了，一頁看完。</p>
+          <p class="f-sys"><b>接的系統</b>工單派發系統、Case Center</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-task.png" alt="AR 派工：上方成員總覽，下方依負責人分組的任務清單" width="2000" height="750">
         </div></figure>
         <ul class="f-points">
-          <li><b>成員總覽</b>各人手上幾件、有沒有逾期，一眼看出誰滿載</li>
+          <li><b>成員總覽</b>各人幾件、有沒有逾期，一眼看出誰滿載</li>
           <li><b>任務帶完整資訊</b>機台號、Recipe、優先級、截止日都在列上</li>
-          <li><b>直接指定負責人</b>派工留下紀錄，交接時不會因為口頭交代而漏掉</li>
+          <li><b>指定負責人</b>派工留下紀錄，交接時查得到</li>
         </ul>
+        <p class="f-role"><b>各角色收到的不同</b>EE 收設備工單，PE 收 DCR 審核，MFG 收排程協調</p>
       </div>
 
       <div role="tabpanel" id="f-ai" aria-labelledby="t-ai" hidden>
         <div class="f-head">
           <h3>AI 助理<span class="en">Ask, with evidence</span></h3>
-          <p class="lead">不熟的異常碼，問一句就有研判和依據。</p>
+          <p class="lead">不熟的異常碼，問一句就有研判。</p>
+          <p class="f-sys"><b>接的系統</b>查 FDC 與 SPC 現場數據，引用 Confluence、EDX Portal 的課內知識</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-ai.png" alt="AI 助理：針對 E-101 跳 ERR-4421 給出研判、依據與建議處置" width="2000" height="700">
         </div></figure>
         <ul class="f-points">
-          <li><b>說明依據</b>研判結論後面接的是查到的現場數據，不是只給一句結論</li>
-          <li><b>標注來源</b>引用了課上哪份知識文件、第幾版，寫在回答裡</li>
-          <li><b>附操作入口</b>要動手時給你帶好機台號與 Recipe 的連結，不用重填</li>
+          <li><b>說明依據</b>研判後面接的是查到的現場數據</li>
+          <li><b>標注來源</b>引用哪份知識文件、第幾版，寫在回答裡</li>
+          <li><b>附操作入口</b>連結帶好機台號與 Recipe</li>
         </ul>
+        <p class="f-role"><b>各角色問的不同</b>EE 問異常碼處置，PE 問 CP 值下滑，MFG 問插單影響</p>
       </div>
 
       <div role="tabpanel" id="f-sch" aria-labelledby="t-sch" hidden>
         <div class="f-head">
           <h3>排程與決策<span class="en">Scheduled runs, human decisions</span></h3>
-          <p class="lead">例行報表定時跑完；要動到系統的，停下來等你決定。</p>
+          <p class="lead">例行報表定時跑完，要動系統的停下來等你。</p>
+          <p class="f-sys"><b>接的系統</b>產出進課佈告欄，開單走 Case Center，通報走工單派發系統</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-schedule.png" alt="排程與決策：SPC 異常日報停在開立異常工單這一步，等待人工決定" width="2000" height="700">
         </div></figure>
         <ul class="f-points">
-          <li><b>定時產出</b>當班交接報告、SPC 異常日報、FDC 異常摘要，時間到自動跑</li>
-          <li><b>寫入前先問</b>會開單、會通報的步驟一律暫停，把要送出的參數攤開給你看</li>
-          <li><b>誰都能決定</b>課上任何成員都可以處理，不用先認領；決定者與時間會留下紀錄</li>
+          <li><b>定時產出</b>當班交接報告、SPC 異常日報、FDC 異常摘要</li>
+          <li><b>寫入前先問</b>會開單、會通報的步驟一律暫停，參數攤開給你看</li>
+          <li><b>誰都能決定</b>課上任何成員都可以處理，決定者與時間留下紀錄</li>
         </ul>
+        <p class="f-role"><b>各角色的排程不同</b>EE 是設備異常摘要，PE 是製程週報，MFG 是產能落後預警</p>
       </div>
     </div>
   </div>

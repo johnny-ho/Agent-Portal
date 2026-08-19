@@ -213,6 +213,15 @@ section.panel .card { background: var(--c-bg); }
 .f-points li { border-top: 1px solid var(--c-border); padding-top: var(--s2); color: var(--c-text-2); }
 .f-points b { display: block; color: var(--c-text); font-weight: 600; margin-bottom: var(--s1); }
 
+/* 接的系統／各角色差異 */
+.f-sys { margin-top: var(--s1); font-size: 13px; color: var(--c-text-2); }
+.f-sys b, .f-role b { color: var(--c-primary); font-weight: 600; margin-right: var(--s1); }
+.f-role {
+  margin-top: var(--s3); padding: var(--s2);
+  background: var(--c-primary-soft); border-radius: var(--radius-btn);
+  font-size: 13px; color: var(--c-text-2);
+}
+
 /* ── 治理 ──────────────────────────────────────────────────────────────── */
 .gov h4 { margin: var(--s2) 0 var(--s1); }
 .gov p { color: var(--c-text-2); }
@@ -245,7 +254,6 @@ section.panel .card { background: var(--c-bg); }
   .head-nav { display: none; }
   .hero { padding-top: var(--s6); padding-bottom: var(--s6); }
   .hero h1 { font-size: 32px; }
-  .br-m { display: none; }
   .compare, .faq, .f-points { grid-template-columns: 1fr; }
   .timeline li { grid-template-columns: 56px 1fr; gap: var(--s2); }
   .trust { gap: var(--s2); }
@@ -277,15 +285,14 @@ section.panel .card { background: var(--c-bg); }
   <div class="wrap">
     <p class="tag hero-tag">以「課」為單位的線上工作站</p>
 
-    <h1>你的課，<br class="br-m">有一個自己的工作站</h1>
-    <p class="en hero-en">A workspace that belongs to your section.</p>
+    <h1>你的課，一頁看完</h1>
+    <p class="en hero-en">Your whole section, on one page.</p>
 
     <p class="lead hero-lead">
-      課上要用的管理工具都準備到位了 —— KPI 報表、AR 派工、機台狀態、常用系統入口。
-      開班打開，全部在同一頁。
+      KPI 報表、AR 派工、機台狀態、常用系統，開班打開就有。
     </p>
     <p class="en hero-lead-en">
-      KPI reports, task dispatch, tool status and the systems you use — ready when your shift starts.
+      KPI reports, task dispatch, tool status, and every system you use.
     </p>
 
     <div class="hero-actions">
@@ -294,9 +301,9 @@ section.panel .card { background: var(--c-bg); }
     </div>
 
     <ul class="trust">
-      <li><span class="dot dot-ok"></span>資料範圍就是你的課</li>
-      <li><span class="dot dot-ok"></span>每張卡片都能點下去處理</li>
-      <li><span class="dot dot-ok"></span>權限沿用 FOD，不用重設</li>
+      <li><span class="dot dot-ok"></span>資料只有你的課</li>
+      <li><span class="dot dot-ok"></span>卡片點了就能做事</li>
+      <li><span class="dot dot-ok"></span>權限沿用 FOD</li>
     </ul>
   </div>
 </section>
@@ -325,91 +332,103 @@ section.panel .card { background: var(--c-bg); }
       <div role="tabpanel" id="f-home" aria-labelledby="t-home">
         <div class="f-head">
           <h3>Home 工作站<span class="en">Your section at shift start</span></h3>
-          <p class="lead">開班第一眼，課上今天的狀況都在這一頁。</p>
+          <p class="lead">開班第一眼，課上今天的狀況全在這頁。</p>
+          <p class="f-sys"><b>接的系統</b>設備監控系統、Case Center、Lot Center，加上排程產出</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-home.png" alt="Home 工作站：左側課佈告欄與機台狀態，右側個人任務清單" width="2000" height="1145">
         </div></figure>
         <ul class="f-points">
           <li><b>課佈告欄</b>交接報告、課長公告、待確認事項，全課同一份</li>
-          <li><b>機台狀態</b>Down／Monitoring／PM 一覽，可直接借機或轉 FOUP</li>
-          <li><b>我的任務</b>右側清單只放你自己的事，P1 置頂，不受其他人的任務干擾</li>
+          <li><b>機台狀態</b>Down、Monitoring、PM 一覽，點了就能借機或轉 FOUP</li>
+          <li><b>我的任務</b>右側只放你的任務，P1 置頂</li>
         </ul>
+        <p class="f-role"><b>各角色看到的不同</b>EE 先看機台與未結案 Case，PE 先看 SPC OOC，MFG 先看線體產出</p>
       </div>
 
       <div role="tabpanel" id="f-kpi" aria-labelledby="t-kpi" hidden>
         <div class="f-head">
           <h3>KPI 報表<span class="en">Reports in one place</span></h3>
-          <p class="lead">課上要看的報表集中在這，不用一個一個系統開。</p>
+          <p class="lead">課上要看的報表集中在這頁。</p>
+          <p class="f-sys"><b>接的系統</b>FDC、SPC、PBI，加上課上自建的報表</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-kpi.png" alt="KPI 報表中心：左側書籤清單，右側稼動率、MTTR 等指標與趨勢圖" width="2000" height="662">
         </div></figure>
         <ul class="f-points">
-          <li><b>書籤清單</b>依設備效能、維修管理、停機分析分組，由課上自己決定放什麼</li>
-          <li><b>對照目標值</b>稼動率、MTTR、FDC 異常台數、Unclose Case 都標出目標與差距</li>
-          <li><b>要細看就跳過去</b>「在原系統開啟」帶著查詢條件進 FDC 或 PBI，不用重設</li>
+          <li><b>書籤清單</b>依設備效能、維修管理、停機分析分組，課上自己決定放什麼</li>
+          <li><b>對照目標</b>稼動率、MTTR、FDC 異常台數、Unclose Case 都標出差距</li>
+          <li><b>原系統直達</b>一鍵開啟，查詢條件已經帶好</li>
         </ul>
+        <p class="f-role"><b>各角色看到的不同</b>EE 看稼動率與 MTTR，PE 看良率與 SPC OOC，MFG 看產出達成率</p>
       </div>
 
       <div role="tabpanel" id="f-app" aria-labelledby="t-app" hidden>
         <div class="f-head">
           <h3>應用中心<span class="en">Your section's systems</span></h3>
-          <p class="lead">課上常用的系統都在這，釘選的會同步顯示在首頁。</p>
+          <p class="lead">課上在用的 28 個系統，都在這頁。</p>
+          <p class="f-sys"><b>接的系統</b>FDC Console、SPC Console、MES、Case Center、Tool Center、Lot Center、Recipe Manager、WIP Tracker 等</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-app.png" alt="應用中心：上方為已釘選應用，下方為完整應用目錄與分類" width="2000" height="775">
         </div></figure>
         <ul class="f-points">
-          <li><b>依用途分類</b>值班管理、機台參數、裝機維修、製程監控、良率分析等</li>
-          <li><b>個人釘選</b>最多 20 個，釘了就出現在首頁「課的應用」</li>
-          <li><b>找不到就搜尋</b>用名稱、描述或所屬系統查，也能瀏覽全廠功能目錄</li>
+          <li><b>依用途分類</b>值班管理、機台參數、裝機維修、製程監控、良率分析</li>
+          <li><b>個人釘選</b>最多 20 個，釘了就出現在首頁</li>
+          <li><b>搜尋</b>用名稱、描述或所屬系統查，也能瀏覽全廠功能目錄</li>
         </ul>
+        <p class="f-role"><b>各角色釘的不同</b>EE 常釘 FDC Console 與 Tool Center，PE 常釘 SPC Console 與 DCR，MFG 常釘 MES 與 WIP Tracker</p>
       </div>
 
       <div role="tabpanel" id="f-task" aria-labelledby="t-task" hidden>
         <div class="f-head">
           <h3>AR 派工<span class="en">Task dispatch</span></h3>
           <p class="lead">誰在做什麼、誰逾期了，一頁看完。</p>
+          <p class="f-sys"><b>接的系統</b>工單派發系統、Case Center</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-task.png" alt="AR 派工：上方成員總覽，下方依負責人分組的任務清單" width="2000" height="750">
         </div></figure>
         <ul class="f-points">
-          <li><b>成員總覽</b>各人手上幾件、有沒有逾期，一眼看出誰滿載</li>
+          <li><b>成員總覽</b>各人幾件、有沒有逾期，一眼看出誰滿載</li>
           <li><b>任務帶完整資訊</b>機台號、Recipe、優先級、截止日都在列上</li>
-          <li><b>直接指定負責人</b>派工留下紀錄，交接時不會因為口頭交代而漏掉</li>
+          <li><b>指定負責人</b>派工留下紀錄，交接時查得到</li>
         </ul>
+        <p class="f-role"><b>各角色收到的不同</b>EE 收設備工單，PE 收 DCR 審核，MFG 收排程協調</p>
       </div>
 
       <div role="tabpanel" id="f-ai" aria-labelledby="t-ai" hidden>
         <div class="f-head">
           <h3>AI 助理<span class="en">Ask, with evidence</span></h3>
-          <p class="lead">不熟的異常碼，問一句就有研判和依據。</p>
+          <p class="lead">不熟的異常碼，問一句就有研判。</p>
+          <p class="f-sys"><b>接的系統</b>查 FDC 與 SPC 現場數據，引用 Confluence、EDX Portal 的課內知識</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-ai.png" alt="AI 助理：針對 E-101 跳 ERR-4421 給出研判、依據與建議處置" width="2000" height="700">
         </div></figure>
         <ul class="f-points">
-          <li><b>說明依據</b>研判結論後面接的是查到的現場數據，不是只給一句結論</li>
-          <li><b>標注來源</b>引用了課上哪份知識文件、第幾版，寫在回答裡</li>
-          <li><b>附操作入口</b>要動手時給你帶好機台號與 Recipe 的連結，不用重填</li>
+          <li><b>說明依據</b>研判後面接的是查到的現場數據</li>
+          <li><b>標注來源</b>引用哪份知識文件、第幾版，寫在回答裡</li>
+          <li><b>附操作入口</b>連結帶好機台號與 Recipe</li>
         </ul>
+        <p class="f-role"><b>各角色問的不同</b>EE 問異常碼處置，PE 問 CP 值下滑，MFG 問插單影響</p>
       </div>
 
       <div role="tabpanel" id="f-sch" aria-labelledby="t-sch" hidden>
         <div class="f-head">
           <h3>排程與決策<span class="en">Scheduled runs, human decisions</span></h3>
-          <p class="lead">例行報表定時跑完；要動到系統的，停下來等你決定。</p>
+          <p class="lead">例行報表定時跑完，要動系統的停下來等你。</p>
+          <p class="f-sys"><b>接的系統</b>產出進課佈告欄，開單走 Case Center，通報走工單派發系統</p>
         </div>
         <figure class="shot"><div class="shot-frame">
           <img src="assets/shot-schedule.png" alt="排程與決策：SPC 異常日報停在開立異常工單這一步，等待人工決定" width="2000" height="700">
         </div></figure>
         <ul class="f-points">
-          <li><b>定時產出</b>當班交接報告、SPC 異常日報、FDC 異常摘要，時間到自動跑</li>
-          <li><b>寫入前先問</b>會開單、會通報的步驟一律暫停，把要送出的參數攤開給你看</li>
-          <li><b>誰都能決定</b>課上任何成員都可以處理，不用先認領；決定者與時間會留下紀錄</li>
+          <li><b>定時產出</b>當班交接報告、SPC 異常日報、FDC 異常摘要</li>
+          <li><b>寫入前先問</b>會開單、會通報的步驟一律暫停，參數攤開給你看</li>
+          <li><b>誰都能決定</b>課上任何成員都可以處理，決定者與時間留下紀錄</li>
         </ul>
+        <p class="f-role"><b>各角色的排程不同</b>EE 是設備異常摘要，PE 是製程週報，MFG 是產能落後預警</p>
       </div>
     </div>
   </div>
@@ -424,8 +443,7 @@ section.panel .card { background: var(--c-bg); }
       <h2>以「課」為單位，工具一次到位</h2>
       <p class="en">Everything scoped to your section.</p>
       <p class="lead" style="margin-top:16px">
-        報表、任務、機台狀態、排程產出，看到的都只有你的課，
-        不用在全廠的資料裡篩出自己要的那幾筆。
+        報表、任務、機台、排程產出，看到的每一筆都是你的課。
       </p>
     </div>
 
@@ -434,26 +452,26 @@ section.panel .card { background: var(--c-bg); }
         <h3 class="compare-title compare-title-old">現在</h3>
         <p class="en">Today</p>
         <ul class="compare-list">
-          <li>報表、派工、機台狀態分散在各系統，各開各的</li>
+          <li>報表、派工、機台狀態各開各的</li>
           <li>要用哪個功能，先在 function tree 裡找</li>
-          <li>課上要加一個工具，開單等 IT 排程</li>
-          <li>看完報表，還是得回原系統重新查一次才能處理</li>
+          <li>課上要加工具，開單等 IT 排程</li>
+          <li>看完報表，回原系統再查一次</li>
         </ul>
       </div>
       <div class="compare-col compare-col-new">
         <h3 class="compare-title compare-title-new">用了之後</h3>
         <p class="en">With Agent Portal</p>
         <ul class="compare-list compare-list-new">
-          <li>同一頁看完，資料範圍就是你的課</li>
-          <li>開班打開就是課上的狀況，不用先找功能</li>
-          <li>課上的 Seed 自己加，當天就能用</li>
-          <li>帶著機台號與 Recipe 直接跳進子系統，不用重填</li>
+          <li>一頁看完，每一筆都是你的課</li>
+          <li>開班打開就是課上的狀況</li>
+          <li>課上的種子自己加，當天就能用</li>
+          <li>帶著機台號與 Recipe 直達子系統</li>
         </ul>
       </div>
     </div>
 
     <p class="note">
-      每一張卡片都能點下去處理，不是只能看的報表。
+      每張卡片都能點下去處理，不只是報表。
       <span class="en" style="display:block;margin-top:8px">Every card is something you can act on.</span>
     </p>
   </div>
@@ -468,8 +486,7 @@ section.panel .card { background: var(--c-bg); }
       <h2>輕鬆管理自己的工作區</h2>
       <p class="en">Manage your own workspace.</p>
       <p class="lead" style="margin-top:16px">
-        權限沿用 FOD 的三種角色 —— 種子、成員、瀏覽者。
-        原本的角色設定直接帶過來，不用重新建一套。
+        權限沿用 FOD 的三種角色：種子、成員、瀏覽者。原設定直接帶過來就能用。
       </p>
     </div>
 
@@ -477,25 +494,23 @@ section.panel .card { background: var(--c-bg); }
       <div class="card gov-hl">
         <p class="tag">種子　Seed</p>
         <h4>調整課上的工作區</h4>
-        <p>首頁要放什麼、課上用哪些應用、KPI 書籤放哪幾張報表、知識文件與排程流程怎麼維護。一課可以有多位種子，不會卡在一個人身上。</p>
+        <p>首頁放什麼、課上用哪些應用、KPI 書籤放哪幾張報表、知識文件與排程流程怎麼維護。一課可以有多位種子。</p>
       </div>
       <div class="card">
         <p class="tag tag-plain">成員　Member</p>
         <h4>日常使用</h4>
-        <p>處理自己的任務、決定排程停下來的步驟、釘選常用應用、問 AI。日常值班用得到的都在這一層。</p>
+        <p>處理自己的任務、決定排程停在哪一步、釘選常用應用、問 AI。值班會用到都在這層。</p>
       </div>
       <div class="card">
         <p class="tag tag-plain">瀏覽者　Viewer</p>
         <h4>唯讀檢視</h4>
-        <p>看得到課上的狀況與報表，不做異動。適合跨課支援或需要了解進度的人。</p>
+        <p>看得到課上的狀況與報表。適合跨課支援，或需要了解進度的人。</p>
       </div>
     </div>
 
     <p class="note">
-      要加工具、改版面、調報表，找課上的種子就好，不用開單等 IT 排程。
-      <span class="en" style="display:block;margin-top:8px">
-        Same three roles as FOD — nothing to set up again.
-      </span>
+      要加工具、改版面、調報表，找課上的種子，當天就能用。
+      <span class="en" style="display:block;margin-top:8px">Ask your section's Seed. Same three roles as FOD.</span>
     </p>
   </div>
 </section>
@@ -515,30 +530,30 @@ section.panel .card { background: var(--c-bg); }
         <h4>這跟舊版 ECP 有何不同？</h4>
         <p class="en">How is this different from ECP?</p>
         <p>ECP 是全廠的功能目錄，你得先知道要找哪個功能、在第幾層。
-           Agent Portal 以課為單位：開班打開就是課上的狀況，報表、派工、機台、常用系統都排好了。
-           <strong>ECP 上的功能不會不見</strong>，一樣能從應用中心進入。</p>
+           Agent Portal 以課為單位，開班打開就是課上的狀況，報表、派工、機台、常用系統都排好了。
+           <strong>ECP 上的功能一樣能從應用中心進入。</strong></p>
       </div>
 
       <div class="faq-item">
         <h4>AI 在哪裡用？可以做什麼事情？</h4>
         <p class="en">Where do I use the AI, and what for?</p>
-        <p>兩個地方。<strong>AI 助理</strong>可以直接問 —— 查機台數據、問異常碼怎麼處理、查課上的知識文件。
-           <strong>排程</strong>則是由它定時跑例行工作，像當班交接報告、SPC 異常日報、FDC 異常摘要。</p>
+        <p>兩個地方。<strong>AI 助理</strong>可以直接問：查 FDC 機台數據、問異常碼怎麼處理、查課上的知識文件。
+           <strong>排程</strong>由它定時跑例行工作，像當班交接報告、SPC 異常日報、FDC 異常摘要。</p>
       </div>
 
       <div class="faq-item">
         <h4>AI 會做到哪些事情？</h4>
         <p class="en">How far will the AI go?</p>
-        <p><strong>止於查詢與建議。</strong>查資料、算數字、彙整報表它自己完成；
+        <p><strong>止於查詢與建議。</strong>查資料、算數字、彙整報表它自己完成。
            會開單、會通報、會改參數的步驟一律停下來，把要送出的內容攤開，等人按確認才往下。
-           回答一定附上依據的數據與引用的知識版本，方便你自己判斷對不對。</p>
+           回答一定附上依據的數據與知識版本，方便你自己判斷。</p>
       </div>
 
       <div class="faq-item">
         <h4>有問題我該找誰？</h4>
         <p class="en">Who do I ask for help?</p>
-        <p><strong>工作區的事找課上的種子</strong> —— 首頁版面、要加的應用、KPI 書籤、知識文件與排程流程。
-           <strong>系統本身的問題找平台團隊</strong> —— 帳號權限、要新接的系統、功能異常。</p>
+        <p><strong>工作區找課上的種子</strong>：首頁版面、要加哪些應用、KPI 書籤、知識文件與排程流程。
+           <strong>系統本身找平台團隊</strong>：帳號權限、要新接的系統、功能異常。</p>
       </div>
     </div>
   </div>
@@ -548,9 +563,9 @@ section.panel .card { background: var(--c-bg); }
 <!-- ── 06-cta.html ── -->
 <section id="cta" class="cta">
   <div class="wrap">
-    <h2>開班的時候，打開它就好</h2>
+    <h2>開班打開它就好</h2>
     <p class="en">Open it when your shift starts. That's it.</p>
-    <p class="lead cta-lead">不用申請帳號，不用先設定。你的課已經在裡面了。</p>
+    <p class="lead cta-lead">打開就能用，你的課已經在裡面。</p>
     <a class="btn btn-primary btn-lg" href="../index.html">進入 Agent Portal　→</a>
   </div>
 </section>
