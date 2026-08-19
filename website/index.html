@@ -30,11 +30,8 @@
   --c-border:         #E0E0E0;
   --c-border-strong:  #9E9E9E;
 
-  /* 狀態四色（與產品一致） */
+  /* 狀態色（取自產品四色，本站僅用到正常態） */
   --c-ok:             #22C55E;
-  --c-warn:           #F59E0B;
-  --c-err:            #EF4444;
-  --c-idle:           #6B7280;
 
   /* 間距：8px 系統 */
   --s1:  8px;  --s2: 16px;  --s3: 24px;  --s4: 32px;
@@ -88,7 +85,6 @@ h2 + .en { margin-top: var(--s1); font-size: 14px; }
 
 .sec-head { margin-bottom: var(--s6); max-width: 720px; }
 
-.mono { font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; }
 
 /* ── 按鈕 ──────────────────────────────────────────────────────────────── */
 .btn {
@@ -103,7 +99,6 @@ h2 + .en { margin-top: var(--s1); font-size: 14px; }
 .btn-ghost { background: transparent; color: var(--c-text); border-color: var(--c-border); }
 .btn-ghost:hover { border-color: var(--c-border-strong); }
 .btn-lg { padding: var(--s2) var(--s4); font-size: 15px; }
-.btn .sub { font-weight: 400; opacity: 0.75; font-size: 12px; }
 
 /* ── 卡片 ──────────────────────────────────────────────────────────────── */
 .card {
@@ -115,15 +110,11 @@ h2 + .en { margin-top: var(--s1); font-size: 14px; }
 section.panel .card { background: var(--c-bg); }
 
 .grid { display: grid; gap: var(--s3); }
-.grid-2 { grid-template-columns: repeat(2, 1fr); }
 .grid-3 { grid-template-columns: repeat(3, 1fr); }
 
 /* ── 狀態圓點：固定 10x10 ───────────────────────────────────────────────── */
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; }
 .dot-ok { background: var(--c-ok); }
-.dot-warn { background: var(--c-warn); }
-.dot-err { background: var(--c-err); }
-.dot-idle { background: var(--c-idle); }
 
 /* ── 膠囊 Tabs：圓角 999px、選中填滿主色、絕不使用底線 ────────────────────── */
 .tabs { display: flex; gap: var(--s1); flex-wrap: wrap; margin-bottom: var(--s5); }
@@ -150,7 +141,7 @@ section.panel .card { background: var(--c-bg); }
 @media (max-width: 900px) {
   section { padding-top: var(--s8); padding-bottom: var(--s8); }
   h2 { font-size: 24px; }
-  .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr; }
 }
 
 /* ==========================================================================
@@ -213,77 +204,14 @@ section.panel .card { background: var(--c-bg); }
 }
 .shot-frame img { display: block; width: 100%; height: auto; }
 .shot figcaption { margin-top: var(--s2); font-size: 13px; color: var(--c-text-3); max-width: 880px; }
-.shot-sm { margin-top: var(--s6); }
 
-.marker {
-  position: absolute; width: 32px; height: 32px; border-radius: 50%;
-  background: var(--c-primary); color: #FFFFFF;
-  font-size: 14px; font-weight: 700; line-height: 32px; text-align: center;
-  border: 2px solid #FFFFFF;
-}
-.marker-static { position: static; display: block; margin-bottom: var(--s2); }
-
-.zone-grid { margin-top: var(--s5); }
-.zone h4 { display: flex; flex-direction: column; margin-bottom: var(--s1); }
-.zone h4 .en { margin-top: 0; }
-.zone p { color: var(--c-text-2); }
-
-/* ── 六個去處 ───────────────────────────────────────────────────────────── */
-.place h4 { margin-bottom: var(--s1); }
-.place p { color: var(--c-text-2); }
-
-/* ── 時間軸 ─────────────────────────────────────────────────────────────── */
-.timeline { list-style: none; }
-.timeline li { display: grid; grid-template-columns: 64px 1fr; gap: var(--s3); }
-.timeline .t { font-family: 'SF Mono', 'Roboto Mono', Menlo, Consolas, monospace; font-size: 14px; font-weight: 600; color: var(--c-primary); }
-.timeline li > div { border-left: 2px solid var(--c-border); padding-left: var(--s3); padding-bottom: var(--s4); }
-.timeline li:last-child > div { padding-bottom: 0; }
-.timeline li.hl > div { border-left-color: var(--c-primary); }
-.timeline h4 { margin-bottom: var(--s1); }
-.timeline p { color: var(--c-text-2); }
-.timeline a { color: var(--c-primary); text-decoration: none; font-weight: 600; white-space: nowrap; }
-.timeline a:hover { text-decoration: underline; }
-
-/* ── 對話流 ─────────────────────────────────────────────────────────────── */
-.chat { max-width: 840px; display: flex; flex-direction: column; gap: var(--s3); }
-.msg p + p { margin-top: var(--s2); }
-.msg-user {
-  align-self: flex-end; max-width: 80%;
-  background: var(--c-primary); color: #FFFFFF;
-  border-radius: var(--radius-card); padding: var(--s2) var(--s3);
-}
-.msg-ai {
-  background: var(--c-bg); border: 1px solid var(--c-border);
-  border-radius: var(--radius-card); padding: var(--s3);
-}
-.msg-meta { display: flex; flex-wrap: wrap; gap: var(--s1); margin-bottom: var(--s2); }
-.msg-steps { margin: var(--s2) 0 0 var(--s3); }
-.msg-steps li { padding: var(--s1) 0; color: var(--c-text-2); }
-.msg-foot { margin-top: var(--s2); font-size: 13px; color: var(--c-text-3); }
-.msg-links { display: flex; flex-wrap: wrap; gap: var(--s1); margin-top: var(--s3); }
-
-.evidence { margin-top: var(--s3); background: var(--c-panel); border-radius: var(--radius-btn); padding: var(--s2) var(--s3) var(--s3); }
-.evidence h4 { font-size: 13px; color: var(--c-text-3); margin-bottom: var(--s2); font-weight: 600; }
-.evidence ul { list-style: none; display: flex; flex-direction: column; gap: var(--s2); }
-.evidence li { display: flex; gap: var(--s1); align-items: flex-start; }
-.evidence .dot { margin-top: var(--s1); }
-.evidence b { display: block; font-size: 13px; font-weight: 600; }
-.evidence span { display: block; font-size: 13px; color: var(--c-text-2); }
-.evidence code { font-size: 12px; color: var(--c-text-3); }
-
-.blocked {
-  display: flex; gap: var(--s1); align-items: flex-start; margin-top: var(--s2);
-  border: 1px solid rgba(239, 68, 68, 0.30); background: rgba(239, 68, 68, 0.06);
-  border-radius: var(--radius-btn); padding: var(--s2);
-}
-.blocked .dot { margin-top: var(--s1); }
-.blocked b { display: block; font-size: 13px; }
-.blocked span { display: block; font-size: 13px; color: var(--c-text-2); }
-.blocked code { font-size: 12px; color: var(--c-text-3); }
-
-.hitl-grid { margin-top: var(--s5); }
-.hitl-grid p { color: var(--c-text-2); }
-.hitl-grid h4 { margin-bottom: var(--s1); }
+/* ── 六大功能 ────────────────────────────────────────────────────────────── */
+.f-head { margin-bottom: var(--s3); max-width: 720px; }
+.f-head h3 { display: flex; flex-direction: column; }
+.f-head .lead { margin-top: var(--s1); }
+.f-points { list-style: none; display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--s3); margin-top: var(--s3); }
+.f-points li { border-top: 1px solid var(--c-border); padding-top: var(--s2); color: var(--c-text-2); }
+.f-points b { display: block; color: var(--c-text); font-weight: 600; margin-bottom: var(--s1); }
 
 /* ── 治理 ──────────────────────────────────────────────────────────────── */
 .gov h4 { margin: var(--s2) 0 var(--s1); }
@@ -318,10 +246,8 @@ section.panel .card { background: var(--c-bg); }
   .hero { padding-top: var(--s6); padding-bottom: var(--s6); }
   .hero h1 { font-size: 32px; }
   .br-m { display: none; }
-  .compare, .faq { grid-template-columns: 1fr; }
+  .compare, .faq, .f-points { grid-template-columns: 1fr; }
   .timeline li { grid-template-columns: 56px 1fr; gap: var(--s2); }
-  .msg-user { max-width: 100%; }
-  .marker { width: 24px; height: 24px; line-height: 24px; font-size: 12px; }
   .trust { gap: var(--s2); }
 }
 
@@ -336,9 +262,9 @@ section.panel .card { background: var(--c-bg); }
       <span class="brand-name">Agent Portal</span>
     </a>
     <nav class="head-nav">
-      <a href="#section-first">為什麼是「課」</a>
-      <a href="#workspace">打開長這樣</a>
-      <a href="#shift">一個班的一天</a>
+      <a href="#features">六大功能</a>
+      <a href="#why">為什麼是「課」</a>
+      <a href="#manage">權限與管理</a>
       <a href="#faq">常見疑問</a>
     </nav>
     <a class="btn btn-primary" href="../index.html">進入 Portal</a>
@@ -355,81 +281,151 @@ section.panel .card { background: var(--c-bg); }
     <p class="en hero-en">A workspace that belongs to your section.</p>
 
     <p class="lead hero-lead">
-      課的佈告欄、機台狀態、未結案 Case、Lot Hold、課的 KPI、你今天的任務、
-      課常用的系統入口 —— 開班打開它，全部在同一頁。
+      課上要用的管理工具都準備到位了 —— KPI 報表、AR 派工、機台狀態、常用系統入口。
+      開班打開，全部在同一頁。
     </p>
     <p class="en hero-lead-en">
-      Your section's bulletin, tool status, open cases, KPIs, your tasks and the systems
-      your section actually uses — all on one page when your shift starts.
+      KPI reports, task dispatch, tool status and the systems you use — ready when your shift starts.
     </p>
 
     <div class="hero-actions">
       <a class="btn btn-primary btn-lg" href="../index.html">進入 Agent Portal　→</a>
-      <a class="btn btn-ghost btn-lg" href="#shift">看一個班的一天　↓</a>
+      <a class="btn btn-ghost btn-lg" href="#features">看六大功能　↓</a>
     </div>
 
     <ul class="trust">
       <li><span class="dot dot-ok"></span>資料範圍就是你的課</li>
-      <li><span class="dot dot-ok"></span>每張卡片都能點下去做事</li>
-      <li><span class="dot dot-ok"></span>版面由你們課自己的 Seed 決定</li>
+      <li><span class="dot dot-ok"></span>每張卡片都能點下去處理</li>
+      <li><span class="dot dot-ok"></span>權限沿用 FOD，不用重設</li>
     </ul>
   </div>
 </section>
 
 
-<!-- ── 02-workspace.html ── -->
-<section id="workspace" class="panel">
+<!-- ── 02-features.html ── -->
+<section id="features" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <p class="eyebrow">The workspace</p>
-      <h2>開班打開，長這樣</h2>
-      <p class="en">This is what you see when your shift starts.</p>
+      <p class="eyebrow">Six features</p>
+      <h2>六大功能</h2>
+      <p class="en">Click any feature to see what it does.</p>
+      <p class="lead" style="margin-top:16px">點任一個，看它實際長什麼樣。</p>
     </div>
 
-    <figure class="shot">
-      <div class="shot-frame">
-        <img src="assets/shot-home.png" alt="Agent Portal 首頁：左側為課佈告欄與機台狀態，右側為我的任務面板，底部為 AI 快問欄" width="2000" height="1250">
-        <span class="marker" style="left:10%;  top:6.5%">1</span>
-        <span class="marker" style="left:84%;  top:5.2%"  >2</span>
-        <span class="marker" style="left:6.5%; top:92.5%">3</span>
+    <div data-tabgroup>
+      <div class="tabs" role="tablist" aria-label="選擇功能">
+        <button class="tab" role="tab" aria-selected="true"  aria-controls="f-home" id="t-home">Home 工作站</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="f-kpi"  id="t-kpi">KPI 報表</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="f-app"  id="t-app">應用中心</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="f-task" id="t-task">AR 派工</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="f-ai"   id="t-ai">AI 助理</button>
+        <button class="tab" role="tab" aria-selected="false" aria-controls="f-sch"  id="t-sch">排程與決策</button>
       </div>
-      <figcaption class="en">ETC 設備課 · 日班 08:00–16:00</figcaption>
-    </figure>
 
-    <div class="grid grid-3 zone-grid">
-      <div class="card zone">
-        <span class="marker marker-static">1</span>
-        <h4>課的公共區<span class="en">Section Zone</span></h4>
-        <p>課佈告欄、機台 Tool Status、未結案 Case、Lot Hold、課的 KPI 摘要。
-           內容與排列由你們課的 Seed 決定，全課看到的是同一份。</p>
+      <div role="tabpanel" id="f-home" aria-labelledby="t-home">
+        <div class="f-head">
+          <h3>Home 工作站<span class="en">Your section at shift start</span></h3>
+          <p class="lead">開班第一眼，課上今天的狀況都在這一頁。</p>
+        </div>
+        <figure class="shot"><div class="shot-frame">
+          <img src="assets/shot-home.png" alt="Home 工作站：左側課佈告欄與機台狀態，右側個人任務清單" width="2000" height="1145">
+        </div></figure>
+        <ul class="f-points">
+          <li><b>課佈告欄</b>交接報告、課長公告、待確認事項，全課同一份</li>
+          <li><b>機台狀態</b>Down／Monitoring／PM 一覽，可直接借機或轉 FOUP</li>
+          <li><b>我的任務</b>右側清單只放你自己的事，P1 置頂，不受其他人的任務干擾</li>
+        </ul>
       </div>
-      <div class="card zone">
-        <span class="marker marker-static">2</span>
-        <h4>我的任務<span class="en">My Tasks</span></h4>
-        <p>右側全高面板，只放你自己的事。P1 置頂、不會自動重排，
-           誰派的、什麼時候到期、關聯哪台機台都寫清楚。</p>
+
+      <div role="tabpanel" id="f-kpi" aria-labelledby="t-kpi" hidden>
+        <div class="f-head">
+          <h3>KPI 報表<span class="en">Reports in one place</span></h3>
+          <p class="lead">課上要看的報表集中在這，不用一個一個系統開。</p>
+        </div>
+        <figure class="shot"><div class="shot-frame">
+          <img src="assets/shot-kpi.png" alt="KPI 報表中心：左側書籤清單，右側稼動率、MTTR 等指標與趨勢圖" width="2000" height="662">
+        </div></figure>
+        <ul class="f-points">
+          <li><b>書籤清單</b>依設備效能、維修管理、停機分析分組，由課上自己決定放什麼</li>
+          <li><b>對照目標值</b>稼動率、MTTR、FDC 異常台數、Unclose Case 都標出目標與差距</li>
+          <li><b>要細看就跳過去</b>「在原系統開啟」帶著查詢條件進 FDC 或 PBI，不用重設</li>
+        </ul>
       </div>
-      <div class="card zone">
-        <span class="marker marker-static">3</span>
-        <h4>快問欄<span class="en">AmbientBar</span></h4>
-        <p>常駐底部。已經載入課的上下文，不用先說明你是哪一課、
-           管哪些機台，直接問就好。</p>
+
+      <div role="tabpanel" id="f-app" aria-labelledby="t-app" hidden>
+        <div class="f-head">
+          <h3>應用中心<span class="en">Your section's systems</span></h3>
+          <p class="lead">課上常用的系統都在這，釘選的會同步顯示在首頁。</p>
+        </div>
+        <figure class="shot"><div class="shot-frame">
+          <img src="assets/shot-app.png" alt="應用中心：上方為已釘選應用，下方為完整應用目錄與分類" width="2000" height="775">
+        </div></figure>
+        <ul class="f-points">
+          <li><b>依用途分類</b>值班管理、機台參數、裝機維修、製程監控、良率分析等</li>
+          <li><b>個人釘選</b>最多 20 個，釘了就出現在首頁「課的應用」</li>
+          <li><b>找不到就搜尋</b>用名稱、描述或所屬系統查，也能瀏覽全廠功能目錄</li>
+        </ul>
+      </div>
+
+      <div role="tabpanel" id="f-task" aria-labelledby="t-task" hidden>
+        <div class="f-head">
+          <h3>AR 派工<span class="en">Task dispatch</span></h3>
+          <p class="lead">誰在做什麼、誰逾期了，一頁看完。</p>
+        </div>
+        <figure class="shot"><div class="shot-frame">
+          <img src="assets/shot-task.png" alt="AR 派工：上方成員總覽，下方依負責人分組的任務清單" width="2000" height="750">
+        </div></figure>
+        <ul class="f-points">
+          <li><b>成員總覽</b>各人手上幾件、有沒有逾期，一眼看出誰滿載</li>
+          <li><b>任務帶完整資訊</b>機台號、Recipe、優先級、截止日都在列上</li>
+          <li><b>直接指定負責人</b>派工留下紀錄，交接時不會因為口頭交代而漏掉</li>
+        </ul>
+      </div>
+
+      <div role="tabpanel" id="f-ai" aria-labelledby="t-ai" hidden>
+        <div class="f-head">
+          <h3>AI 助理<span class="en">Ask, with evidence</span></h3>
+          <p class="lead">不熟的異常碼，問一句就有研判和依據。</p>
+        </div>
+        <figure class="shot"><div class="shot-frame">
+          <img src="assets/shot-ai.png" alt="AI 助理：針對 E-101 跳 ERR-4421 給出研判、依據與建議處置" width="2000" height="700">
+        </div></figure>
+        <ul class="f-points">
+          <li><b>說明依據</b>研判結論後面接的是查到的現場數據，不是只給一句結論</li>
+          <li><b>標注來源</b>引用了課上哪份知識文件、第幾版，寫在回答裡</li>
+          <li><b>附操作入口</b>要動手時給你帶好機台號與 Recipe 的連結，不用重填</li>
+        </ul>
+      </div>
+
+      <div role="tabpanel" id="f-sch" aria-labelledby="t-sch" hidden>
+        <div class="f-head">
+          <h3>排程與決策<span class="en">Scheduled runs, human decisions</span></h3>
+          <p class="lead">例行報表定時跑完；要動到系統的，停下來等你決定。</p>
+        </div>
+        <figure class="shot"><div class="shot-frame">
+          <img src="assets/shot-schedule.png" alt="排程與決策：SPC 異常日報停在開立異常工單這一步，等待人工決定" width="2000" height="700">
+        </div></figure>
+        <ul class="f-points">
+          <li><b>定時產出</b>當班交接報告、SPC 異常日報、FDC 異常摘要，時間到自動跑</li>
+          <li><b>寫入前先問</b>會開單、會通報的步驟一律暫停，把要送出的參數攤開給你看</li>
+          <li><b>誰都能決定</b>課上任何成員都可以處理，不用先認領；決定者與時間會留下紀錄</li>
+        </ul>
       </div>
     </div>
   </div>
 </section>
 
 
-<!-- ── 03-section.html ── -->
-<section id="section-first">
+<!-- ── 03-why.html ── -->
+<section id="why">
   <div class="wrap">
     <div class="sec-head">
       <p class="eyebrow">Section-first</p>
-      <h2>為什麼是「課」，不是「功能」</h2>
-      <p class="en">Your section is the unit — not a directory of functions.</p>
+      <h2>以「課」為單位，工具一次到位</h2>
+      <p class="en">Everything scoped to your section.</p>
       <p class="lead" style="margin-top:16px">
-        課是排班、交接、協調的實際單位。所以 Portal 把「課」當成資料邊界：
-        你看到的每一筆，都是你的課的事，不是整廠的雜訊。
+        報表、任務、機台狀態、排程產出，看到的都只有你的課，
+        不用在全廠的資料裡篩出自己要的那幾筆。
       </p>
     </div>
 
@@ -438,282 +434,74 @@ section.panel .card { background: var(--c-bg); }
         <h3 class="compare-title compare-title-old">現在</h3>
         <p class="en">Today</p>
         <ul class="compare-list">
-          <li>課的資訊散在 FDC、MES、SPC、Case Center，各點各的</li>
-          <li>Function tree 要自己找功能，先想「這個在哪一層」</li>
-          <li>想加一個課裡要用的東西，得跟 IT 開單排隊</li>
-          <li>儀表板看得很漂亮，看完還是得回原系統做事</li>
+          <li>報表、派工、機台狀態分散在各系統，各開各的</li>
+          <li>要用哪個功能，先在 function tree 裡找</li>
+          <li>課上要加一個工具，開單等 IT 排程</li>
+          <li>看完報表，還是得回原系統重新查一次才能處理</li>
         </ul>
       </div>
       <div class="compare-col compare-col-new">
         <h3 class="compare-title compare-title-new">用了之後</h3>
         <p class="en">With Agent Portal</p>
         <ul class="compare-list compare-list-new">
-          <li>課的當前狀態集中在同一頁，範圍就是你的課</li>
-          <li>開啟即見課況，不用先找功能在哪裡</li>
-          <li>你們課的 Seed 自己排版面、加應用、維護知識</li>
-          <li>每張卡片都能點下去，帶著參數直接跳進子系統</li>
+          <li>同一頁看完，資料範圍就是你的課</li>
+          <li>開班打開就是課上的狀況，不用先找功能</li>
+          <li>課上的 Seed 自己加，當天就能用</li>
+          <li>帶著機台號與 Recipe 直接跳進子系統，不用重填</li>
         </ul>
       </div>
     </div>
 
     <p class="note">
-      這也是它<strong>不是儀表板</strong>的原因 —— 每張卡片、每個指標都必須能點下去做事。
-      我們不做給課長欣賞的精美儀表板。
-      <span class="en" style="display:block;margin-top:8px">
-        It's a workspace, not a dashboard. Every card is something you can act on.
-      </span>
+      每一張卡片都能點下去處理，不是只能看的報表。
+      <span class="en" style="display:block;margin-top:8px">Every card is something you can act on.</span>
     </p>
   </div>
 </section>
 
 
-<!-- ── 04-places.html ── -->
-<section id="places" class="panel">
+<!-- ── 04-manage.html ── -->
+<section id="manage" class="panel">
   <div class="wrap">
     <div class="sec-head">
-      <p class="eyebrow">Six places</p>
-      <h2>六個去處，一件事一個地方</h2>
-      <p class="en">Six destinations — one place for each kind of work.</p>
-    </div>
-
-    <div class="grid grid-3 places">
-      <div class="card place">
-        <h4>Home　工作站</h4>
-        <p>課的當前狀態與你今天要處理的事，開班第一站。</p>
-      </div>
-      <div class="card place">
-        <h4>KPI　報表中心</h4>
-        <p>課的報表書籤與趨勢深入分析，數字不對時往下追。</p>
-      </div>
-      <div class="card place">
-        <h4>App　應用中心</h4>
-        <p>課常用的系統集中在這，可個人釘選，也能查全廠功能目錄。</p>
-      </div>
-      <div class="card place">
-        <h4>Task　派工管理</h4>
-        <p>課長派工、跨角色移交 —— 發起和接收都有明確的地方，不再靠口頭。</p>
-      </div>
-      <div class="card place">
-        <h4>AI　助理</h4>
-        <p>用課的上下文問問題。每個回答都標注查了哪些數據、引用哪份知識。</p>
-      </div>
-      <div class="card place">
-        <h4>Schedule　排程與決策</h4>
-        <p>課裡重複做的事定時跑完；需要人決定的，排隊在這等你。</p>
-      </div>
-    </div>
-
-    <figure class="shot shot-sm">
-      <div class="shot-frame">
-        <img src="assets/shot-app.png" alt="App Center：課常用應用釘選於上方，下方為完整應用目錄與分類" width="2000" height="775" loading="lazy">
-      </div>
-      <figcaption>
-        App Center —— 課裡真正在用的 28 個系統都在這，常用的釘選起來會同步顯示在首頁。
-        <span class="en">Your section's systems in one place. Pin the ones you use; they show up on Home.</span>
-      </figcaption>
-    </figure>
-  </div>
-</section>
-
-
-<!-- ── 05-shift.html ── -->
-<section id="shift">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">A day on shift</p>
-      <h2>一個班的一天</h2>
-      <p class="en">What one shift actually looks like.</p>
+      <p class="eyebrow">Roles &amp; permissions</p>
+      <h2>輕鬆管理自己的工作區</h2>
+      <p class="en">Manage your own workspace.</p>
       <p class="lead" style="margin-top:16px">
-        三種角色看到的預設內容不一樣 —— 指標、任務、常用系統都依你的職務排好。
-      </p>
-    </div>
-
-    <div data-tabgroup>
-      <div class="tabs" role="tablist" aria-label="選擇角色">
-        <button class="tab" role="tab" aria-selected="true"  aria-controls="tl-ee"  id="tab-ee">EE　設備工程師</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="tl-pe"  id="tab-pe">PE　製程工程師</button>
-        <button class="tab" role="tab" aria-selected="false" aria-controls="tl-mfg" id="tab-mfg">MFG　製造工程師</button>
-      </div>
-
-      <div role="tabpanel" id="tl-ee" aria-labelledby="tab-ee">
-        <ol class="timeline">
-          <li><span class="t">07:50</span><div><h4>交接報告已經產好了</h4><p>「當班交接報告」排程跑完 5 個步驟：取稼動資料、取警報並分級、算稼動率與異常密度、取未結案 Case、套課內格式。<strong>數字機器算，判斷你給</strong> —— 你補上交代事項再送出。</p></div></li>
-          <li><span class="t">08:10</span><div><h4>開班掃課況</h4><p>Tool Status 3 台 Down、2 台 Monitoring；未結案 Case 7 件，其中 1 件逾期。要看細節就點下去，不用另開系統。</p></div></li>
-          <li class="hl"><span class="t">09:20</span><div><h4>E-101 跳 ERR-4421，你沒看過這個碼</h4><p>問一句就好。AI 依課內指引給研判與依據，並附上它查了哪些數據、引用哪份文件第幾版。<a href="#zoom-ai">↓ 放大看這一段</a></p></div></li>
-          <li class="hl"><span class="t">14:00</span><div><h4>SPC 異常日報要開單了，它停下來問你</h4><p>排程跑到「開立異常工單」這一步就停住 —— 因為這一步會異動系統。<a href="#zoom-hitl">↓ 放大看這一段</a></p></div></li>
-          <li><span class="t">16:30</span><div><h4>課長派了一件 P1 給你</h4><p>直接出現在 My Tasks 置頂，附機台號、期限與發起人。交接時它還在，不會口頭交代完就消失。</p></div></li>
-        </ol>
-      </div>
-
-      <div role="tabpanel" id="tl-pe" aria-labelledby="tab-pe" hidden>
-        <ol class="timeline">
-          <li><span class="t">08:00</span><div><h4>每日 SPC 巡檢摘要已產出</h4><p>排程自動彙整今日各 Recipe 的 OOC 狀況，開班就在佈告欄看得到。</p></div></li>
-          <li><span class="t">08:20</span><div><h4>開班掃課況</h4><p>SPC OOC 2 筆、待審 DCR 3 件、再發 Alarm 1 件 —— 都是你這個角色的預設指標。</p></div></li>
-          <li class="hl"><span class="t">10:15</span><div><h4>R-512 CP 值一直掉，該怎麼辦</h4><p>問 AI 拿趨勢研判與可能原因，附它查過的量測數據，並帶著 Recipe 參數直接跳進 SPC Console。</p></div></li>
-          <li><span class="t">13:40</span><div><h4>EE 移交過來的製程評估</h4><p>出現在 My Tasks，附原始 Case 與 EE 已經查過的數據 —— 不用再問一次「你查到什麼」。</p></div></li>
-          <li><span class="t">15:00</span><div><h4>Recipe 品質週報排程跑完</h4><p>產出直接進課佈告欄，全課看得到，不用再寄一封信。</p></div></li>
-        </ol>
-      </div>
-
-      <div role="tabpanel" id="tl-mfg" aria-labelledby="tab-mfg" hidden>
-        <ol class="timeline">
-          <li><span class="t">07:45</span><div><h4>生產日報自動彙整完成</h4><p>昨日各線產出、達成率、異常停機事件，排程跑完直接進佈告欄。</p></div></li>
-          <li><span class="t">08:15</span><div><h4>開班掃課況</h4><p>Line 3 產能落後 8%、Priority Lot 4 批、WIP 分布與線體稼動率一頁看完。</p></div></li>
-          <li class="hl"><span class="t">09:30</span><div><h4>W26-042 這批該不該插隊</h4><p>問 AI 拿影響評估 —— 交期、線體稼動、被擠掉的批次分別會怎樣，決定還是你下。</p></div></li>
-          <li><span class="t">11:00</span><div><h4>產能落後預警觸發</h4><p>排程偵測到落後，把提醒推送到值班人員的 Priority Feed，不用等到會議上才發現。</p></div></li>
-          <li><span class="t">15:30</span><div><h4>下午生產協調會議</h4><p>課的排程衝突與停機影響已經彙整好，開會直接談決策，不用現場翻系統。</p></div></li>
-        </ol>
-      </div>
-    </div>
-  </div>
-</section>
-
-<section id="zoom-ai" class="panel">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">09:20　放大看</p>
-      <h2>問一句，它連「憑什麼」一起給你</h2>
-      <p class="en">Every answer comes with the evidence behind it.</p>
-    </div>
-
-    <div class="chat">
-      <div class="msg msg-user"><p>E-101 跳 ERR-4421，怎麼辦？</p></div>
-
-      <div class="msg msg-ai">
-        <div class="msg-meta">
-          <span class="tag">Skill · ERR-4421 冷卻異常研判</span>
-          <span class="tag tag-plain">引用知識《ERR-4421 冷卻系統異常排除 v2》</span>
-        </div>
-        <p>這個狀況本課沒有標準流程，我依《ERR-4421 冷卻異常研判》幫你查了現場數據。</p>
-        <p><strong>研判：冷卻水路阻塞</strong></p>
-        <p>依據有三：過濾器壓差 0.07 MPa，超過 0.05 的判斷門檻；水壓是緩降不是跳動，形態符合阻塞而非感測器老化；同機台近 7 天沒有其他同碼警報，不像感測器問題。</p>
-        <p><strong>建議處置</strong></p>
-        <ol class="msg-steps">
-          <li>先執行冷卻水路疏通程序（清洗過濾器）</li>
-          <li>疏通後觀察 30 分鐘，水壓應回到 0.18 MPa 以上</li>
-          <li>若 30 分鐘內未回升，再開緊急工單請廠務支援</li>
-        </ol>
-        <p class="msg-foot">這是依指引研判的建議，不是已核准的流程，最後判斷仍在你身上。</p>
-
-        <div class="evidence">
-          <h4>查過的現場數據</h4>
-          <ul>
-            <li><span class="dot dot-ok"></span><div><b>比對適用範圍</b><span>E-101 屬 CMP、位於 ETC-3F、警報碼 ERR-4421 —— 符合</span></div></li>
-            <li><span class="dot dot-ok"></span><div><b>查警報明細　<code class="mono">fdc.get_alarm_detail</code></b><span>冷卻水壓 0.11 MPa（門檻 0.15）、過濾器壓差 0.07 MPa</span></div></li>
-            <li><span class="dot dot-ok"></span><div><b>查感測器趨勢　<code class="mono">eqp.get_sensor_trend</code></b><span>近 2 小時水壓由 0.19 緩降至 0.11，非跳動</span></div></li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="msg msg-user"><p>了解。那你順便幫我把 E-101 的 SPC 管制上限放寬一點，不然等一下又會跳。</p></div>
-
-      <div class="msg msg-ai">
-        <p><strong>這個我不能幫你做。</strong>我綁的是「ERR-4421 冷卻異常研判」，屬 Skill 型，只拿得到唯讀工具。我確實試著呼叫了變更管制界限的工具，被擋下來了 —— 就是下面這一行。</p>
-        <div class="blocked">
-          <span class="dot dot-err"></span>
-          <div>
-            <b>已擋下：變更 SPC 管制界限　<code class="mono">spc.update_control_limit</code></b>
-            <span>類型為「Skill」，允許清單內只有唯讀工具</span>
-          </div>
-        </div>
-        <p>而且就算做得到也不該這樣做 —— 水壓異常時放寬上限等於把警報關掉，異常還在。管制界限變更屬製程參數異動，要走 DCR 程序由製程課核准。你要自己做的話，路徑在下面，參數都幫你帶好了：</p>
-        <div class="msg-links">
-          <a class="btn btn-ghost" href="../index.html">開啟 SPC Console</a>
-          <a class="btn btn-ghost" href="../index.html">開 DCR 申請</a>
-        </div>
-      </div>
-    </div>
-
-    <p class="note">
-      它沒有照著做，也沒有只回一句「無法執行」—— 而是說明為什麼不行、應該走哪條路，並把你送到那條路的入口。
-      <span class="en" style="display:block;margin-top:8px">It refuses, explains why, and hands you the correct path.</span>
-    </p>
-  </div>
-</section>
-
-<section id="zoom-hitl">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">14:00　放大看</p>
-      <h2>會動到系統的那一步，它停下來等你</h2>
-      <p class="en">Every write stops and waits for a human.</p>
-    </div>
-
-    <figure class="shot">
-      <div class="shot-frame">
-        <img src="assets/shot-schedule.png" alt="排程決策收件匣：SPC 異常日報停在第 3 步「開立異常工單」，等待人工決定" width="2000" height="700" loading="lazy">
-      </div>
-    </figure>
-
-    <div class="grid grid-3 hitl-grid">
-      <div class="card">
-        <h4>停在哪一步，寫得很清楚</h4>
-        <p>SPC 異常日報跑到 Step 3「開立異常工單」。前兩步（查詢今日 SPC 資料、篩選 OOC 異常）已經跑完，結果都攤開給你看。</p>
-      </div>
-      <div class="card">
-        <h4>它打算做什麼，先講明白</h4>
-        <p>要呼叫哪個工具、帶什麼參數、依據是什麼，一行一行列出來 —— 不是叫你盲目按確認。</p>
-      </div>
-      <div class="card">
-        <h4>三個選項，你挑一個</h4>
-        <p>同意並繼續、改參數、略過此步。全課任何成員都能決定，不用先認領；先送出的決定即定案，並記下決定者與時間。</p>
-      </div>
-    </div>
-
-    <p class="note">
-      這道關卡是在<strong>執行的當下</strong>把關，不是靠事前審查流程內容。
-      所以不管那個流程裡寫了什麼，只要那一步會寫入，就一定會停在這裡。
-      <span class="en" style="display:block;margin-top:8px">
-        The gate runs at execution time, so no flow can slip a write past it.
-      </span>
-    </p>
-  </div>
-</section>
-
-
-<!-- ── 06-yours.html ── -->
-<section id="yours" class="panel">
-  <div class="wrap">
-    <div class="sec-head">
-      <p class="eyebrow">Your section runs it</p>
-      <h2>這個地盤，你們自己管</h2>
-      <p class="en">Your section configures it — not IT.</p>
-      <p class="lead" style="margin-top:16px">
-        每個課有自己的 <strong>Seed</strong>。Seed 不是 IT，就是你們課裡的工程師 ——
-        課的版面、課要用的應用、課的知識與流程，由他來調。
+        權限沿用 FOD 的三種角色 —— 種子、成員、瀏覽者。
+        原本的角色設定直接帶過來，不用重新建一套。
       </p>
     </div>
 
     <div class="grid grid-3 gov">
-      <div class="card">
-        <p class="tag tag-plain">平台團隊</p>
-        <h4>骨架</h4>
-        <p>頁面結構、Nav、Widget 規格與資料契約。所有課共用同一套，不會各做各的。</p>
-      </div>
       <div class="card gov-hl">
-        <p class="tag">你們課的 Seed</p>
-        <h4>課的內容</h4>
-        <p>首頁版面怎麼排、課要用哪些應用、KPI 書籤放什麼、課內知識與 Codify 流程怎麼維護。</p>
+        <p class="tag">種子　Seed</p>
+        <h4>調整課上的工作區</h4>
+        <p>首頁要放什麼、課上用哪些應用、KPI 書籤放哪幾張報表、知識文件與排程流程怎麼維護。一課可以有多位種子，不會卡在一個人身上。</p>
       </div>
       <div class="card">
-        <p class="tag tag-plain">你自己</p>
-        <h4>個人偏好</h4>
-        <p>應用釘選（最多 20 個）、個人顯示偏好。課的公共區不會被個人改掉。</p>
+        <p class="tag tag-plain">成員　Member</p>
+        <h4>日常使用</h4>
+        <p>處理自己的任務、決定排程停下來的步驟、釘選常用應用、問 AI。日常值班用得到的都在這一層。</p>
+      </div>
+      <div class="card">
+        <p class="tag tag-plain">瀏覽者　Viewer</p>
+        <h4>唯讀檢視</h4>
+        <p>看得到課上的狀況與報表，不做異動。適合跨課支援或需要了解進度的人。</p>
       </div>
     </div>
 
     <p class="note">
-      所以想加一個課裡要用的東西，<strong>找你們課的 Seed 就好，不用開單等 IT 排程</strong>。
-      一個課可以有多位 Seed，不會因為某個人請假就卡住。
+      要加工具、改版面、調報表，找課上的種子就好，不用開單等 IT 排程。
       <span class="en" style="display:block;margin-top:8px">
-        Need something changed? Ask your section's Seed — no ticket, no waiting on IT.
+        Same three roles as FOD — nothing to set up again.
       </span>
     </p>
   </div>
 </section>
 
 
-<!-- ── 07-faq.html ── -->
+<!-- ── 05-faq.html ── -->
 <section id="faq">
   <div class="wrap">
     <div class="sec-head">
@@ -724,40 +512,40 @@ section.panel .card { background: var(--c-bg); }
 
     <div class="faq">
       <div class="faq-item">
-        <h4>這是不是給課長看我在幹嘛的監視工具？</h4>
-        <p class="en">Is this a monitoring tool for my supervisor?</p>
-        <p>不是。Portal 以「課」為資料邊界，預設畫面是給工程師自己用的；
-           AI 的建議可以一鍵忽略，<strong>不會因此產生行政紀錄或追蹤義務</strong>。
-           我們的出發點是讓你少寫報告、少開單，不是多一個被盯的地方。</p>
+        <h4>這跟舊版 ECP 有何不同？</h4>
+        <p class="en">How is this different from ECP?</p>
+        <p>ECP 是全廠的功能目錄，你得先知道要找哪個功能、在第幾層。
+           Agent Portal 以課為單位：開班打開就是課上的狀況，報表、派工、機台、常用系統都排好了。
+           <strong>ECP 上的功能不會不見</strong>，一樣能從應用中心進入。</p>
       </div>
 
       <div class="faq-item">
-        <h4>AI 會不會自己跑去改系統？</h4>
-        <p class="en">Can the AI change systems on its own?</p>
-        <p>不會。唯讀的查詢它自己跑；任何會開單、會通報、會改資料的動作，
-           執行到那一步一律停下來等人按確認。這個檢查是在<strong>執行當下</strong>做的，
-           不是靠事前審核流程內容，所以繞不過去。</p>
+        <h4>AI 在哪裡用？可以做什麼事情？</h4>
+        <p class="en">Where do I use the AI, and what for?</p>
+        <p>兩個地方。<strong>AI 助理</strong>可以直接問 —— 查機台數據、問異常碼怎麼處理、查課上的知識文件。
+           <strong>排程</strong>則是由它定時跑例行工作，像當班交接報告、SPC 異常日報、FDC 異常摘要。</p>
       </div>
 
       <div class="faq-item">
-        <h4>我要學多久才會用？</h4>
-        <p class="en">How long does it take to learn?</p>
-        <p>不用先學。開班打開它，該看的東西已經排好了；不會的就用底部快問欄問一句。
-           等你發現課裡有件事每天都在重複做，再找 Seed 把它做成排程。</p>
+        <h4>AI 會做到哪些事情？</h4>
+        <p class="en">How far will the AI go?</p>
+        <p><strong>止於查詢與建議。</strong>查資料、算數字、彙整報表它自己完成；
+           會開單、會通報、會改參數的步驟一律停下來，把要送出的內容攤開，等人按確認才往下。
+           回答一定附上依據的數據與引用的知識版本，方便你自己判斷對不對。</p>
       </div>
 
       <div class="faq-item">
-        <h4>FDC、MES、Case Center 會被取代嗎？</h4>
-        <p class="en">Does this replace FDC, MES or Case Center?</p>
-        <p>不會。Portal 整合它們的數據呈現在同一頁，要深入操作時，
-           <strong>帶著已知參數直接跳過去</strong> —— 機台號、配方、批號都幫你填好，不用重打一次。</p>
+        <h4>有問題我該找誰？</h4>
+        <p class="en">Who do I ask for help?</p>
+        <p><strong>工作區的事找課上的種子</strong> —— 首頁版面、要加的應用、KPI 書籤、知識文件與排程流程。
+           <strong>系統本身的問題找平台團隊</strong> —— 帳號權限、要新接的系統、功能異常。</p>
       </div>
     </div>
   </div>
 </section>
 
 
-<!-- ── 08-cta.html ── -->
+<!-- ── 06-cta.html ── -->
 <section id="cta" class="cta">
   <div class="wrap">
     <h2>開班的時候，打開它就好</h2>
@@ -768,7 +556,7 @@ section.panel .card { background: var(--c-bg); }
 </section>
 
 
-<!-- ── 09-footer.html ── -->
+<!-- ── 07-footer.html ── -->
 <footer class="site-foot">
   <div class="wrap foot-inner">
     <div>
@@ -776,9 +564,9 @@ section.panel .card { background: var(--c-bg); }
       <p class="en">以「課」為單位的線上工作站 · A workspace that belongs to your section</p>
     </div>
     <nav class="foot-nav">
-      <a href="#section-first">為什麼是「課」</a>
-      <a href="#workspace">打開長這樣</a>
-      <a href="#shift">一個班的一天</a>
+      <a href="#features">六大功能</a>
+      <a href="#why">為什麼是「課」</a>
+      <a href="#manage">權限與管理</a>
       <a href="#faq">常見疑問</a>
       <a href="../index.html">進入 Portal</a>
     </nav>

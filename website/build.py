@@ -26,14 +26,12 @@ OUTPUT_FILE = os.path.join(BASE_DIR, 'index.html')
 SECTIONS = [
     '00-header.html',    # 置頂導覽列
     '01-hero.html',      # 你的課，有一個自己的工作站
-    '02-workspace.html', # 打開長這樣（Home 截圖）
-    '03-section.html',   # 為什麼是「課」
-    '04-places.html',    # 六個去處
-    '05-shift.html',     # 一個班的一天（EE / PE / MFG）
-    '06-yours.html',     # 這個地盤，你們自己管
-    '07-faq.html',       # 常見疑問
-    '08-cta.html',       # 收尾 CTA
-    '09-footer.html',    # 頁尾
+    '02-features.html',  # 六大功能（可點擊切換，各配真實截圖）
+    '03-why.html',       # 以「課」為單位，工具一次到位
+    '04-manage.html',    # 輕鬆管理自己的工作區（Seed / Member / Viewer）
+    '05-faq.html',       # 常見疑問
+    '06-cta.html',       # 收尾 CTA
+    '07-footer.html',    # 頁尾
 ]
 
 if '--output' in sys.argv:
