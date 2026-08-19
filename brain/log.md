@@ -628,3 +628,13 @@ PO 提出跨課情境需求（課級發布 → 他課下載測試 → 依原流�
 連帶：`Popconfirm` → Modal（僅已發布者）；發布項 `status` 加 `pending`；MP-OQ-1／3 結案；**新增 MP-OQ-5**（通知需擴充 N5／N6，既有四類都涵蓋不了，是通知中心第一次為 Skill 模組長出東西）、**MP-OQ-6**（課長 persona 尚未實作，baseline §13.4 P2 缺口 → 決策 H 的課長視角原型上做不出來，建議 Phase 2 先做 Seed 端＋mock 簽准接通流程）。
 
 受影響 wiki 頁：[skill-marketplace](concepts/skill-marketplace.md)、[open-questions.md](open-questions.md)、index.md。
+
+## [2026-08-19] decision | MP-OQ-5／6 結案：課長 persona 不拉進本輪、通知擴充延後
+
+**MP-OQ-6 課長 persona → 不拉進本輪**。Phase 2 只做 Seed 端（送出／待簽核／撤回）＋ 一顆 mock「模擬課長簽准」把流程接通；課長視角的設計（決策 H 的 H-2／H-3）已完成但暫不實作，等 baseline §13.4 的 P2 課長 persona 一起做，做出來才會跟其他頁面一致。
+
+**MP-OQ-5 通知 N5／N6 → 先不做，之後補**。⚠️ 已記錄代價：沒有 N5，下架訊息只剩清單列徽章與詳情頁置頂兩個表面，**人要自己走進 Skill 管理才看得到**。對決策 G 是實質降級——上游把一份「流程有問題」的 Codify 下架了，下游可能好幾週不知道，而那份正掛在排程上每週在跑。留痕機制完整（決定了就記得住），缺的是觸達。N6 暫時不痛（課長 persona 本來就不做，沒人需要被通知）→ **補 N5 的優先度應高於 N6**，Phase 3 排入時先做 N5。
+
+**PO 指示：先不動工，等叫。** 本 session 至此只寫 wiki，未動任何 `src/` 或 build 產出。
+
+受影響 wiki 頁：[skill-marketplace](concepts/skill-marketplace.md)、[open-questions.md](open-questions.md)。
