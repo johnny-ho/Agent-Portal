@@ -39,6 +39,12 @@
 function getSignoffGate(skill, calcOpened) {
   if (skill.stage === 'approving' || skill.stage === 'pirun' || skill.stage === 'production') return null;
 
+  /* 跨課下載的必經狀態（決策 B）：範圍沒設就沒有對象，沒有對象就沒東西可試跑。
+     放在最前面 —— 它是所有其他條件的前提。 */
+  if (skill.scope && skill.scope.unset) {
+    return '尚未設定適用範圍 —— ' + (skill.origin ? skill.origin.fromSection + '的對象編號在本課不存在，要自己選過' : '請先勾選這份適用於哪些對象');
+  }
+
   if (skill.tier === 'sop') {
     var scs = buildDataScenarios(skill);
     if (scs.length === 0) return '還沒有流程步驟，無法試跑也無法送簽';
@@ -177,6 +183,70 @@ function getSignoffAction(stage) {
     case 'production': return { label: '已生效',   next: null,        enabled: false };
     default:           return { label: '送出簽核', next: 'approving', enabled: true  };
   }
+}
+
+/* ════════════════════════════════════════
+   MpOriginBlock — 跨課下載後的落地狀態（決策 B）
+
+   置頂的是**任務清單不是橫幅**：每一項都有一顆按鈕跳到對應區塊。
+   決議 18 刪掉的是「只講狀態、不能行動」的橫幅，這塊不衝突。
+
+   補完就收合成一行常駐標記 —— 來源要永久看得見（半年後有人追問
+   「這東西哪來的」，答案要在原地），但「還沒設定」是進度，不該常駐。
+   ════════════════════════════════════════ */
+function MpOriginBlock({ skill, p }) {
+  var { C, fz } = useTheme();
+  if (!skill.origin) return null;
+  var o = skill.origin;
+  var pending = mpPendingSetup(skill);
+  var missingTools = mpToolCheck(p.key, skill.tools).missing;
+
+  function goto(id) {
+    var el = document.getElementById(id);
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* 全部補完：收合成一行 */
+  if (pending.length === 0) {
+    return (
+      <div style={{ marginBottom: 32, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+        ⓘ 下載自 {o.fromSection}《{skill.title}》{o.version}（{o.at}）· 本課已完成設定
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      marginBottom: 32, padding: 16, borderRadius: 8,
+      border: '1px solid rgba(245,158,11,0.2)', background: 'rgba(245,158,11,0.06)',
+    }}>
+      <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>
+        這份下載自 {o.fromSection}《{skill.title}》{o.version}
+      </div>
+      <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.8, marginBottom: 16 }}>
+        流程與工具已沿用，以下 {pending.length} 項必須由本課重新設定：
+      </div>
+
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', background: C.bg }}>
+        {pending.map(function(row, i) {
+          return (
+            <div key={row.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none' }}>
+              <span style={{ fontSize: fz(13), color: C.textMuted, flexShrink: 0 }}>☐</span>
+              <span style={{ fontSize: fz(13), color: C.text, width: 80, flexShrink: 0 }}>{row.label}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: fz(12), color: C.textMuted }}>{row.note}</span>
+              <antd.Button size="small" type="link" onClick={function() { goto(row.target); }} style={{ flexShrink: 0 }}>前往設定 →</antd.Button>
+            </div>
+          );
+        })}
+      </div>
+
+      {missingTools.length > 0 && (
+        <div style={{ fontSize: fz(12), color: '#F59E0B', lineHeight: 1.8, marginTop: 8 }}>
+          ⚠ 另有 {missingTools.length} 個工具（{missingTools.map(function(t) { return t.name; }).join('、')}）本課未授權
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ════════════════════════════════════════
@@ -709,7 +779,36 @@ function ScopeBlock({ skill, p, onSave }) {
       {/* 一句話用途 */}
       <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.8, marginBottom: 16 }}>{skill.purpose}</div>
 
+      {/* 跨課下載後的空白狀態：把原課的設定寫出來當參考，但**不預填**。
+          看得到、抄得動，但要自己動手 —— 決策 B「不自動 remap」的落點。 */}
+      {skill.scope && skill.scope.unset && (
+        <div style={{
+          border: '1px dashed ' + C.borderStrong, borderRadius: 8, padding: 24,
+          textAlign: 'center', marginBottom: 8, background: C.bgSub,
+        }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>尚未設定</div>
+          {skill.origin && skill.origin.originScope && (
+            <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, marginBottom: 16 }}>
+              {skill.origin.fromSection}設定的是
+              {' ' + ((skill.origin.originScope.equipmentClass || []).join('、') || '全部類別')}
+              {' ／ ' + ((skill.origin.originScope.area || []).join('、') || '全區')}
+              {' ／ ' + ((skill.origin.originScope.equipmentIds || []).join('、') || '—')}
+              <br />
+              本課的對象編號不同，系統不代為對應 —— 請自己選。
+            </div>
+          )}
+          {onSave && (
+            <antd.Button type="primary" onClick={function() {
+              onSave(Object.assign({}, skill, {
+                scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: (skill.origin && skill.origin.originScope && skill.origin.originScope.trigger) || { type: 'manual' } },
+              }));
+            }}>設定適用範圍</antd.Button>
+          )}
+        </div>
+      )}
+
       {/* 結構化條件（勾出來的，不是自由文字，所以才算得出符合幾台） */}
+      {!(skill.scope && skill.scope.unset) && (
       <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
         {describeScope(skill.scope).map(function(row, i) {
           return (
@@ -730,6 +829,7 @@ function ScopeBlock({ skill, p, onSave }) {
           )}
         </div>
       </div>
+      )}
 
       {/* 工具授權摘要：一行，需要細節才展開。
           Skill 的「不能寫入」要看得到，才知道邊界在哪。 */}
@@ -2323,7 +2423,8 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onSchedul
             <span style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{skill.title}</span>
           </div>
           <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
-            {tierCfg.oneLiner} · {skill.importedBy} 建立於 {skill.importedAt}
+            {/* 下載來的不是「建立」—— 這一份的內容是別課寫的，本課只是把它帶進來 */}
+            {tierCfg.oneLiner} · {skill.importedBy} {skill.origin ? '下載於' : '建立於'} {skill.importedAt}
           </div>
         </div>
         <antd.Space size={8} style={{ flexShrink: 0 }}>
@@ -2354,6 +2455,8 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onSchedul
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '24px 32px' }} className="scrollbar-thin">
           <div style={{ maxWidth: 880 }}>
+
+            <MpOriginBlock skill={skill} p={p} />
 
             {/* 類型摘要：這是什麼、能不能排程 */}
             <div id="sd-tier" className={flash === 'tier' ? 'sd-flash' : undefined} style={{
@@ -2398,6 +2501,18 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onSchedul
                 : '同一份指引換個問法就會走不同路，沒有固定步驟可以試跑，而且每次結果都不一樣 —— 所以驗的是意圖，而且要跑很多次。你寫下每次回答都該成立的條件，系統把每個提問情境各跑 ' + ACCEPT_RUNS + ' 次，由你看內容確認。全數確認才能送簽。'}>
               <TestBlock skill={skill} p={p} onSave={onSave} onOpenCalc={function() { setCalcOpened(true); }} />
             </SdSection>
+
+            {/* 原課的紀錄給看，但標死不計入 —— 不能有一絲「已經測過了可以直接用」的暗示 */}
+            {skill.origin && skill.origin.originAcceptNote && (
+              <SdSection
+                title={skill.origin.fromSection + '的' + (skill.tier === 'sop' ? '試跑' : '驗收') + '紀錄'}
+                desc={'⚠ 這是' + skill.origin.fromSection + '的紀錄，不計入本課簽核。本課仍須自己跑過一次。'}>
+                <div style={{
+                  fontSize: fz(13), color: C.textSub, lineHeight: 1.8,
+                  background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16,
+                }}>{skill.origin.originAcceptNote}</div>
+              </SdSection>
+            )}
 
             <StatusBlock skill={skill} p={p} mount={mount} onScheduleSkill={onScheduleSkill} />
 

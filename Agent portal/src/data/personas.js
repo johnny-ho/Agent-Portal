@@ -52,6 +52,10 @@ const EQUIPMENT_MASTER = {
 /* 依結構化適用範圍算出符合的機台（適用範圍勾選畫面即時回饋「目前符合 N 台」用） */
 function matchScopeTargets(personaKey, scope) {
   var master = EQUIPMENT_MASTER[personaKey] || [];
+  /* unset = 「尚未設定」，與「全部」語意相反。
+     跨課下載的 Skill 一定落在這個狀態（決策 B：不做自動 scope remap）——
+     空陣列在下面代表「該類別全部」，若沿用會讓人以為範圍已經設好了。 */
+  if (scope && scope.unset) return [];
   if (!scope) return master.slice();
   var ids     = scope.equipmentIds || [];
   var classes = scope.equipmentClass || [];

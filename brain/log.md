@@ -638,3 +638,20 @@ PO 提出跨課情境需求（課級發布 → 他課下載測試 → 依原流�
 **PO 指示：先不動工，等叫。** 本 session 至此只寫 wiki，未動任何 `src/` 或 build 產出。
 
 受影響 wiki 頁：[skill-marketplace](concepts/skill-marketplace.md)、[open-questions.md](open-questions.md)。
+
+## [2026-08-19] decision | Skill Marketplace Phase 1 + 下載落地實作完成
+
+**範圍**：Phase 1（看得到）＋ Phase 2 的下載落地。發布流程（A）、課長簽准（H）、下架（G）、版本更新提示（D）**未實作**。
+
+**新增**：`data/skillMarketplace.js`（7 個發布項、課級工具授權表 `MP_TOOL_GRANTS`、helpers）、`components/SkillMarketplacePage.jsx`（列表＋詳情＋下載確認）。**改動**：`SkillManagementPage.jsx`（Header 入口按鈕、副標改寫、view 切換、下載 handler、清單列兩顆徽章）、`SkillDetailPage.jsx`（`MpOriginBlock` 待設定清單、scope 空白狀態、gate 加 unset、原課紀錄唯讀區、「下載於」用字）、`personas.js`（`matchScopeTargets` 認得 `scope.unset`）、`build.py`（註冊兩個模組）。
+
+**實作期的三個判斷**：
+1. **`scope.unset` 必須是旗標，不能用空陣列**——空陣列在 `matchScopeTargets` 裡代表「該類別全部」，與「尚未設定」語意剛好相反。沿用會讓下載回來的東西看起來範圍已經設好了。
+2. **gate 不必新增機制**，`getSignoffGate` 加一條 unset 判斷即可 —— 跨課只是多了一個到不了送簽的理由，不是新的閘門。
+3. **「建立於」改「下載於」**——下載來的內容是別課寫的，本課只是把它帶進來。
+
+**實測抓到的一個資料矛盾**：`MP_TOOL_GRANTS` 一開始把設備課的讀取權限開太窄，導致卡片出現「6 課已生效，但本課 0 個工具可用」這種自相矛盾的畫面。修正方向是**讀取類工具廣授、受限的是寫入類與各課專業系統**（設備課讀得到良率與 MES，讀不到製程課的 SPC 管制圖工具），並補一支一致性檢查腳本：「在目前版本上已生效」的課，工具授權必須全數對得上（舊版生效的課當時沒有新工具，不算矛盾 —— mp-001 的製程課正是這個情形，v1.2 才加 `inv.get_eta`，製程課也正好在 v1.2 棄用）。
+
+**瀏覽器實測**：vendor 依賴（npm registry 可達、unpkg 被 proxy 擋）＋ Playwright（用預裝 chromium-1194），`shell.html` 未動。**22 項互動全過**，app 層 console error 0（另兩則是測試伺服器的 favicon 404 與 Babel 檔案大小提示）。淺色／深色雙主題均已截圖確認。
+
+受影響 wiki 頁：[skill-marketplace](concepts/skill-marketplace.md)、index.md。

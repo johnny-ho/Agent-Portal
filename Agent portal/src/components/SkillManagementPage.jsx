@@ -14,6 +14,17 @@
      · 每個分頁在清單上方掛一句小標題，解釋這個類型是什麼、何時該升級
      · 類型欄拿掉：分頁本身已經宣告了類型，每列再標一次是重複資訊
 
+   2026-08-19 改版（Skill Marketplace Phase 1–2a）：
+     · Header 多一顆「Skill Marketplace」入口 → 全頁替換
+       （不做成第三個分頁：現有兩顆膠囊的軸是「類型」，Marketplace 是
+        「來源」，兩軸混一顆會壞掉。逛別人的東西與管自己課的東西是
+        兩種模式，下載的終點又是回到本課清單，全頁替換的返回路徑
+        天然對得上）
+     · 副標從「不可跨課使用」改寫 —— 跨課流動的是定義文本，不是執行權限
+     · 下載落地為 Draft，scope 標 unset、知識引用與驗收紀錄一律不跨課
+       （決策 B：系統猜錯比留白危險）
+     見 brain/concepts/skill-marketplace.md
+
    五階段管理流程維持：Draft → Testing → Approving → Pilot Run → Production
    註：主元件函式名稱維持 SOPManagementPage，以相容 SettingPage。
    ════════════════════════════════════════ */
@@ -158,6 +169,17 @@ function useSkillColumns({ onDelete, mounts }) {
               {(r.knowledgeRefs || []).length > 0 && (
                 <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>引用 {r.knowledgeRefs.length} 份知識</antd.Tag>
               )}
+              {/* 來源永久保留；待設定是進度，補完就消失 */}
+              {r.origin && (
+                <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>
+                  來自 {r.origin.fromSection} {r.origin.version}
+                </antd.Tag>
+              )}
+              {mpPendingSetup(r).length > 0 && (
+                <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#F59E0B', background: 'rgba(245,158,11,0.08)' }}>
+                  {mpPendingSetup(r).length} 項待設定
+                </antd.Tag>
+              )}
             </div>
           </div>
         );
@@ -205,6 +227,7 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
   var [detailId, setDetailId]     = React.useState(null);
   var [searchQuery, setSearch]    = React.useState('');
   var [sortBy, setSortBy]         = React.useState('newest');
+  var [view, setView]             = React.useState('list');   /* 'list' | 'market' */
 
   /* persona 切換時重載 */
   React.useEffect(function() {
@@ -213,6 +236,7 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
     setFilter('all');
     setActiveTier(SKILL_DEFAULT_TIER);
     setSearch('');
+    setView('list');
   }, [p.key]);
 
   function advanceStage(id, nextStage) {
@@ -229,6 +253,19 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
   function deleteSkill(id) {
     setSkills(function(prev) { return prev.filter(function(s) { return s.id !== id; }); });
     if (detailId === id) setDetailId(null);
+  }
+
+  /* 決策 A（副本不訂閱）+ B（落 Draft、不自動 remap）的落點。
+     下載完直接跳進詳情頁 —— 那裡才看得到「還有哪幾項要自己設」。 */
+  function downloadFromMarket(item) {
+    var today = new Date().toISOString().slice(0, 10);
+    var landed = mpToSkill(item, p.key, (p.user && p.user.name) || 'Seed', today);
+    setSkills(function(prev) { return [landed].concat(prev); });
+    setActiveTier(landed.tier);
+    setFilter('all');
+    setSearch('');
+    setView('list');
+    setDetailId(landed.id);
   }
 
   function saveSkill(updated) {
@@ -264,6 +301,18 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
       if (sortBy === 'stage')  return SKILL_STAGES.indexOf(a.stage) - SKILL_STAGES.indexOf(b.stage);
       return 0;
     });
+
+  /* Marketplace：逛別人的東西，跟管自己課的東西是兩種模式，故整頁換掉 */
+  if (view === 'market') {
+    return (
+      <SkillMarketplacePage
+        p={p}
+        mySkills={skills}
+        onBack={function() { setView('list'); }}
+        onDownload={downloadFromMarket}
+      />
+    );
+  }
 
   /* 詳情頁：清單只是進入點，其餘行為都在這裡 */
   var detailSkill = detailId ? skills.filter(function(s) { return s.id === detailId; })[0] : null;
@@ -336,10 +385,13 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
       <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text }}>Skill 管理</div>
-          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Skill 與 Codify · 同課審批 · 不可跨課使用</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Skill 與 Codify · 同課審批 · 跨課可下載、下載後重走簽核</div>
         </div>
         <div style={{ flex: 1 }} />
-        <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
+        <antd.Space size={8}>
+          <antd.Button onClick={function() { setView('market'); }}>Skill Marketplace</antd.Button>
+          <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
+        </antd.Space>
       </div>
 
       <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>

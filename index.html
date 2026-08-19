@@ -126,6 +126,10 @@ const EQUIPMENT_MASTER = {
 /* 依結構化適用範圍算出符合的機台（適用範圍勾選畫面即時回饋「目前符合 N 台」用） */
 function matchScopeTargets(personaKey, scope) {
   var master = EQUIPMENT_MASTER[personaKey] || [];
+  /* unset = 「尚未設定」，與「全部」語意相反。
+     跨課下載的 Skill 一定落在這個狀態（決策 B：不做自動 scope remap）——
+     空陣列在下面代表「該類別全部」，若沿用會讓人以為範圍已經設好了。 */
+  if (scope && scope.unset) return [];
   if (!scope) return master.slice();
   var ids     = scope.equipmentIds || [];
   var classes = scope.equipmentClass || [];
@@ -4912,6 +4916,481 @@ const NOTIFICATIONS_BY_PERSONA = {
 
   it: [],
 };
+
+
+/* ── data/skillMarketplace.js ── */
+
+/* ════════════════════════════════════════
+   SKILL MARKETPLACE — 跨課流通的資料層
+
+   見 brain/concepts/skill-marketplace.md（決策 A–H）
+
+   定調：Marketplace 流動的是 Skill 的**定義文本**，不是執行權限。
+   執行時用的仍是自己課的機台、自己課的 MCP 權限、自己課的簽核人。
+
+   本檔與 personas.js 的 sopManagement 刻意分開 ——
+   sopManagement 是「本課有什麼」，本檔是「全廠發布了什麼」，
+   兩者的生命週期不同（決策 A：副本不訂閱，發布項不會跟著課內原件走）。
+   ════════════════════════════════════════ */
+
+const MP_SECTION_LABEL = {
+  equipment: '設備課',
+  process:   '製程課',
+  mfg:       '製造課',
+  it:        'IT',
+};
+
+/* ── 課級工具授權（決策 E 的比對基準）──────────────────
+
+   跨課下載最常見的失敗原因是「這個工具我課沒有權限」，
+   而那件事在下載前就該被擋下來，不是等到試跑才發現。
+
+   真實系統裡這份會來自 Tool Gateway 的授權表；
+   原型階段以課別直接列舉，重疊是正常的
+   （製程課也會查 PM 與備料，只是查不到採購的到貨日）。
+   ──────────────────────────────────────────────────── */
+const MP_TOOL_GRANTS = {
+  /* 讀取類工具在廠內是廣授的（跨域對照資料是日常），
+     受限的是寫入類與各課的專業系統 ——
+     設備課讀得到良率與 MES，但讀不到製程課的 SPC 管制圖工具。 */
+  equipment: [
+    'cmms.list_due_pm', 'cmms.get_maint_record', 'cmms.get_pm_spec',
+    'eqp.get_sensor_trend', 'eqp.compare_fleet', 'eqp.get_uptime',
+    'eqp.get_downtime', 'eqp.list_downtime', 'eqp.hold_station', 'eqp.stop_equipment',
+    'fdc.list_alarms', 'fdc.get_alarm_detail',
+    'inv.get_stock', 'inv.get_eta',
+    'spc.get_recipe_stats',
+    'yield.get_lot_detail', 'recipe.get_version',
+    'mes.get_lot_history', 'mes.get_lot_due', 'mes.list_wip',
+    'line.get_throughput',
+    'case_center.create_case', 'case_center.list_open',
+    'notify.send_to_section', 'notify.send_to_duty',
+  ],
+  process: [
+    'spc.get_trend', 'spc.get_cpk', 'spc.list_ooc', 'spc.get_ooc_detail',
+    'spc.query_daily', 'spc.get_recipe_stats',
+    'yield.get_lot_detail',
+    'mes.get_lot_history', 'mes.get_lot_due', 'mes.hold_lots',
+    'recipe.get_version', 'metro.get_measurements',
+    'cmms.list_due_pm', 'cmms.get_maint_record', 'inv.get_stock',
+    'eqp.get_sensor_trend', 'eqp.get_uptime',
+    'case_center.create_case', 'case_center.list_open',
+    'notify.send_to_section',
+  ],
+  mfg: [
+    'mes.list_wip', 'mes.get_changeover', 'mes.get_lot_due',
+    'mes.export_daily', 'mes.log_downtime', 'mes.hold_lots',
+    'line.get_throughput',
+    'eqp.get_uptime', 'eqp.get_downtime', 'eqp.list_downtime',
+    'cmms.list_due_pm',
+    'case_center.create_case', 'case_center.list_open',
+    'notify.send_to_section', 'notify.send_to_duty',
+  ],
+  it: [],
+};
+
+/* ════════════════════════════════════════
+   發布項
+
+   status: 'pending'（待課長簽准）| 'listed' | 'delisted'
+   —— pending 與 delisted 為決策 G／H 的資料位；本階段只用 listed。
+
+   originScope 是**降解析度後**的揭露（決策 E 連帶規則）：
+   只給類別、台數與觸發條件。具體機台編號對別課無意義，
+   且屬課內識別資訊，只出現在詳情頁並標明僅供參考。
+   ════════════════════════════════════════ */
+const MP_ITEMS = [
+
+  /* ── Codify · 設備課 · 唯讀 · 中量採用 ── */
+  {
+    id: 'mp-001',
+    tier: 'sop',
+    title: 'PM 到期清單彙整',
+    purpose: '每週一彙整未來 14 天到期的預防性保養項目，含備料齊備狀況。',
+    description: '每週要做的排程準備工作，過去要在 CMMS 與備料系統之間手動對照，常常到了保養當天才發現備料沒到。\n\n流程大意：取未來 14 天到期的 PM 項目，接著逐項查備料庫存與到貨狀態，然後依「到期日 × 備料是否齊備」排出優先順序，最後套用清單格式輸出。\n\n備料未齊的項目一律排在最前面，不論到期日 —— 這一條是本課自己加的，因為催料需要提前期，等到期日到了才發現沒料就來不及了。\n\n全程只讀取資料、不異動任何系統。要調整 PM 排程仍須由人在 CMMS 操作。',
+    publisher: { section: 'equipment', by: '吳志豪', at: '2026-07-15' },
+    currentVersion: 'v1.2',
+    status: 'listed',
+    tags: ['PM', '保養', '每週'],
+    hasWrite: false,
+    tools: [
+      { name: 'cmms.list_due_pm',      label: '取到期 PM 項目', system: 'CMMS',     mode: 'read' },
+      { name: 'inv.get_stock',         label: '查備料庫存',     system: '倉儲系統', mode: 'read' },
+      { name: 'cmms.get_maint_record', label: '查保養記錄',     system: 'CMMS',     mode: 'read' },
+      { name: 'inv.get_eta',           label: '查採購到貨日',   system: '採購系統', mode: 'read' },
+    ],
+    plainSteps: [
+      { num: 1, label: '取未來 14 天到期 PM', source: 'standard', component: 'PM 到期查詢',   version: 'v1.3', io: 'read',    system: 'CMMS',     tool: 'cmms.list_due_pm' },
+      { num: 2, label: '逐項查備料庫存',       source: 'standard', component: '備料庫存查詢', version: 'v1.1', io: 'read',    system: '倉儲系統', tool: 'inv.get_stock' },
+      { num: 3, label: '補查未齊項目的到貨日', source: 'standard', component: '到貨日查詢',   version: 'v1.0', io: 'read',    system: '採購系統', tool: 'inv.get_eta' },
+      { num: 4, label: '計算優先順序',         source: 'custom',   io: 'compute', note: '本課自訂：備料未齊者不論到期日一律排最前，因為需要提早催料' },
+      { num: 5, label: '套用清單格式',         source: 'standard', component: 'PM 清單格式',   version: 'v1.0', io: 'compute' },
+    ],
+    originScope: { equipmentClass: ['CMP'], area: ['ETC-2F', 'ETC-3F'], targetCount: 3, equipmentIds: ['E-101', 'E-102', 'E-205'], trigger: { type: 'schedule', at: '每週一 08:00' } },
+    originAcceptNote: '情境試跑 4／4 行為符合約定（2026-07-29，張文凱）',
+    versions: [
+      { v: 'v1.2', at: '2026-07-15', by: '吳志豪', changelog: '補上採購到貨日查詢。原本只看庫存量，備料在途的項目會被誤判成未齊，每週都要人工再對一次。' },
+      { v: 'v1.1', at: '2026-06-28', by: '吳志豪', changelog: '修正跨月時 14 天視窗算錯 —— 月底執行會漏掉下個月初到期的項目。' },
+      { v: 'v1.0', at: '2026-06-10', by: '吳志豪', changelog: '首次發布。取未來 14 天到期的 PM 項目，逐項查備料庫存，依到期日與備料齊備狀況排序後輸出清單。全程唯讀。' },
+    ],
+    adoption: [
+      { section: 'process', at: '2026-06-15', version: 'v1.0', outcome: 'production' },
+      { section: 'mfg',     at: '2026-06-20', version: 'v1.0', outcome: 'production' },
+      { section: 'process', at: '2026-07-02', version: 'v1.1', outcome: 'production' },
+      { section: 'mfg',     at: '2026-07-18', version: 'v1.2', outcome: 'testing' },
+      { section: 'process', at: '2026-07-20', version: 'v1.2', outcome: 'dropped' },
+    ],
+    adoptionExtra: { production: 5, testing: 2, dropped: 1 },   /* 其他廠區課別，原型不逐筆列 */
+    reviews: [
+      { section: 'process', by: '李佩玲', at: '2026-07-05', version: 'v1.1', text: '備料那步我們的倉儲系統欄位名不一樣，改了一行就通了。其餘直接沿用。' },
+      { section: 'mfg',     by: '陳建宏', at: '2026-06-25', version: 'v1.0', text: '「備料未齊排最前」這條我們一開始沒照做，跑兩週之後改回來了 —— 設備課是對的。' },
+    ],
+    derivedFrom: null,
+  },
+
+  /* ── Codify · 製造課 · 含寫入 · 棄用多於生效（決策 D 要抓的就是這種） ── */
+  {
+    id: 'mp-002',
+    tier: 'sop',
+    title: '停機通報單自動生成',
+    purpose: '線體停機超過通報門檻時，彙整影響範圍並產生通報單送出。',
+    description: '線體停機達 30 分鐘就要通報，但通報單要填的東西散在三個系統裡，值班的人一邊處理停機一邊填單，常常填到一半就被叫走。\n\n流程大意：取停機事件與預計時長，判定是否達通報門檻，接著查受影響的 WIP 與待交批號，然後彙整成通報單格式，最後送出通報。\n\n最後一步會實際送出通報，屬於寫入動作，執行時必須有人確認才會往下。',
+    publisher: { section: 'mfg', by: '陳建宏', at: '2026-08-05' },
+    currentVersion: 'v2.1',
+    status: 'listed',
+    tags: ['停機', '通報', '異常'],
+    hasWrite: true,
+    tools: [
+      { name: 'eqp.get_downtime',      label: '查停機事件',   system: '設備監控', mode: 'read'  },
+      { name: 'mes.list_wip',          label: '查受影響 WIP', system: 'MES',      mode: 'read'  },
+      { name: 'mes.get_lot_due',       label: '查待交批號',   system: 'MES',      mode: 'read'  },
+      { name: 'case_center.create_case', label: '開立通報單', system: 'CaseCenter', mode: 'write' },
+      { name: 'notify.send_to_duty',   label: '通知值班',     system: '通知服務', mode: 'write' },
+    ],
+    plainSteps: [
+      { num: 1, label: '取停機事件與預計時長', source: 'standard', component: '停機事件查詢', version: 'v2.0', io: 'read',  system: '設備監控', tool: 'eqp.get_downtime' },
+      { num: 2, label: '判定是否達通報門檻',   source: 'custom',   io: 'decision', note: '本課自訂：30 分鐘。各課門檻不同，下載後要改這一步' },
+      { num: 3, label: '查受影響 WIP 與待交批號', source: 'standard', component: 'WIP 影響查詢', version: 'v1.4', io: 'read', system: 'MES', tool: 'mes.list_wip' },
+      { num: 4, label: '彙整通報單內容',       source: 'standard', component: '通報單格式',   version: 'v2.1', io: 'compute' },
+      { num: 5, label: '送出通報單',           source: 'standard', component: '通報單開立',   version: 'v1.2', io: 'write', system: 'CaseCenter', tool: 'case_center.create_case', needsConfirm: true },
+      { num: 6, label: '通知值班人員',         source: 'standard', component: '值班通知',     version: 'v1.0', io: 'write', system: '通知服務', tool: 'notify.send_to_duty', needsConfirm: true },
+    ],
+    originScope: { equipmentClass: ['LINE'], area: ['MFG-1F'], targetCount: 4, equipmentIds: ['LINE-1', 'LINE-2', 'LINE-3', 'LINE-4'], trigger: { type: 'threshold', metric: '停機時長', op: '>', value: '30 分鐘' } },
+    originAcceptNote: '情境試跑 5／5 行為符合約定、Pilot Run 3 次（2026-08-01，陳建宏）',
+    versions: [
+      { v: 'v2.1', at: '2026-08-05', by: '陳建宏', changelog: '同一天重複執行時改為提示上次結果，不再重複開單。之前一次停機開了三張單。' },
+      { v: 'v2.0', at: '2026-07-12', by: '陳建宏', changelog: '通報門檻從寫死 30 分鐘改成可調參數 —— 各課門檻不同，這是被最多課反映的一點。' },
+      { v: 'v1.0', at: '2026-05-30', by: '陳建宏', changelog: '首次發布。停機達門檻時彙整影響範圍並開立通報單。' },
+    ],
+    adoption: [
+      { section: 'equipment', at: '2026-06-05', version: 'v1.0', outcome: 'dropped' },
+      { section: 'process',   at: '2026-06-08', version: 'v1.0', outcome: 'dropped' },
+      { section: 'equipment', at: '2026-07-20', version: 'v2.0', outcome: 'production' },
+      { section: 'process',   at: '2026-08-06', version: 'v2.1', outcome: 'testing' },
+    ],
+    adoptionExtra: { production: 2, testing: 1, dropped: 2 },
+    reviews: [
+      { section: 'equipment', by: '張文凱', at: '2026-07-28', version: 'v2.0', text: 'v1.0 我們用兩週就停了 —— 門檻寫死 30 分鐘，設備課的機台停 30 分鐘太常見，通報單一天開十幾張沒人看。v2.0 改成可調之後才真的能用。' },
+    ],
+    derivedFrom: null,
+  },
+
+  /* ── Codify · 製程課 · 唯讀 ── */
+  {
+    id: 'mp-003',
+    tier: 'sop',
+    title: 'SPC OOC 每日彙整',
+    purpose: '每日 07:30 彙整前一日所有 OOC 事件，依站點與嚴重度排序。',
+    description: '每天早會前要知道昨天有哪些 SPC 超規，過去是各站自己看自己的，沒有人有全課的視角。\n\n流程大意：取前一日全部 OOC 事件，逐筆查明細與所屬站點，計算連續超規的批次數，再依「連續次數 × 偏離幅度」排序輸出。\n\n連續超規優先於單次大偏離 —— 單次大偏離常常是量測問題，連續才是製程真的在漂。這一條是本課排序邏輯的核心。\n\n全程唯讀。',
+    publisher: { section: 'process', by: '黃怡君', at: '2026-07-22' },
+    currentVersion: 'v1.1',
+    status: 'listed',
+    tags: ['SPC', 'OOC', '每日'],
+    hasWrite: false,
+    tools: [
+      { name: 'spc.list_ooc',      label: '取 OOC 清單',  system: 'SPC', mode: 'read' },
+      { name: 'spc.get_ooc_detail', label: '查 OOC 明細', system: 'SPC', mode: 'read' },
+      { name: 'spc.get_trend',     label: '查管制圖趨勢', system: 'SPC', mode: 'read' },
+    ],
+    plainSteps: [
+      { num: 1, label: '取前一日 OOC 清單',   source: 'standard', component: 'OOC 查詢',   version: 'v1.2', io: 'read', system: 'SPC', tool: 'spc.list_ooc' },
+      { num: 2, label: '逐筆查明細與站點',     source: 'standard', component: 'OOC 明細',   version: 'v1.0', io: 'read', system: 'SPC', tool: 'spc.get_ooc_detail' },
+      { num: 3, label: '計算連續超規批次數',   source: 'custom',   io: 'compute', note: '本課自訂：連續超規優先於單次大偏離 —— 單次多為量測問題' },
+      { num: 4, label: '排序並套用彙整格式',   source: 'standard', component: 'OOC 日報格式', version: 'v1.1', io: 'compute' },
+    ],
+    originScope: { equipmentClass: ['CMP', 'ETCH'], area: ['ETC-2F', 'ETC-3F'], targetCount: 5, equipmentIds: ['R-501', 'R-512', 'R-520', 'R-533', 'R-540'], trigger: { type: 'schedule', at: '每日 07:30' } },
+    originAcceptNote: '情境試跑 4／4 行為符合約定（2026-07-20，黃怡君）',
+    versions: [
+      { v: 'v1.1', at: '2026-07-22', by: '黃怡君', changelog: '來源回空集合時改為明確標示「昨日無 OOC」，之前會輸出一份空表看不出是真的沒有還是沒查到。' },
+      { v: 'v1.0', at: '2026-07-01', by: '黃怡君', changelog: '首次發布。每日彙整前一日 OOC 事件，依連續超規次數與偏離幅度排序。' },
+    ],
+    adoption: [
+      { section: 'mfg', at: '2026-07-25', version: 'v1.1', outcome: 'dropped' },
+    ],
+    adoptionExtra: { production: 3, testing: 1, dropped: 0 },
+    reviews: [],
+    derivedFrom: null,
+  },
+
+  /* ── Codify · 製造課 · 最高採用（交接報告，戰略切入點） ── */
+  {
+    id: 'mp-004',
+    tier: 'sop',
+    title: '當班交接報告',
+    purpose: '每班結束前彙整本班產出、異常與待交接事項，產出交接報告。',
+    description: '交接一直是口頭加白板，接班的人常常要重問一輪，出事了也追不到當時誰講過什麼。\n\n流程大意：取本班稼動與產出數據，接著取本班停機與異常事件，然後查未結案的待辦與 Priority Lot，最後依交接報告格式彙整輸出。\n\n報告產出後會發到佈告欄，接班的人一進系統就看得到。\n\n全程唯讀，不異動任何系統。',
+    publisher: { section: 'mfg', by: '林淑芬', at: '2026-06-02' },
+    currentVersion: 'v3.0',
+    status: 'listed',
+    tags: ['交接', '每班', '報告'],
+    hasWrite: false,
+    tools: [
+      { name: 'eqp.get_uptime',        label: '查稼動率',       system: '設備監控',   mode: 'read' },
+      { name: 'line.get_throughput',   label: '查產出',         system: 'MES',        mode: 'read' },
+      { name: 'eqp.list_downtime',     label: '查停機事件',     system: '設備監控',   mode: 'read' },
+      { name: 'case_center.list_open', label: '查未結案工單',   system: 'CaseCenter', mode: 'read' },
+      { name: 'mes.get_lot_due',       label: '查 Priority Lot', system: 'MES',       mode: 'read' },
+    ],
+    plainSteps: [
+      { num: 1, label: '取本班稼動與產出',       source: 'standard', component: '班別產出查詢', version: 'v2.1', io: 'read', system: 'MES',        tool: 'line.get_throughput' },
+      { num: 2, label: '取本班停機與異常事件',   source: 'standard', component: '停機清單',     version: 'v1.5', io: 'read', system: '設備監控',   tool: 'eqp.list_downtime' },
+      { num: 3, label: '查未結案工單與 Priority Lot', source: 'standard', component: '待辦查詢', version: 'v1.2', io: 'read', system: 'CaseCenter', tool: 'case_center.list_open' },
+      { num: 4, label: '計算稼動率（排除 PM 時間）', source: 'custom', io: 'compute', note: '本課自訂：PM 時間不計入分母，否則保養日的稼動率會失真' },
+      { num: 5, label: '套用交接報告格式',       source: 'standard', component: '交接報告格式', version: 'v3.0', io: 'compute' },
+    ],
+    originScope: { equipmentClass: ['LINE'], area: ['MFG-1F', 'MFG-2F'], targetCount: 6, equipmentIds: ['LINE-1', 'LINE-2', 'LINE-3', 'LINE-4', 'LINE-5', 'LINE-6'], trigger: { type: 'schedule', at: '每班結束前 30 分鐘' } },
+    originAcceptNote: '情境試跑 4／4 行為符合約定（2026-05-28，林淑芬）',
+    versions: [
+      { v: 'v3.0', at: '2026-06-02', by: '林淑芬', changelog: '待交接事項改為必列未結案工單與 Priority Lot。之前只有數字沒有待辦，接班的人還是要自己去翻。' },
+      { v: 'v2.0', at: '2026-04-18', by: '林淑芬', changelog: '稼動率計算排除 PM 時間 —— 保養日的稼動率原本會掉到 60%，看起來像出事。' },
+      { v: 'v1.0', at: '2026-03-05', by: '林淑芬', changelog: '首次發布。每班結束前彙整產出、異常與待交接事項。' },
+    ],
+    adoption: [
+      { section: 'equipment', at: '2026-03-20', version: 'v1.0', outcome: 'production' },
+      { section: 'process',   at: '2026-04-25', version: 'v2.0', outcome: 'production' },
+      { section: 'equipment', at: '2026-06-10', version: 'v3.0', outcome: 'production' },
+    ],
+    adoptionExtra: { production: 11, testing: 3, dropped: 1 },
+    reviews: [
+      { section: 'equipment', by: '吳志豪', at: '2026-06-18', version: 'v3.0', text: '整個課的交接時間從 20 分鐘掉到 5 分鐘。稼動率排除 PM 那一條建議所有課都照做。' },
+      { section: 'process',   by: '黃怡君', at: '2026-05-02', version: 'v2.0', text: '製程課沒有線體，我們把第 1 步換成站點產出就能用。步驟結構不用動。' },
+    ],
+    derivedFrom: null,
+  },
+
+  /* ── Skill · 設備課 ── */
+  {
+    id: 'mp-005',
+    tier: 'guided',
+    title: '換件後性能異常研判',
+    purpose: '換件完成後試磨結果不如預期時，研判是安裝、備料還是機台本身的問題。',
+    description: '# 換件後性能異常研判\n\n## 什麼時候用這份\n研磨頭換件完成、試磨片跑完，但研磨率或均勻性不符規格時使用。\n\n## 什麼時候不用這份\n換件過程中就發現異常（鎖不緊、漏水）的，直接回到換件程序處理。\n\n## 可以動用的工具\n- `cmms.get_maint_record(eqp_id)` — 換件記錄：扭矩值、O-ring 安裝確認項\n- `spc.get_recipe_stats(recipe_id)` — 換件後的研磨率與均勻性\n- `eqp.get_sensor_trend(eqp_id, hours)` — 換件前的機台基線，用來比對漂移\n\n全部唯讀。重新拆裝、退料、報修都要人自己執行。\n\n## 研判步驟\n順序不能顛倒：**安裝 → 備料 → 機台**。這個順序是照「發生機率 × 修正成本」排的，先查機率高又好修的。\n\n1. **先確認安裝** — 扭矩值不在規格內，或 O-ring 確認項沒勾 → 就是安裝問題，到此為止\n2. **安裝無誤才看備料** — 同批多台都異常 → 判為備料問題，建議整批攔下\n3. **前兩者都排除才看機台** — 取換件前 7 天基線，看是換件前就在漂還是換件後才變\n\n## 回答一定要包含\n1. 結論落在三層的哪一層，以及**前面幾層是怎麼被排除的**\n2. 每個數字的來源\n3. 建議動作與執行位置\n4. 責任聲明：這是研判建議，不是核准流程\n\n「前面幾層怎麼被排除」是這份最容易漏的一項。只給結論不給排除過程，下一個人得整段重查。\n\n## 注意事項\n本指引產出的是**研判建議**，責任仍在執行者。',
+    publisher: { section: 'equipment', by: '吳志豪', at: '2026-08-01' },
+    currentVersion: 'v1.0',
+    status: 'listed',
+    tags: ['換件', 'CMP', '研判'],
+    hasWrite: false,
+    tools: [
+      { name: 'cmms.get_maint_record', label: '查換件記錄',   system: 'CMMS',     mode: 'read' },
+      { name: 'eqp.get_sensor_trend',  label: '查感測器趨勢', system: '設備監控', mode: 'read' },
+      { name: 'spc.get_recipe_stats',  label: '查配方統計',   system: 'SPC',      mode: 'read' },
+    ],
+    plainSteps: [],
+    originScope: { equipmentClass: ['CMP'], area: ['ETC-3F'], targetCount: 3, equipmentIds: ['E-101', 'E-203', 'E-308'], trigger: { type: 'manual' } },
+    originAcceptNote: '驗收 5 條條件全數確認、3 個提問情境各跑 5 次（2026-07-26，吳志豪）',
+    versions: [
+      { v: 'v1.0', at: '2026-08-01', by: '吳志豪', changelog: '首次發布。換件後性能不如預期時，依「安裝 → 備料 → 機台」的順序逐層排除並說明排除依據。' },
+    ],
+    adoption: [
+      { section: 'process', at: '2026-08-08', version: 'v1.0', outcome: 'testing' },
+    ],
+    adoptionExtra: { production: 1, testing: 1, dropped: 0 },
+    reviews: [],
+    derivedFrom: null,
+  },
+
+  /* ── Skill · 製程課 · 高採用 ── */
+  {
+    id: 'mp-006',
+    tier: 'guided',
+    title: '良率異常根因研判',
+    purpose: '單批或連續批良率跌破管制下限時，研判是製程、材料還是量測問題。',
+    description: '# 良率異常根因研判\n\n## 什麼時候用這份\n單批良率低於管制下限，或連續 3 批呈下滑趨勢時使用。\n\n## 什麼時候不用這份\n已知是設備停機或人為操作失誤造成的，直接走既有異常處理流程。\n產線層級的產出落後不適用 —— 那要看稼動與排程，不是配方與材料。\n\n## 可以動用的工具\n- `yield.get_lot_detail(lot_id)` — 批號良率明細與量測原始值\n- `mes.get_lot_history(lot_id)` — 批號履歷：走過哪些站、用哪一批原料\n- `recipe.get_version(station)` — 配方版本異動紀錄\n\n全部唯讀。任何製程參數調整都必須走 DCR。\n\n## 研判步驟\n順序是**量測 → 材料 → 製程**。量測問題佔比不低又最好排除，放第一個可以省掉大量無謂的製程排查。\n\n1. **先確認不是量測問題** — 重測後回到規格內 → 量測失準，到此為止。沒有重測值 → 建議先重測，明說在重測之前不下製程結論\n2. **確認不是量測問題後看材料** — 材料造成的良率變化通常有**明確的時間斷點**；良率是緩降而非斷點 → 材料的可能性降低\n3. **材料無異動才看製程** — 配方版本異動、SPC 趨勢、設備參數漂移疊在同一條時間軸上\n\n## 回答一定要包含\n1. 結論落在三層的哪一層，以及前面幾層**憑什麼被排除**\n2. 量測原始值與重測值（若沒重測，要明說這一步還沒做）\n3. 原料批號切換點的時間，與良率變化時間的對應關係\n4. 建議動作：要重測、要攔批、還是要開 DCR\n5. 責任聲明：這是研判建議，不是核准流程\n\n## 停下來不要硬判的情況\n- 只有一批數據 → 說明樣本不足以判斷趨勢\n- 量測與製程數據互相矛盾 → 明說矛盾在哪，不要挑一個順眼的下結論',
+    publisher: { section: 'process', by: '黃怡君', at: '2026-07-30' },
+    currentVersion: 'v1.3',
+    status: 'listed',
+    tags: ['良率', '根因', '研判'],
+    hasWrite: false,
+    tools: [
+      { name: 'yield.get_lot_detail', label: '查批號良率明細', system: '良率分析',    mode: 'read' },
+      { name: 'mes.get_lot_history',  label: '查批號履歷',     system: 'MES',         mode: 'read' },
+      { name: 'recipe.get_version',   label: '查配方版本紀錄', system: 'Recipe 管理', mode: 'read' },
+    ],
+    plainSteps: [],
+    originScope: { equipmentClass: ['CMP', 'ETCH'], area: ['ETC-3F'], targetCount: 4, equipmentIds: ['R-501', 'R-512', 'R-533', 'R-540'], trigger: { type: 'threshold', metric: '良率', op: '<', value: '管制下限' } },
+    originAcceptNote: '驗收 5 條條件全數確認、3 個提問情境各跑 5 次（2026-07-28，黃怡君）',
+    versions: [
+      { v: 'v1.3', at: '2026-07-30', by: '黃怡君', changelog: '把「良率門檻」從指引正文裡的數字改成「管制下限」—— 各課的下限不同，寫死會讓別課套錯。' },
+      { v: 'v1.2', at: '2026-07-10', by: '黃怡君', changelog: '補上「量測與製程數據互相矛盾時明說矛盾在哪」這條，之前 AI 會挑一個順眼的下結論。' },
+      { v: 'v1.0', at: '2026-06-20', by: '黃怡君', changelog: '首次發布。依「量測 → 材料 → 製程」的順序逐層排除，並要求寫出每一層的排除依據。' },
+    ],
+    adoption: [
+      { section: 'equipment', at: '2026-06-28', version: 'v1.0', outcome: 'production' },
+      { section: 'mfg',       at: '2026-07-12', version: 'v1.2', outcome: 'production' },
+      { section: 'equipment', at: '2026-08-02', version: 'v1.3', outcome: 'testing' },
+    ],
+    adoptionExtra: { production: 4, testing: 2, dropped: 1 },
+    reviews: [
+      { section: 'equipment', by: '張文凱', at: '2026-07-08', version: 'v1.0', text: '「重測之前不下製程結論」這條救了我們好幾次。設備課照用沒改。' },
+    ],
+    derivedFrom: null,
+  },
+
+  /* ── Skill · 設備課 · 衍生自別課（決策 A 的來源鏈） ── */
+  {
+    id: 'mp-007',
+    tier: 'guided',
+    title: '機台異音與震動研判',
+    purpose: '巡檢聽到異音或震動偏高時，研判該立即停機還是可以觀察到下次 PM。',
+    description: '# 機台異音與震動研判\n\n## 什麼時候用這份\n巡檢時聽到異音、或震動感測值高於平常但尚未觸發警報時使用。\n\n## 什麼時候不用這份\n已經觸發震動警報的，直接走 FDC 異常快速反應流程。\n\n## 研判步驟\n\n1. **先看變化形態** — 突然跳高（數小時內跨越基線 1.5 倍以上）→ 傾向軸承損傷或鎖固鬆動，急迫；緩慢爬升 → 傾向正常磨耗，可排入 PM\n2. **比對同型機台** — 同型多台同期間一起升 → 多半是廠務端（電源、氣源、冷卻），要往廠務通報；只有這一台 → 才繼續往單機方向查\n3. **對照上次 PM** — 剛做完 PM 就出現的震動，優先懷疑組裝而不是磨耗\n\n## 停機判定門檻\n判定結果一定要對照下面三段，並在回答裡寫出落在哪一段：\n- 震動值 **> 基線 2 倍**，或伴隨異音明顯改變 → **建議立即停機**\n- 震動值在 **基線 1.3–2 倍**之間且趨勢平緩 → 可觀察至下次 PM，但須加密巡檢\n- 震動值 **< 基線 1.3 倍** → 記錄即可\n\n## 停下來不要硬判的情況\n- 取不到基線（新機、剛換件）→ 說明無基線可比，改以絕對值與同型機台判斷，並標明把握度較低\n- 感測值正常但人耳聽到異音 → 不要因為數據沒事就回「無異常」，據實說明數據與現場觀察不一致\n\n## 注意事項\n本指引產出的是**建議**，停機決定權在當班工程師與課長。',
+    publisher: { section: 'equipment', by: '張文凱', at: '2026-08-12' },
+    currentVersion: 'v1.1',
+    status: 'listed',
+    tags: ['異音', '震動', '研判'],
+    hasWrite: false,
+    tools: [
+      { name: 'eqp.get_sensor_trend',  label: '查感測器趨勢', system: '設備監控', mode: 'read' },
+      { name: 'eqp.compare_fleet',     label: '比對同型機台', system: '設備監控', mode: 'read' },
+      { name: 'cmms.get_maint_record', label: '查保養記錄',   system: 'CMMS',     mode: 'read' },
+    ],
+    plainSteps: [],
+    originScope: { equipmentClass: ['CMP'], area: ['ETC-2F', 'ETC-3F'], targetCount: 4, equipmentIds: ['E-101', 'E-102', 'E-203', 'E-205'], trigger: { type: 'manual' } },
+    originAcceptNote: '驗收 5 條條件全數確認、3 個提問情境各跑 5 次（2026-08-08，張文凱）',
+    versions: [
+      { v: 'v1.1', at: '2026-08-12', by: '張文凱', changelog: '補上「感測值正常但人耳聽到異音」的處理 —— 原版遇到這種會直接回「無異常」，跟現場觀察打架。' },
+      { v: 'v1.0', at: '2026-08-06', by: '張文凱', changelog: '衍生自製造課《線體異音研判》v2.0，改為 CMP 機台的震動基線與三段停機門檻。' },
+    ],
+    adoption: [],
+    adoptionExtra: { production: 0, testing: 2, dropped: 0 },
+    reviews: [],
+    derivedFrom: { section: 'mfg', title: '線體異音研判', version: 'v2.0' },
+  },
+];
+
+/* ════════════════════════════════════════
+   Helpers
+   ════════════════════════════════════════ */
+
+function mpSectionName(key) { return MP_SECTION_LABEL[key] || key; }
+
+/* 決策 E：不只揭露工具，還要當場比對本課權限。
+   權限落差是跨課最常見的失敗原因，擋在下載前比下載後才發現有價值。 */
+function mpToolCheck(personaKey, tools) {
+  var grants = MP_TOOL_GRANTS[personaKey] || [];
+  var list = tools || [];
+  var ok = [], missing = [];
+  list.forEach(function(t) {
+    (grants.indexOf(t.name) !== -1 ? ok : missing).push(t);
+  });
+  return { ok: ok, missing: missing, total: list.length };
+}
+
+/* 決策 D：三個行為數字，不做五星。
+   outcome 由下載課的 stage 推導（本階段以 mock 的 adoption[] 代表），
+   不另存評分 —— 維持單一真相。 */
+function mpAdoption(item) {
+  var extra = item.adoptionExtra || {};
+  var acc = { downloads: 0, production: 0, testing: 0, dropped: 0 };
+  (item.adoption || []).forEach(function(a) {
+    acc.downloads += 1;
+    if (acc[a.outcome] !== undefined) acc[a.outcome] += 1;
+  });
+  ['production', 'testing', 'dropped'].forEach(function(k) {
+    var n = extra[k] || 0;
+    acc[k] += n;
+    acc.downloads += n;
+  });
+  return acc;
+}
+
+/* 本課在這一份上的下載紀錄（最新一筆）。有紀錄就不該再點下載。 */
+function mpMyDownload(item, personaKey) {
+  var mine = (item.adoption || []).filter(function(a) { return a.section === personaKey; });
+  return mine.length ? mine[mine.length - 1] : null;
+}
+
+function mpListed(personaKey) {
+  return MP_ITEMS.filter(function(it) { return it.status === 'listed'; });
+}
+
+/* 決策 B：下載一律落 Draft，且**不做自動 scope remap**。
+   scope 標 unset、knowledgeRefs 清空、驗收紀錄不跟著跨課 ——
+   系統猜錯比留白危險，猜出來的東西會讓人以為已經設好了。 */
+function mpToSkill(item, personaKey, userName, today) {
+  var ver = item.currentVersion;
+  return {
+    id: 'sm-mp-' + item.id + '-' + Date.now(),
+    title: item.title,
+    purpose: item.purpose,
+    description: item.description,
+    sourceKM: 'Marketplace · ' + mpSectionName(item.publisher.section),
+    importedAt: today,
+    importedBy: userName,
+    stage: 'draft',
+    tags: (item.tags || []).slice(),
+    tier: item.tier,
+    tools: (item.tools || []).map(function(t) { return Object.assign({}, t); }),
+    hasWrite: !!item.hasWrite,
+    plainSteps: (item.plainSteps || []).map(function(s) { return Object.assign({}, s); }),
+    graph: (item.plainSteps || []).length
+      ? { edges: buildLinearEdges(item.plainSteps) }
+      : null,
+    /* unset 是「尚未設定」的旗標，不是「全部」——
+       空陣列在 matchScopeTargets 裡代表「該類別全部」，語意剛好相反。 */
+    scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: null, unset: true },
+    knowledgeRefs: [],
+    consumedBy: { calledByAgent: false, scheduleId: null },
+    acceptance: { criteria: [], probes: [] },
+    origin: {
+      marketplaceId: item.id,
+      version: ver,
+      fromSection: mpSectionName(item.publisher.section),
+      fromSectionKey: item.publisher.section,
+      at: today,
+      originAcceptNote: item.originAcceptNote || null,
+      originScope: item.originScope || null,
+      delisted: null,
+    },
+  };
+}
+
+function buildLinearEdges(steps) {
+  var edges = [{ from: 'start', to: steps[0].num }];
+  for (var i = 0; i < steps.length - 1; i++) {
+    edges.push({ from: steps[i].num, to: steps[i + 1].num });
+  }
+  edges.push({ from: steps[steps.length - 1].num, to: 'end' });
+  return edges;
+}
+
+/* 下載後必須由本課重新設定的三項（決策 B）。
+   補完就消失 —— 這是進度不是狀態。 */
+function mpPendingSetup(skill) {
+  if (!skill || !skill.origin) return [];
+  var out = [];
+  if (!skill.scope || skill.scope.unset) {
+    out.push({ key: 'scope', label: '適用範圍', note: '尚未設定', target: 'sd-scope' });
+  }
+  if ((skill.knowledgeRefs || []).length === 0) {
+    out.push({ key: 'knowledge', label: '引用知識', note: '原引用的是' + skill.origin.fromSection + '的文件，已失效', target: 'sd-desc' });
+  }
+  if (skill.tier === 'sop') {
+    if (!skill.scenarioRun) out.push({ key: 'test', label: '情境試跑', note: '尚未在本課跑過', target: 'sd-test' });
+  } else {
+    if (!skill.acceptRun) out.push({ key: 'test', label: '驗收', note: '尚未在本課跑過', target: 'sd-test' });
+  }
+  return out;
+}
 
 
 /* ── components/shared.jsx ── */
@@ -10924,6 +11403,620 @@ function WriteToggle({ draft, onEnable, onDisable }) {
 }
 
 
+/* ── components/SkillMarketplacePage.jsx ── */
+
+/* ════════════════════════════════════════
+   SKILL MARKETPLACE PAGE — 跨課流通（全頁）
+
+   見 brain/concepts/skill-marketplace.md（決策 A–H）
+
+   為什麼是「全頁替換」而不是 Skill 管理的第三個分頁：
+     現有兩顆 Segmented 的語意軸是**類型**（Skill／Codify），
+     Marketplace 是**來源**。兩個軸混在同一顆膠囊上會壞掉。
+     而且「逛別人的東西」與「管自己課的東西」是兩種模式，
+     混在同一個清單框裡會讓「這筆是不是我的」得靠標籤去讀。
+     下載的終點是回到本課清單，全頁替換的返回路徑天然對得上。
+
+   卡片上四行資訊的順序是刻意的：
+     這是什麼 → 誰做的 → 跑不跑得動 → 別人用得如何
+   工具可用性擋在採用數據前面 —— 工具不通的話，12 課都說好也沒用。
+   ════════════════════════════════════════ */
+
+/* 決策 D：三個行為數字，不做五星。
+   「下載了但沒生效」是唯一會誠實反映水土不服的訊號。 */
+function MpAdoptionLine({ item, size }) {
+  var { C, fz } = useTheme();
+  var a = mpAdoption(item);
+  if (a.downloads === 0) {
+    return <span style={{ fontSize: fz(size || 12), color: C.textMuted }}>尚無下載紀錄</span>;
+  }
+  var parts = [
+    { n: a.downloads,  label: '課下載', color: C.textSub  },
+    { n: a.production, label: '課已生效', color: '#22C55E' },
+    { n: a.dropped,    label: '課棄用',  color: a.dropped > 0 ? '#F59E0B' : C.textMuted },
+  ];
+  return (
+    <span style={{ fontSize: fz(size || 12), color: C.textMuted }}>
+      {parts.map(function(p, i) {
+        return (
+          <span key={p.label}>
+            {i > 0 && <span style={{ margin: '0 8px', color: C.border }}>·</span>}
+            <span style={{ color: p.color, fontWeight: i === 0 ? 400 : 600 }}>{p.n}</span> {p.label}
+          </span>
+        );
+      })}
+    </span>
+  );
+}
+
+/* 決策 E：不只揭露工具，還要當場比對本課權限。
+   權限落差是跨課最常見的失敗原因，擋在下載前比下載後才發現有價值。 */
+function MpToolSummary({ item, p }) {
+  var { C, fz } = useTheme();
+  var chk = mpToolCheck(p.key, item.tools);
+  return (
+    <span style={{ fontSize: fz(12), color: C.textMuted }}>
+      {chk.total} 個工具 · 本課
+      {chk.missing.length === 0
+        ? <span style={{ color: '#22C55E', fontWeight: 600 }}> {chk.ok.length} 個全部可用 ✓</span>
+        : <span> <span style={{ color: C.textSub }}>{chk.ok.length} 個可用</span>、
+            <span style={{ color: '#F59E0B', fontWeight: 600 }}>{chk.missing.length} 個未授權 ⚠</span></span>}
+    </span>
+  );
+}
+
+/* hasWrite 必須在卡片層就看得見 —— 那是風險等級的第一眼，不能藏在詳情頁 */
+function MpWriteLine({ item }) {
+  var { fz } = useTheme();
+  var cfg = item.hasWrite
+    ? { text: '含會異動系統的步驟', color: '#EF4444', icon: '⚠' }
+    : { text: '全程唯讀，不異動系統', color: '#22C55E', icon: '✓' };
+  return (
+    <span style={{ fontSize: fz(12), color: cfg.color, fontWeight: 600 }}>
+      {cfg.icon} {cfg.text}
+    </span>
+  );
+}
+
+/* 適用範圍在 Marketplace 上**降解析度**：只給類別、台數與觸發條件。
+   具體機台編號對別課無意義，且屬課內識別資訊。 */
+function mpScopeLine(item) {
+  var s = item.originScope || {};
+  var bits = [];
+  if ((s.equipmentClass || []).length) bits.push(s.equipmentClass.join('、'));
+  if (s.targetCount) bits.push('原課 ' + s.targetCount + ' 台');
+  var t = s.trigger;
+  if (t) {
+    if (t.at) bits.push(t.at);
+    else if (t.type === 'manual') bits.push('人工調用');
+    else if (t.metric) bits.push(t.metric + ' ' + (t.op || '') + ' ' + (t.value || ''));
+    else bits.push(SK_TRIGGER_LABEL[t.type] || t.type);
+  }
+  return bits.join(' · ');
+}
+
+/* ════════════════════════════════════════
+   MpCard — 列表卡片
+   ════════════════════════════════════════ */
+function MpCard({ item, p, downloaded, onOpen }) {
+  var { C, fz } = useTheme();
+  var isMine = item.publisher.section === p.key;
+
+  return (
+    <div
+      onClick={onOpen}
+      style={{
+        border: '1px solid ' + C.border, borderRadius: 8, padding: 16,
+        background: C.bg, cursor: 'pointer', marginBottom: 16,
+      }}
+      onMouseEnter={function(e) { e.currentTarget.style.background = C.hover; }}
+      onMouseLeave={function(e) { e.currentTarget.style.background = C.bg; }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <SkillTierTag tier={item.tier} size="small" />
+        <span style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>{item.title}</span>
+        <span style={{ flex: 1 }} />
+        {isMine && (
+          <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>本課發布</antd.Tag>
+        )}
+        {downloaded && (
+          <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#2563EB', background: 'rgba(37,99,235,0.08)' }}>已下載</antd.Tag>
+        )}
+        <span style={{ fontSize: fz(12), fontFamily: 'monospace', color: C.textMuted }}>{item.currentVersion}</span>
+      </div>
+
+      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, marginBottom: 16 }}>{item.purpose}</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: fz(12), color: C.textMuted }}>
+          {mpSectionName(item.publisher.section)} · {item.publisher.by} · {item.publisher.at} 發布
+        </div>
+        <div style={{ fontSize: fz(12), color: C.textMuted }}>{mpScopeLine(item)}</div>
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <MpToolSummary item={item} p={p} />
+          <MpWriteLine item={item} />
+        </div>
+        <MpAdoptionLine item={item} />
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   MpDetail — 詳情（主欄 + 右側資訊欄）
+   ════════════════════════════════════════ */
+function MpDetailSection({ title, desc, extra, children }) {
+  var { C, fz } = useTheme();
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text }}>{title}</div>
+        <div style={{ flex: 1 }} />
+        {extra}
+      </div>
+      {desc && <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, marginBottom: 8 }}>{desc}</div>}
+      {children}
+    </div>
+  );
+}
+
+function MpSideCard({ title, children }) {
+  var { C, fz } = useTheme();
+  return (
+    <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg, marginBottom: 16 }}>
+      <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function MpDetail({ item, p, downloaded, onBack, onDownload }) {
+  var { C, fz } = useTheme();
+  var chk = mpAdoption(item);
+  var tools = mpToolCheck(p.key, item.tools);
+  var isMine = item.publisher.section === p.key;
+  var [confirm, setConfirm] = React.useState(false);
+
+  var scope = item.originScope || {};
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.bg }}>
+
+      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <antd.Button size="small" type="text" onClick={onBack} style={{ color: C.textSub, flexShrink: 0 }}>← 返回 Marketplace</antd.Button>
+        <div style={{ width: 1, height: 24, background: C.border, flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <SkillTierTag tier={item.tier} />
+            <span style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{item.title}</span>
+            <span style={{ fontSize: fz(12), fontFamily: 'monospace', color: C.textMuted }}>{item.currentVersion}</span>
+          </div>
+          <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
+            {mpSectionName(item.publisher.section)} · {item.publisher.by} · {item.publisher.at} 發布
+            {item.derivedFrom && ' · 衍生自 ' + mpSectionName(item.derivedFrom.section) + '《' + item.derivedFrom.title + '》' + item.derivedFrom.version}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', gap: 24, padding: '16px 24px', alignItems: 'flex-start' }} className="scrollbar-thin">
+
+        {/* 主欄 */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+
+          <MpDetailSection title="這份在做什麼">
+            <div style={{
+              fontSize: fz(13), color: C.textSub, lineHeight: 1.8, whiteSpace: 'pre-wrap',
+              background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16,
+            }}>{item.description}</div>
+          </MpDetailSection>
+
+          {(item.plainSteps || []).length > 0 && (
+            <MpDetailSection title="逐步流程" desc="白話說明是簽核契約，code 是實作。下載後這一份會直接沿用。">
+              <antd.List bordered size="small" dataSource={item.plainSteps}
+                renderItem={function(s) {
+                  return (
+                    <antd.List.Item style={{ gap: 8, alignItems: 'flex-start' }}>
+                      <span style={{ fontSize: fz(12), color: C.textMuted, width: 20, flexShrink: 0 }}>{s.num}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: fz(13), color: C.text }}>{s.label}</span>
+                          <SkillIoTag io={s.io} />
+                          {s.source === 'custom' && (
+                            <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: '#F59E0B', background: 'rgba(245,158,11,0.08)' }}>本課自訂</antd.Tag>
+                          )}
+                          {s.needsConfirm && (
+                            <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#EF4444', background: 'rgba(239,68,68,0.08)' }}>🔒 需人工確認</antd.Tag>
+                          )}
+                        </div>
+                        {s.note && <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, marginTop: 4 }}>{s.note}</div>}
+                        {s.tool && <div style={{ fontSize: fz(11), fontFamily: 'monospace', color: C.textMuted, marginTop: 4 }}>{s.system} · {s.tool}</div>}
+                      </div>
+                    </antd.List.Item>
+                  );
+                }}
+              />
+            </MpDetailSection>
+          )}
+
+          <MpDetailSection
+            title="原課生效範圍"
+            desc={'這是' + mpSectionName(item.publisher.section) + '的設定，僅供參考。本課的對象編號不同，下載後須自己重新設定。'}
+          >
+            <antd.Descriptions bordered size="small" column={1}
+              labelStyle={{ fontSize: fz(12), color: C.textMuted, width: 96 }}
+              contentStyle={{ fontSize: fz(13), color: C.text }}
+              items={[
+                { key: 'cls',  label: '機台類別', children: (scope.equipmentClass || []).join('、') || '全部類別' },
+                { key: 'area', label: '區域',     children: (scope.area || []).join('、') || '全區' },
+                { key: 'ids',  label: '指定機台', children: <span style={{ fontFamily: 'monospace', color: C.textMuted }}>{(scope.equipmentIds || []).join('、') || '—'}</span> },
+                { key: 'trg',  label: '觸發條件', children: describeTrigger(scope.trigger) },
+              ]}
+            />
+          </MpDetailSection>
+
+          <MpDetailSection title="版本歷史" desc="下載的人靠變更說明判斷要不要拉這一版。">
+            <antd.Timeline
+              items={(item.versions || []).map(function(v, i) {
+                return {
+                  color: i === 0 ? '#2563EB' : '#9E9E9E',
+                  children: (
+                    <div style={{ paddingBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: fz(13), fontWeight: 600, fontFamily: 'monospace', color: C.text }}>{v.v}</span>
+                        <span style={{ fontSize: fz(12), color: C.textMuted }}>{v.at} · {v.by}</span>
+                        {i === 0 && (
+                          <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#2563EB', background: 'rgba(37,99,235,0.08)' }}>目前版本</antd.Tag>
+                        )}
+                      </div>
+                      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8, marginTop: 4 }}>{v.changelog}</div>
+                    </div>
+                  ),
+                };
+              })}
+            />
+          </MpDetailSection>
+
+          {item.originAcceptNote && (
+            <MpDetailSection
+              title={mpSectionName(item.publisher.section) + '的驗收紀錄'}
+              desc="⚠ 這是原課的紀錄，不計入本課簽核。下載後須在本課重跑。"
+            >
+              <div style={{
+                fontSize: fz(13), color: C.textSub, lineHeight: 1.8,
+                background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16,
+              }}>{item.originAcceptNote}</div>
+            </MpDetailSection>
+          )}
+
+          <MpDetailSection title="使用心得" desc="只有已把這份推到生效的課才留得了心得。">
+            {(item.reviews || []).length === 0 ? (
+              <div style={{ fontSize: fz(13), color: C.textMuted, padding: 16, border: '1px dashed ' + C.border, borderRadius: 8, textAlign: 'center' }}>
+                還沒有課留下心得
+              </div>
+            ) : (
+              <antd.List bordered size="small" dataSource={item.reviews}
+                renderItem={function(r) {
+                  return (
+                    <antd.List.Item style={{ display: 'block' }}>
+                      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 4 }}>
+                        {mpSectionName(r.section)} · {r.by} · {r.at} · <span style={{ fontFamily: 'monospace' }}>{r.version}</span>
+                      </div>
+                      <div style={{ fontSize: fz(13), color: C.textSub, lineHeight: 1.8 }}>{r.text}</div>
+                    </antd.List.Item>
+                  );
+                }}
+              />
+            )}
+          </MpDetailSection>
+        </div>
+
+        {/* 右側資訊欄 */}
+        <div style={{ width: 288, flexShrink: 0 }}>
+
+          <div style={{ border: '1px solid ' + C.border, borderRadius: 8, padding: 16, background: C.bg, marginBottom: 16 }}>
+            {isMine ? (
+              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+                這份是本課發布的，不需要下載。
+              </div>
+            ) : downloaded ? (
+              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+                本課已下載這一份（{downloaded.origin.version}），在 Skill 管理清單裡。
+              </div>
+            ) : (
+              <React.Fragment>
+                <antd.Button type="primary" block onClick={function() { setConfirm(true); }}>下載到本課</antd.Button>
+                <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, marginTop: 8 }}>
+                  落地為 Draft，需重走測試與簽核
+                </div>
+              </React.Fragment>
+            )}
+          </div>
+
+          <MpSideCard title="本課工具檢查">
+            {tools.ok.map(function(t) {
+              return (
+                <div key={t.name} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <span style={{ color: '#22C55E', fontSize: fz(12), flexShrink: 0 }}>✓</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: fz(12), fontFamily: 'monospace', color: C.textSub, wordBreak: 'break-all' }}>{t.name}</div>
+                    <div style={{ fontSize: fz(11), color: C.textMuted }}>{t.system} · {SKILL_IO_CFG[t.mode] ? SKILL_IO_CFG[t.mode].label : t.mode}</div>
+                  </div>
+                </div>
+              );
+            })}
+            {tools.missing.map(function(t) {
+              return (
+                <div key={t.name} style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                  <span style={{ color: '#F59E0B', fontSize: fz(12), flexShrink: 0 }}>⚠</span>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: fz(12), fontFamily: 'monospace', color: C.textSub, wordBreak: 'break-all' }}>{t.name}</div>
+                    <div style={{ fontSize: fz(11), color: '#F59E0B' }}>本課未授權</div>
+                    <div style={{ fontSize: fz(11), color: C.textMuted, lineHeight: 1.8 }}>→ 找 IT 開通，或下載後改用其他工具</div>
+                  </div>
+                </div>
+              );
+            })}
+          </MpSideCard>
+
+          <MpSideCard title="風險">
+            <div style={{ marginBottom: 8 }}><MpWriteLine item={item} /></div>
+            <div style={{ fontSize: fz(12), color: C.textSub }}>
+              {(item.plainSteps || []).filter(function(s) { return s.needsConfirm; }).length > 0
+                ? '⚠ ' + (item.plainSteps || []).filter(function(s) { return s.needsConfirm; }).length + ' 步需人工確認'
+                : '✓ 無需人工確認步驟'}
+            </div>
+          </MpSideCard>
+
+          <MpSideCard title="採用狀況">
+            {chk.downloads === 0 ? (
+              <div style={{ fontSize: fz(13), color: C.textMuted }}>尚無下載紀錄</div>
+            ) : (
+              [
+                { label: '課下載',   n: chk.downloads,  color: C.text },
+                { label: '課已生效', n: chk.production, color: '#22C55E' },
+                { label: '課測試中', n: chk.testing,    color: '#F59E0B' },
+                { label: '課棄用',   n: chk.dropped,    color: chk.dropped > 0 ? '#F59E0B' : C.textMuted },
+              ].map(function(row) {
+                return (
+                  <div key={row.label} style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: fz(18), fontWeight: 600, color: row.color, minWidth: 24 }}>{row.n}</span>
+                    <span style={{ fontSize: fz(12), color: C.textMuted }}>{row.label}</span>
+                  </div>
+                );
+              })
+            )}
+          </MpSideCard>
+        </div>
+      </div>
+
+      {confirm && (
+        <MpDownloadModal
+          item={item} p={p}
+          onCancel={function() { setConfirm(false); }}
+          onConfirm={function() { setConfirm(false); onDownload(item); }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   MpDownloadModal — 下載確認
+
+   這是決策 A（副本不訂閱）與 B（落 Draft、不自動 remap）
+   的**唯一一次完整解釋**。之後的畫面不再重複說明機制，只標狀態。
+   ════════════════════════════════════════ */
+function MpDownloadModal({ item, p, onCancel, onConfirm }) {
+  var { C, fz } = useTheme();
+  var tools = mpToolCheck(p.key, item.tools);
+
+  function Row({ icon, color, title, lines }) {
+    return (
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+        <span style={{ color: color, fontSize: fz(13), flexShrink: 0, fontWeight: 600 }}>{icon}</span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>{title}</div>
+          {lines.map(function(l, i) {
+            return <div key={i} style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>{l}</div>;
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <antd.Modal
+      open
+      title="下載到本課"
+      onCancel={onCancel}
+      width={560}
+      footer={[
+        <antd.Button key="c" onClick={onCancel}>取消</antd.Button>,
+        <antd.Button key="ok" type="primary" onClick={onConfirm}>下載為 Draft</antd.Button>,
+      ]}
+    >
+      <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 16 }}>
+        {item.title} {item.currentVersion}（{mpSectionName(item.publisher.section)}）
+      </div>
+
+      <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 16 }}>下載後會發生什麼：</div>
+
+      <Row icon="✓" color="#22C55E" title="直接沿用"
+        lines={[(item.plainSteps || []).length ? '流程說明、逐步流程、工具清單、標籤' : '指引全文、工具清單、標籤']} />
+
+      <Row icon="⚠" color="#F59E0B" title="必須由你重新設定"
+        lines={[
+          '適用範圍 —— ' + mpSectionName(item.publisher.section) + '的對象編號在本課不存在',
+          '引用知識 —— 原本引用的是' + mpSectionName(item.publisher.section) + '的文件',
+          (item.tier === 'sop' ? '情境試跑' : '驗收') + ' —— ' + mpSectionName(item.publisher.section) + '的紀錄不計入本課簽核',
+        ]} />
+
+      {tools.missing.length > 0 && (
+        <Row icon="⚠" color="#F59E0B" title={'本課有 ' + tools.missing.length + ' 個工具未授權'}
+          lines={[
+            tools.missing.map(function(t) { return t.name; }).join('、'),
+            '在開通或替換之前，這份跑不完整。',
+          ]} />
+      )}
+
+      <div style={{
+        fontSize: fz(12), color: C.textSub, lineHeight: 1.8,
+        background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16,
+      }}>
+        它會落在 Draft，走完測試 → 簽核 → Pilot Run 才會生效。
+        之後{mpSectionName(item.publisher.section)}再出新版，你會收到提示，但不會自動更新。
+      </div>
+    </antd.Modal>
+  );
+}
+
+/* ════════════════════════════════════════
+   主頁面
+   ════════════════════════════════════════ */
+function SkillMarketplacePage({ p, mySkills, onBack, onDownload }) {
+  var { C, fz } = useTheme();
+  var [tier, setTier]       = React.useState(SKILL_DEFAULT_TIER);
+  var [query, setQuery]     = React.useState('');
+  var [onlyOk, setOnlyOk]   = React.useState(false);
+  var [sortBy, setSortBy]   = React.useState('adopted');
+  var [openId, setOpenId]   = React.useState(null);
+
+  var listed = mpListed(p.key);
+
+  /* 本課已下載哪幾份 —— 以本課 skill 的 origin 為準，不另存狀態 */
+  function downloadedOf(item) {
+    return (mySkills || []).filter(function(s) {
+      return s.origin && s.origin.marketplaceId === item.id;
+    })[0] || null;
+  }
+
+  var tierCounts = {};
+  SKILL_TIERS.forEach(function(t) {
+    tierCounts[t] = listed.filter(function(x) { return x.tier === t; }).length;
+  });
+
+  var displayed = listed
+    .filter(function(it) { return it.tier === tier; })
+    .filter(function(it) { return !onlyOk || mpToolCheck(p.key, it.tools).missing.length === 0; })
+    .filter(function(it) {
+      if (!query.trim()) return true;
+      var q = query.toLowerCase();
+      return it.title.toLowerCase().indexOf(q) !== -1
+          || (it.purpose || '').toLowerCase().indexOf(q) !== -1
+          || mpSectionName(it.publisher.section).indexOf(query.trim()) !== -1
+          || (it.tags || []).join(' ').toLowerCase().indexOf(q) !== -1;
+    })
+    .sort(function(a, b) {
+      if (sortBy === 'adopted') return mpAdoption(b).production - mpAdoption(a).production;
+      if (sortBy === 'newest')  return b.publisher.at.localeCompare(a.publisher.at);
+      if (sortBy === 'name')    return a.title.localeCompare(b.title, 'zh');
+      return 0;
+    });
+
+  var openItem = openId ? listed.filter(function(it) { return it.id === openId; })[0] : null;
+  if (openItem) {
+    return (
+      <MpDetail
+        key={openItem.id}
+        item={openItem}
+        p={p}
+        downloaded={downloadedOf(openItem)}
+        onBack={function() { setOpenId(null); }}
+        onDownload={onDownload}
+      />
+    );
+  }
+
+  var tierTabOptions = SKILL_TIERS.map(function(t) {
+    var cfg = SKILL_TIER_CFG[t];
+    var active = tier === t;
+    return {
+      value: t,
+      label: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0 8px', color: active ? '#FFFFFF' : C.textSub, fontWeight: 600, fontSize: fz(13) }}>
+          {cfg.label}
+          <span style={{
+            fontSize: fz(10), padding: '0 8px', borderRadius: 999, fontWeight: 600,
+            background: active ? 'rgba(255,255,255,0.25)' : C.hover,
+            color: active ? '#FFFFFF' : C.textMuted,
+          }}>{tierCounts[t] || 0}</span>
+        </span>
+      ),
+    };
+  });
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, background: C.bg }}>
+
+      <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <antd.Button size="small" type="text" onClick={onBack} style={{ color: C.textSub, flexShrink: 0 }}>← 返回 Skill 管理</antd.Button>
+        <div style={{ width: 1, height: 24, background: C.border, flexShrink: 0 }} />
+        <div>
+          <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text }}>Skill Marketplace</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted }}>其他課發布的 Skill 與 Codify · 下載後在本課重走測試與簽核才會生效</div>
+        </div>
+      </div>
+
+      <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
+        <div style={{ padding: '16px 24px 8px', flexShrink: 0 }}>
+          <antd.Segmented value={tier} onChange={setTier} options={tierTabOptions} style={{ alignSelf: 'flex-start' }} />
+        </div>
+
+        <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0, overflowX: 'auto' }} className="scrollbar-none">
+          <antd.Input
+            allowClear
+            value={query}
+            onChange={function(e) { setQuery(e.target.value); }}
+            prefix={<span style={{ color: C.textMuted, fontSize: fz(12) }}>🔍</span>}
+            aria-label="搜尋 Marketplace"
+            placeholder="搜尋名稱、用途、發布課別…"
+            style={{ flex: 1, minWidth: 176 }}
+          />
+          <antd.Checkbox checked={onlyOk} onChange={function(e) { setOnlyOk(e.target.checked); }} style={{ flexShrink: 0, fontSize: fz(12), color: C.textSub }}>
+            只看本課工具都可用
+          </antd.Checkbox>
+          <antd.Select
+            value={sortBy}
+            onChange={setSortBy}
+            aria-label="排序方式"
+            style={{ width: 168, flexShrink: 0 }}
+            options={[
+              { value: 'adopted', label: '排序：最多課已生效' },
+              { value: 'newest',  label: '排序：最新發布' },
+              { value: 'name',    label: '排序：名稱 A→Z' },
+            ]}
+          />
+        </div>
+      </antd.ConfigProvider>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 24px' }} className="scrollbar-thin">
+        {displayed.length === 0 ? (
+          <antd.Empty
+            image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
+            description={
+              <span style={{ fontSize: fz(13), color: C.textMuted }}>
+                {onlyOk ? '沒有本課工具全部可用的 ' + SKILL_TIER_CFG[tier].label : '沒有符合條件的 ' + SKILL_TIER_CFG[tier].label}
+              </span>
+            }
+            style={{ padding: 32 }}
+          />
+        ) : displayed.map(function(it) {
+          return (
+            <MpCard
+              key={it.id}
+              item={it}
+              p={p}
+              downloaded={downloadedOf(it)}
+              onOpen={function() { setOpenId(it.id); }}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+
 /* ── components/SkillManagementPage.jsx ── */
 
 /* ════════════════════════════════════════
@@ -10941,6 +12034,17 @@ function WriteToggle({ draft, onEnable, onDisable }) {
        知道我們有這個能力，再讓人自己切過去探索 Codify
      · 每個分頁在清單上方掛一句小標題，解釋這個類型是什麼、何時該升級
      · 類型欄拿掉：分頁本身已經宣告了類型，每列再標一次是重複資訊
+
+   2026-08-19 改版（Skill Marketplace Phase 1–2a）：
+     · Header 多一顆「Skill Marketplace」入口 → 全頁替換
+       （不做成第三個分頁：現有兩顆膠囊的軸是「類型」，Marketplace 是
+        「來源」，兩軸混一顆會壞掉。逛別人的東西與管自己課的東西是
+        兩種模式，下載的終點又是回到本課清單，全頁替換的返回路徑
+        天然對得上）
+     · 副標從「不可跨課使用」改寫 —— 跨課流動的是定義文本，不是執行權限
+     · 下載落地為 Draft，scope 標 unset、知識引用與驗收紀錄一律不跨課
+       （決策 B：系統猜錯比留白危險）
+     見 brain/concepts/skill-marketplace.md
 
    五階段管理流程維持：Draft → Testing → Approving → Pilot Run → Production
    註：主元件函式名稱維持 SOPManagementPage，以相容 SettingPage。
@@ -11086,6 +12190,17 @@ function useSkillColumns({ onDelete, mounts }) {
               {(r.knowledgeRefs || []).length > 0 && (
                 <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>引用 {r.knowledgeRefs.length} 份知識</antd.Tag>
               )}
+              {/* 來源永久保留；待設定是進度，補完就消失 */}
+              {r.origin && (
+                <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), color: C.textMuted, background: C.bgPanel }}>
+                  來自 {r.origin.fromSection} {r.origin.version}
+                </antd.Tag>
+              )}
+              {mpPendingSetup(r).length > 0 && (
+                <antd.Tag bordered={false} style={{ marginInlineEnd: 0, borderRadius: 999, fontSize: fz(10), fontWeight: 600, color: '#F59E0B', background: 'rgba(245,158,11,0.08)' }}>
+                  {mpPendingSetup(r).length} 項待設定
+                </antd.Tag>
+              )}
             </div>
           </div>
         );
@@ -11133,6 +12248,7 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
   var [detailId, setDetailId]     = React.useState(null);
   var [searchQuery, setSearch]    = React.useState('');
   var [sortBy, setSortBy]         = React.useState('newest');
+  var [view, setView]             = React.useState('list');   /* 'list' | 'market' */
 
   /* persona 切換時重載 */
   React.useEffect(function() {
@@ -11141,6 +12257,7 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
     setFilter('all');
     setActiveTier(SKILL_DEFAULT_TIER);
     setSearch('');
+    setView('list');
   }, [p.key]);
 
   function advanceStage(id, nextStage) {
@@ -11157,6 +12274,19 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
   function deleteSkill(id) {
     setSkills(function(prev) { return prev.filter(function(s) { return s.id !== id; }); });
     if (detailId === id) setDetailId(null);
+  }
+
+  /* 決策 A（副本不訂閱）+ B（落 Draft、不自動 remap）的落點。
+     下載完直接跳進詳情頁 —— 那裡才看得到「還有哪幾項要自己設」。 */
+  function downloadFromMarket(item) {
+    var today = new Date().toISOString().slice(0, 10);
+    var landed = mpToSkill(item, p.key, (p.user && p.user.name) || 'Seed', today);
+    setSkills(function(prev) { return [landed].concat(prev); });
+    setActiveTier(landed.tier);
+    setFilter('all');
+    setSearch('');
+    setView('list');
+    setDetailId(landed.id);
   }
 
   function saveSkill(updated) {
@@ -11192,6 +12322,18 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
       if (sortBy === 'stage')  return SKILL_STAGES.indexOf(a.stage) - SKILL_STAGES.indexOf(b.stage);
       return 0;
     });
+
+  /* Marketplace：逛別人的東西，跟管自己課的東西是兩種模式，故整頁換掉 */
+  if (view === 'market') {
+    return (
+      <SkillMarketplacePage
+        p={p}
+        mySkills={skills}
+        onBack={function() { setView('list'); }}
+        onDownload={downloadFromMarket}
+      />
+    );
+  }
 
   /* 詳情頁：清單只是進入點，其餘行為都在這裡 */
   var detailSkill = detailId ? skills.filter(function(s) { return s.id === detailId; })[0] : null;
@@ -11264,10 +12406,13 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
       <div style={{ padding: '8px 24px', borderBottom: '1px solid ' + C.border, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         <div>
           <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text }}>Skill 管理</div>
-          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Skill 與 Codify · 同課審批 · 不可跨課使用</div>
+          <div style={{ fontSize: fz(12), color: C.textMuted }}>{p.name} · Skill 與 Codify · 同課審批 · 跨課可下載、下載後重走簽核</div>
         </div>
         <div style={{ flex: 1 }} />
-        <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
+        <antd.Space size={8}>
+          <antd.Button onClick={function() { setView('market'); }}>Skill Marketplace</antd.Button>
+          <antd.Button type="primary" onClick={function() { setShowCreate(true); }}>＋ 建立 Skill</antd.Button>
+        </antd.Space>
       </div>
 
       <antd.ConfigProvider theme={{ components: { Segmented: { itemSelectedBg: '#2563EB', itemSelectedColor: '#FFFFFF' } } }}>
@@ -11412,6 +12557,12 @@ function SOPManagementPage({ p, schedMounts, onScheduleSkill }) {
 function getSignoffGate(skill, calcOpened) {
   if (skill.stage === 'approving' || skill.stage === 'pirun' || skill.stage === 'production') return null;
 
+  /* 跨課下載的必經狀態（決策 B）：範圍沒設就沒有對象，沒有對象就沒東西可試跑。
+     放在最前面 —— 它是所有其他條件的前提。 */
+  if (skill.scope && skill.scope.unset) {
+    return '尚未設定適用範圍 —— ' + (skill.origin ? skill.origin.fromSection + '的對象編號在本課不存在，要自己選過' : '請先勾選這份適用於哪些對象');
+  }
+
   if (skill.tier === 'sop') {
     var scs = buildDataScenarios(skill);
     if (scs.length === 0) return '還沒有流程步驟，無法試跑也無法送簽';
@@ -11550,6 +12701,70 @@ function getSignoffAction(stage) {
     case 'production': return { label: '已生效',   next: null,        enabled: false };
     default:           return { label: '送出簽核', next: 'approving', enabled: true  };
   }
+}
+
+/* ════════════════════════════════════════
+   MpOriginBlock — 跨課下載後的落地狀態（決策 B）
+
+   置頂的是**任務清單不是橫幅**：每一項都有一顆按鈕跳到對應區塊。
+   決議 18 刪掉的是「只講狀態、不能行動」的橫幅，這塊不衝突。
+
+   補完就收合成一行常駐標記 —— 來源要永久看得見（半年後有人追問
+   「這東西哪來的」，答案要在原地），但「還沒設定」是進度，不該常駐。
+   ════════════════════════════════════════ */
+function MpOriginBlock({ skill, p }) {
+  var { C, fz } = useTheme();
+  if (!skill.origin) return null;
+  var o = skill.origin;
+  var pending = mpPendingSetup(skill);
+  var missingTools = mpToolCheck(p.key, skill.tools).missing;
+
+  function goto(id) {
+    var el = document.getElementById(id);
+    if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* 全部補完：收合成一行 */
+  if (pending.length === 0) {
+    return (
+      <div style={{ marginBottom: 32, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+        ⓘ 下載自 {o.fromSection}《{skill.title}》{o.version}（{o.at}）· 本課已完成設定
+      </div>
+    );
+  }
+
+  return (
+    <div style={{
+      marginBottom: 32, padding: 16, borderRadius: 8,
+      border: '1px solid rgba(245,158,11,0.2)', background: 'rgba(245,158,11,0.06)',
+    }}>
+      <div style={{ fontSize: fz(13), fontWeight: 600, color: C.text, marginBottom: 4 }}>
+        這份下載自 {o.fromSection}《{skill.title}》{o.version}
+      </div>
+      <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.8, marginBottom: 16 }}>
+        流程與工具已沿用，以下 {pending.length} 項必須由本課重新設定：
+      </div>
+
+      <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden', background: C.bg }}>
+        {pending.map(function(row, i) {
+          return (
+            <div key={row.key} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderTop: i > 0 ? '1px solid ' + C.border : 'none' }}>
+              <span style={{ fontSize: fz(13), color: C.textMuted, flexShrink: 0 }}>☐</span>
+              <span style={{ fontSize: fz(13), color: C.text, width: 80, flexShrink: 0 }}>{row.label}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: fz(12), color: C.textMuted }}>{row.note}</span>
+              <antd.Button size="small" type="link" onClick={function() { goto(row.target); }} style={{ flexShrink: 0 }}>前往設定 →</antd.Button>
+            </div>
+          );
+        })}
+      </div>
+
+      {missingTools.length > 0 && (
+        <div style={{ fontSize: fz(12), color: '#F59E0B', lineHeight: 1.8, marginTop: 8 }}>
+          ⚠ 另有 {missingTools.length} 個工具（{missingTools.map(function(t) { return t.name; }).join('、')}）本課未授權
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ════════════════════════════════════════
@@ -12082,7 +13297,36 @@ function ScopeBlock({ skill, p, onSave }) {
       {/* 一句話用途 */}
       <div style={{ fontSize: fz(14), color: C.text, lineHeight: 1.8, marginBottom: 16 }}>{skill.purpose}</div>
 
+      {/* 跨課下載後的空白狀態：把原課的設定寫出來當參考，但**不預填**。
+          看得到、抄得動，但要自己動手 —— 決策 B「不自動 remap」的落點。 */}
+      {skill.scope && skill.scope.unset && (
+        <div style={{
+          border: '1px dashed ' + C.borderStrong, borderRadius: 8, padding: 24,
+          textAlign: 'center', marginBottom: 8, background: C.bgSub,
+        }}>
+          <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, marginBottom: 8 }}>尚未設定</div>
+          {skill.origin && skill.origin.originScope && (
+            <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, marginBottom: 16 }}>
+              {skill.origin.fromSection}設定的是
+              {' ' + ((skill.origin.originScope.equipmentClass || []).join('、') || '全部類別')}
+              {' ／ ' + ((skill.origin.originScope.area || []).join('、') || '全區')}
+              {' ／ ' + ((skill.origin.originScope.equipmentIds || []).join('、') || '—')}
+              <br />
+              本課的對象編號不同，系統不代為對應 —— 請自己選。
+            </div>
+          )}
+          {onSave && (
+            <antd.Button type="primary" onClick={function() {
+              onSave(Object.assign({}, skill, {
+                scope: { equipmentClass: [], equipmentIds: [], area: [], trigger: (skill.origin && skill.origin.originScope && skill.origin.originScope.trigger) || { type: 'manual' } },
+              }));
+            }}>設定適用範圍</antd.Button>
+          )}
+        </div>
+      )}
+
       {/* 結構化條件（勾出來的，不是自由文字，所以才算得出符合幾台） */}
+      {!(skill.scope && skill.scope.unset) && (
       <div style={{ border: '1px solid ' + C.border, borderRadius: 8, overflow: 'hidden' }}>
         {describeScope(skill.scope).map(function(row, i) {
           return (
@@ -12103,6 +13347,7 @@ function ScopeBlock({ skill, p, onSave }) {
           )}
         </div>
       </div>
+      )}
 
       {/* 工具授權摘要：一行，需要細節才展開。
           Skill 的「不能寫入」要看得到，才知道邊界在哪。 */}
@@ -13696,7 +14941,8 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onSchedul
             <span style={{ fontSize: fz(18), fontWeight: 600, color: C.text }}>{skill.title}</span>
           </div>
           <div style={{ fontSize: fz(12), color: C.textMuted, marginTop: 2 }}>
-            {tierCfg.oneLiner} · {skill.importedBy} 建立於 {skill.importedAt}
+            {/* 下載來的不是「建立」—— 這一份的內容是別課寫的，本課只是把它帶進來 */}
+            {tierCfg.oneLiner} · {skill.importedBy} {skill.origin ? '下載於' : '建立於'} {skill.importedAt}
           </div>
         </div>
         <antd.Space size={8} style={{ flexShrink: 0 }}>
@@ -13727,6 +14973,8 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onSchedul
       <div style={{ flex: 1, display: 'flex', minHeight: 0 }}>
         <div style={{ flex: 1, minWidth: 0, overflowY: 'auto', padding: '24px 32px' }} className="scrollbar-thin">
           <div style={{ maxWidth: 880 }}>
+
+            <MpOriginBlock skill={skill} p={p} />
 
             {/* 類型摘要：這是什麼、能不能排程 */}
             <div id="sd-tier" className={flash === 'tier' ? 'sd-flash' : undefined} style={{
@@ -13771,6 +15019,18 @@ function SkillDetailPage({ skill, p, onBack, onSave, onAdvance, mount, onSchedul
                 : '同一份指引換個問法就會走不同路，沒有固定步驟可以試跑，而且每次結果都不一樣 —— 所以驗的是意圖，而且要跑很多次。你寫下每次回答都該成立的條件，系統把每個提問情境各跑 ' + ACCEPT_RUNS + ' 次，由你看內容確認。全數確認才能送簽。'}>
               <TestBlock skill={skill} p={p} onSave={onSave} onOpenCalc={function() { setCalcOpened(true); }} />
             </SdSection>
+
+            {/* 原課的紀錄給看，但標死不計入 —— 不能有一絲「已經測過了可以直接用」的暗示 */}
+            {skill.origin && skill.origin.originAcceptNote && (
+              <SdSection
+                title={skill.origin.fromSection + '的' + (skill.tier === 'sop' ? '試跑' : '驗收') + '紀錄'}
+                desc={'⚠ 這是' + skill.origin.fromSection + '的紀錄，不計入本課簽核。本課仍須自己跑過一次。'}>
+                <div style={{
+                  fontSize: fz(13), color: C.textSub, lineHeight: 1.8,
+                  background: C.bgSub, border: '1px solid ' + C.border, borderRadius: 8, padding: 16,
+                }}>{skill.origin.originAcceptNote}</div>
+              </SdSection>
+            )}
 
             <StatusBlock skill={skill} p={p} mount={mount} onScheduleSkill={onScheduleSkill} />
 
