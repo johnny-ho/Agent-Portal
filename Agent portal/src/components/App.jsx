@@ -424,30 +424,35 @@ function App() {
     return true;
   }, [schedDecisions]);
 
-  /* ── Drive → KPI 的嵌入清單：{ [personaKey]: [fileId, ...] } ──
-     放在 App 而不是任何一頁，因為 Drive（設定嵌入）與 KPI（顯示嵌入）
-     兩邊要看到同一份真相；同 schedMounts 的作法。 */
+  /* ── KPI 報表清單裡的 Drive 產出：{ [personaKey]: [fileId, ...] } ──
+     放在 App 而不是任何一頁：KPI 頁管理這份清單（決議 25），
+     Drive 頁要據它顯示「在 KPI 清單」的狀態，兩邊要看到同一份真相。
+     同 schedMounts 的作法。 */
   const [driveEmbedIds, setDriveEmbedIds] = React.useState(
     typeof DEFAULT_DRIVE_EMBEDS !== 'undefined' ? DEFAULT_DRIVE_EMBEDS : { equipment: [], process: [], mfg: [] }
   );
-  const handleToggleDriveEmbed = React.useCallback(function (fileId) {
+  /* 整份取代而不是逐筆 toggle —— KPI 的加入 Modal 是「一次管理一份清單」，
+     按下確定才生效；逐筆 toggle 的話取消就取消不掉了。 */
+  const handleSetDriveEmbeds = React.useCallback(function (ids) {
     setDriveEmbedIds(function (prev) {
-      const cur = prev[persona] || [];
-      const next = cur.indexOf(fileId) >= 0
-        ? cur.filter(function (id) { return id !== fileId; })
-        : cur.concat([fileId]);
-      return Object.assign({}, prev, { [persona]: next });
+      return Object.assign({}, prev, { [persona]: ids });
     });
   }, [persona]);
 
-  /* 目前這一課已嵌入、且還真的存在的檔案（取消嵌入後 KPI 那邊要跟著消失） */
+  /* 目前這一課已加入、且還真的存在的檔案（從清單移除後 KPI 那邊要跟著消失） */
   const driveEmbedFiles = React.useMemo(function () {
     return (driveEmbedIds[persona] || [])
       .map(function (id) { return getDriveFileById(persona, id); })
       .filter(function (f) { return f && isDriveEmbeddable(f); });
   }, [persona, driveEmbedIds]);
 
-  /* Drive 詳情「在 KPI 報表中心檢視」→ 跳 KPI 並落在那份產出上（nonce 每次遞增以重觸發）*/
+  /* 這一課有哪些產出加得進 KPI —— 加入 Modal 的候選清單 */
+  const driveCandidates = React.useMemo(function () {
+    return getDriveEmbedCandidates(persona);
+  }, [persona]);
+
+  /* Drive 詳情 → 跳 KPI。帶 fileId 就落在那份產出上，帶 null 只是換頁
+     （nonce 每次遞增以重觸發）*/
   const [kpiJump, setKpiJump] = React.useState({ fileId: null, nonce: 0 });
   const handleGoKpiEmbed = React.useCallback(function (fileId) {
     setKpiJump(function (prev) { return { fileId: fileId, nonce: prev.nonce + 1 }; });
@@ -800,9 +805,9 @@ function App() {
 
         {nav === 'dashboard'  && <DashboardPage p={p} onAskAI={handleAskAI} handoverRecord={handoverRecord} onHandoverSubmit={handleHandoverSubmit} onGoTasks={(member, taskId) => { setTaskFilter(member || ''); setTaskOpenId(taskId || null); setNav('tasks'); }} pinnedAppIds={pinnedAppIds} onGoAppCenter={() => setNav('apps')} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} onOpenKpiSetting={handleOpenKpiSetting} onOpenBulletinSetting={handleOpenBulletinSetting} onOpenAppSetting={handleOpenAppSetting} onOpenLinkWidgetSetting={handleOpenLinkWidgetSetting} showHandoverModal={showHandoverModal} setShowHandoverModal={setShowHandoverModal} homeLayout={homeLayoutByPersona[persona] || []} />}
         {nav === 'apps'       && <AppCenterPage p={p} pinnedAppIds={pinnedAppIds} onTogglePin={handleTogglePin} functionTree={functionTree} legacyMode={legacyMode} />}
-        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} driveEmbeds={driveEmbedFiles} kpiJump={kpiJump} onGoDrive={handleGoDrive} />}
+        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} driveEmbeds={driveEmbedFiles} driveCandidates={driveCandidates} onSetEmbeds={handleSetDriveEmbeds} kpiJump={kpiJump} onGoDrive={handleGoDrive} />}
         {/* key={persona} 讓切課時重置頁內狀態：資料夾位置與選取的檔案不會跨課殘留 */}
-        {nav === 'drive'      && <DrivePage key={persona} p={p} embedIds={driveEmbedIds[persona] || []} onToggleEmbed={handleToggleDriveEmbed} onGoKpi={handleGoKpiEmbed} onGoNav={setNav} />}
+        {nav === 'drive'      && <DrivePage key={persona} p={p} embedIds={driveEmbedIds[persona] || []} onGoKpi={handleGoKpiEmbed} onGoNav={setNav} />}
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} schedMounts={schedMounts} onScheduleSkill={handleScheduleSkill} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}

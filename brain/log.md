@@ -623,3 +623,19 @@ PO 指定兩件事：以課為單位的雲端硬碟、每課預設 `Agent_Artifa
 **瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：Drive 進入／Agent_Artifacts 列表／選檔詳情／非 html 的限制說明／嵌入／取消嵌入後 KPI 分組消失且選取退回／KPI 端 iframe 真的渲染出內容／「在 Drive 開啟」回跳／資料夾與子資料夾麵包屑／換課後檔案與嵌入清單各自獨立／深色模式，全過，無 page error。實測抓到一個 bug：AntD Table 的選取列底色用 inline `onRow.style` 吃不到（被 `td` 蓋掉），改用既有的 `rowClassName` + CSS 慣例。
 
 受影響 wiki 頁：新增 [drive](entities/modules/drive.md)；更新 [kpi-center](entities/modules/kpi-center.md)、[sitemap](entities/sitemap.md)、[architecture](entities/architecture.md)、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-31] decision | 嵌入開關搬到 KPI（決議 25，推翻決議 24 第三項）
+
+PO：「嵌入開關我要設置在 kpi，不要在 drive」。
+
+**PO 是對的，理由比我原本那條強**：KPI 報表中心本來就是**管理書籤清單**的地方（頁尾「⚙ Seed 管理書籤與分類」立在那裡很久了），從 Drive 加一份 AI 產出，與加一個外部報表書籤是同一件事。我原本的歸因（「決定要不要給全課看的地方，該是看得到它怎麼產出的地方」）講的是**判斷所需的資訊**——但那份資訊 Modal 裡列得出來（來源／時間／大小／路徑），而清單的家只有一個。
+
+**KPI 端**：左欄 header 常駐「＋ AI 產出」→ Modal 列出該課所有 `.html` 產出，勾選清單同時做新增與移除，按確定才生效；報表 toolbar 補「從清單移除」。三個判斷：入口**不掛在「AI 產出報表」那一組上**（那組沒東西時整組不出現，入口跟著消失＝找不到的功能）；**按確定才生效**故 App handler 從逐筆 `toggle` 改成整份 `set`（逐筆的話 Modal 的「取消」取消不掉）；「從清單移除」**不用 danger 色** + Popconfirm 講明檔案仍在 Drive（移除的是清單項不是檔案）。
+
+**Drive 端**：只剩狀態與指路。已加入 → 狀態句 +「在 KPI 報表中心檢視」；未加入的 .html → 「加入與移除在 KPI 報表中心的『＋ AI 產出』」+「前往 KPI 報表中心」（**留路徑，不做成隱藏功能**）；非 .html 整個區塊不出現——原本那句「只有 .html 才能嵌」是在替一顆不存在的按鈕解釋。用字對齊清單語彙：徽章「已嵌入 KPI」→「在 KPI 清單」、左欄檢視 →「已在 KPI 報表清單」。
+
+**資料層**：新增 `getDriveEmbedCandidates()`——挑報表既然是 KPI 頁的事，候選清單的計算也放資料層，不讓 KPI 頁自己去翻 Drive 的樹。
+
+**瀏覽器實測**：14 項全過（Drive 端兩顆開關確實消失、已加入／未加入／非 html 三種詳情、KPI 入口與 Modal、勾選加入、從清單移除、Drive 端狀態同步跟著變回未加入），無 page error。
+
+受影響 wiki 頁：[drive](entities/modules/drive.md)、[kpi-center](entities/modules/kpi-center.md)、[decisions.md](decisions.md)（決議 24 第三項標記推翻）、index.md。

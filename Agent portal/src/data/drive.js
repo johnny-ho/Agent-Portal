@@ -339,3 +339,10 @@ function getDriveFileById(personaKey, id) {
 function isDriveEmbeddable(file) {
   return !!file && file.type === 'html' && !!file.html;
 }
+
+/* 這個課有哪些產出「加得進」KPI 報表中心。
+   KPI 頁的加入 Modal 直接吃這一份 —— 挑報表是 KPI 頁的事（2026-08-31 決議 25），
+   所以候選清單的計算也放在資料層，而不是讓 KPI 頁自己去翻 Drive 的樹。 */
+function getDriveEmbedCandidates(personaKey) {
+  return flattenDriveFiles(personaKey).filter(isDriveEmbeddable);
+}

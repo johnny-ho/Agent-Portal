@@ -5264,6 +5264,13 @@ function isDriveEmbeddable(file) {
   return !!file && file.type === 'html' && !!file.html;
 }
 
+/* 這個課有哪些產出「加得進」KPI 報表中心。
+   KPI 頁的加入 Modal 直接吃這一份 —— 挑報表是 KPI 頁的事（2026-08-31 決議 25），
+   所以候選清單的計算也放在資料層，而不是讓 KPI 頁自己去翻 Drive 的樹。 */
+function getDriveEmbedCandidates(personaKey) {
+  return flattenDriveFiles(personaKey).filter(isDriveEmbeddable);
+}
+
 
 /* ── components/shared.jsx ── */
 
@@ -8664,7 +8671,7 @@ const KPI_SRC_CFG = {
   mes:    { label: 'MES',  bg: '#FDF4FF', color: '#7E22CE' },
   custom: { label: '自建', bg: '#F3F4F6', color: '#374151' },
   /* Drive 來的 AI 產出。它與上面五個不同：不是外部系統的報表，
-     而是本平台 AI 產出、存在課的 Drive 裡、被 Seed／課員嵌進來的 .html。
+     而是本平台 AI 產出、存在課的 Drive 裡、被加進本頁書籤清單的 .html。
      見 data/drive.js 與 DrivePage.jsx。 */
   agent:  { label: 'AI',   bg: 'rgba(124,58,237,0.08)', color: '#7C3AED' },
 };
@@ -8683,13 +8690,98 @@ function KpiSrcTag({ src, size }) {
 }
 
 /* ════════════════════════════════════════
+   KpiAddArtifactModal — 從 Drive 挑 AI 產出加進書籤清單
+
+   2026-08-31 決議 25：挑報表是本頁的事。KPI 報表中心本來就是「管理書籤清單」
+   的地方（頁尾那句「⚙ Seed 管理書籤與分類」），從 Drive 加一份 AI 產出
+   與加一個外部報表書籤是同一件事，不該跑到 Drive 去設定。
+
+   一份勾選清單同時做新增與移除 —— 這是「管理清單」的心智模型，
+   不是「對每個檔案下指令」。按下確定才生效，取消就整批不算數。
+   ════════════════════════════════════════ */
+function KpiAddArtifactModal({ candidates, embedIds, onConfirm, onClose }) {
+  var { C, fz } = useTheme();
+  var [picked, setPicked] = React.useState(embedIds || []);
+
+  function toggle(id) {
+    setPicked(function (prev) {
+      return prev.indexOf(id) >= 0
+        ? prev.filter(function (x) { return x !== id; })
+        : prev.concat([id]);
+    });
+  }
+
+  return (
+    <antd.Modal
+      open centered width={640} onCancel={onClose}
+      title={<span style={{ fontWeight: 600, fontSize: fz(18), color: C.text }}>從 Drive 加入 AI 產出報表</span>}
+      okText="確定" cancelText="取消"
+      onOk={function () { onConfirm(picked); }}
+      styles={{
+        body: { padding: '16px 24px', maxHeight: '56vh', overflowY: 'auto' },
+        header: { marginBottom: 0, padding: '16px 24px', borderBottom: '1px solid ' + C.border },
+        footer: { marginTop: 0, padding: '16px 24px', borderTop: '1px solid ' + C.border, background: C.bgSub },
+        content: { padding: 0, overflow: 'hidden' },
+      }}
+    >
+      <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8, marginBottom: 16 }}>
+        只有 <span style={{ fontFamily: 'monospace' }}>.html</span> 的產出可以加進報表清單。取消勾選即從清單移除，不會刪除 Drive 裡的檔案。
+      </div>
+
+      {candidates.length === 0 ? (
+        <antd.Empty
+          image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
+          description={<span style={{ fontSize: fz(12), color: C.textMuted }}>
+            這個課的 {DRIVE_AGENT_FOLDER} 目前沒有 .html 產出。
+          </span>}
+        />
+      ) : (
+        <antd.List
+          dataSource={candidates}
+          split={false}
+          renderItem={function (f) {
+            var on = picked.indexOf(f.id) >= 0;
+            return (
+              <antd.List.Item
+                onClick={function () { toggle(f.id); }}
+                style={{
+                  padding: 8, cursor: 'pointer', borderBlockEnd: 'none',
+                  borderRadius: 6, marginBottom: 8,
+                  border: '1px solid ' + (on ? '#2563EB' : C.border),
+                  background: on ? C.hoverAccent : 'transparent',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, width: '100%', minWidth: 0 }}>
+                  <antd.Checkbox checked={on} onChange={function () { toggle(f.id); }} onClick={function (e) { e.stopPropagation(); }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: fz(13), fontWeight: on ? 600 : 400, color: on ? '#2563EB' : C.text, wordBreak: 'break-all' }}>
+                      {f.name}
+                    </div>
+                    <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
+                      {(f.origin ? f.origin.label + ' · ' : '') + f.updatedAt + ' · ' + f.size}
+                    </div>
+                  </div>
+                  <span style={{ fontSize: fz(11), color: C.textMuted, fontFamily: 'monospace', flexShrink: 0 }}>
+                    /{(f.folderPath || '').split(' / ').join('/')}
+                  </span>
+                </div>
+              </antd.List.Item>
+            );
+          }}
+        />
+      )}
+    </antd.Modal>
+  );
+}
+
+/* ════════════════════════════════════════
    KpiEmbedView — Drive 的 .html 產出嵌在 KPI 頁的樣子
 
    刻意與外部系統的報表框（下方 demo）長得不同：外部報表要看得出是「別人的畫面」，
    AI 產出則是本平台的東西，只需要一條說明它從哪來、可以回到 Drive 的工具列。
    iframe 帶 sandbox=""（不給 script、不給同源），產出物不能反過來動 portal。
    ════════════════════════════════════════ */
-function KpiEmbedView({ item, onGoDrive, onAskAI }) {
+function KpiEmbedView({ item, onGoDrive, onAskAI, onRemove }) {
   var { C, fz } = useTheme();
   var file = item.driveFile;
 
@@ -8718,6 +8810,15 @@ function KpiEmbedView({ item, onGoDrive, onAskAI }) {
             </antd.Button>
           )}
           <antd.Button size="small" onClick={function () { onGoDrive(file.id); }}>↗ 在 Drive 開啟</antd.Button>
+          {/* 移除只把它從書籤清單拿掉，Drive 裡那份檔案不動 —— 故不用 danger 色 */}
+          <antd.Popconfirm
+            title="從報表清單移除？"
+            description="檔案仍留在 Drive，隨時可以再加回來。"
+            okText="移除" cancelText="取消"
+            onConfirm={function () { onRemove(file.id); }}
+          >
+            <antd.Button size="small">從清單移除</antd.Button>
+          </antd.Popconfirm>
         </div>
       </div>
 
@@ -8746,14 +8847,15 @@ function KpiEmbedView({ item, onGoDrive, onAskAI }) {
   );
 }
 
-function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
+function KPIPage({ p, onAskAI, driveEmbeds, driveCandidates, onSetEmbeds, kpiJump, onGoDrive }) {
   var { C, fz } = useTheme();
   const kpiData = KPI_BOOKMARKS[p.key] || KPI_BOOKMARKS.equipment;
 
   /* ── Drive 嵌進來的 AI 產出 ──
      書籤清單置頂多一組「AI 產出報表」。它與其他書籤走同一條路（點左邊、右邊換內容），
      差別只在右邊渲染的是 Drive 裡那份 .html 本身，不是外部系統的模擬畫面。
-     嵌入狀態由 App 持有（Drive 與 KPI 兩頁共用同一份，不會兩邊講不一樣的話）。 */
+     清單由 App 持有（Drive 要顯示「已加入 KPI」的狀態，兩頁共用同一份真相）。
+     **加入／移除的操作在本頁**（2026-08-31 決議 25）—— 本頁就是管理書籤清單的地方。 */
   const embedItems = React.useMemo(function () {
     return (driveEmbeds || []).map(function (f) {
       return {
@@ -8772,6 +8874,7 @@ function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
   const allItems = groups.flatMap(g => g.items);
   const [activeId, setActiveId] = React.useState(kpiData.groups[0].items[0]?.id);
   const [searchVal, setSearchVal] = React.useState('');
+  const [showAdd, setShowAdd] = React.useState(false);
   const demo = kpiData.demo;
 
   /* Drive 詳情頁「在 KPI 報表中心檢視」→ 直接落在那份產出上 */
@@ -8806,6 +8909,15 @@ function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
 
+      {showAdd && (
+        <KpiAddArtifactModal
+          candidates={driveCandidates || []}
+          embedIds={(driveEmbeds || []).map(function (f) { return f.id; })}
+          onConfirm={function (ids) { onSetEmbeds(ids); setShowAdd(false); }}
+          onClose={function () { setShowAdd(false); }}
+        />
+      )}
+
       <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
 
         {/* LEFT — Bookmark list */}
@@ -8816,7 +8928,16 @@ function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
         }}>
           {/* Search — 以 inline label 取代 placeholder 代 label（guideline） */}
           <div style={{ padding: 16, borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
-            <div style={{ fontSize: fz(13), fontWeight: 700, color: C.text, marginBottom: 8 }}>書籤清單</div>
+            {/* 入口固定在 header，不掛在「AI 產出報表」那一組上 ——
+                那組沒東西時整組不出現，入口跟著消失就變成找不到的功能。 */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div style={{ fontSize: fz(13), fontWeight: 700, color: C.text, flex: 1 }}>書籤清單</div>
+              <antd.Button
+                size="small" type="text"
+                onClick={function () { setShowAdd(true); }}
+                style={{ color: '#2563EB', fontSize: fz(12), padding: '0 8px' }}
+              >＋ AI 產出</antd.Button>
+            </div>
             <antd.Input
               size="small"
               value={searchVal}
@@ -8883,7 +9004,12 @@ function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
              選中的是 Drive 嵌進來的 AI 產出 → 直接渲染那份 .html；
              否則走原本的外部系統報表模擬畫面。 */}
         {activeEmbed ? (
-          <KpiEmbedView item={activeEmbed} onGoDrive={onGoDrive} onAskAI={onAskAI} />
+          <KpiEmbedView
+            item={activeEmbed} onGoDrive={onGoDrive} onAskAI={onAskAI}
+            onRemove={function (id) {
+              onSetEmbeds((driveEmbeds || []).map(function (f) { return f.id; }).filter(function (x) { return x !== id; }));
+            }}
+          />
         ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
@@ -9088,7 +9214,8 @@ function DriveOriginTag({ origin }) {
   );
 }
 
-/* 已嵌入 KPI 的徽章 —— 列表與詳情共用，語彙一致 */
+/* 在 KPI 報表清單裡的徽章 —— 列表與詳情共用，語彙一致。
+   它只是狀態，不是可按的開關（開關在 KPI 頁，決議 25）。 */
 function DriveEmbedTag() {
   var { fz } = useTheme();
   return (
@@ -9096,7 +9223,7 @@ function DriveEmbedTag() {
       marginInlineEnd: 0, borderRadius: 999,
       color: '#2563EB', background: 'rgba(37,99,235,0.08)',
       fontSize: fz(10), fontWeight: 600, lineHeight: '18px', paddingInline: 8,
-    }}>已嵌入 KPI</antd.Tag>
+    }}>在 KPI 清單</antd.Tag>
   );
 }
 
@@ -9144,7 +9271,7 @@ function DriveDetailEmpty() {
 /* ════════════════════════════════════════
    右欄詳情
    ════════════════════════════════════════ */
-function DriveDetail({ file, embedded, onToggleEmbed, onGoKpi, onGoNav, onNotice }) {
+function DriveDetail({ file, embedded, onGoKpi, onGoNav, onNotice }) {
   var { C, fz } = useTheme();
   if (!file) return <DriveDetailEmpty />;
 
@@ -9234,36 +9361,39 @@ function DriveDetail({ file, embedded, onToggleEmbed, onGoKpi, onGoNav, onNotice
         )}
       </div>
 
+      {/* ── KPI 報表中心 ──
+          2026-08-31 決議 25：**加入／移除的開關不在這裡**，在 KPI 報表中心。
+          挑報表是「管理書籤清單」的動作，那份清單的家在 KPI 頁。
+          Drive 這邊只做兩件事：說出目前的狀態，以及指出開關在哪裡。 */}
+      {canEmbed && (
+        <div style={{ padding: 16, borderBottom: '1px solid ' + C.border, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em' }}>KPI 報表中心</div>
+          {embedded ? (
+            <React.Fragment>
+              <div style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.8 }}>
+                這份產出已加入 KPI 報表清單，全課都看得到。
+              </div>
+              <antd.Button type="primary" block onClick={function () { onGoKpi(file.id); }}>
+                在 KPI 報表中心檢視
+              </antd.Button>
+            </React.Fragment>
+          ) : (
+            <React.Fragment>
+              <div style={{ fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+                這份是 .html 產出，可以加進 KPI 報表清單給全課看。
+                加入與移除在 KPI 報表中心的「＋ AI 產出」。
+              </div>
+              <antd.Button block onClick={function () { onGoKpi(null); }}>
+                ↗ 前往 KPI 報表中心
+              </antd.Button>
+            </React.Fragment>
+          )}
+        </div>
+      )}
+
       {/* 動作 */}
       <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em' }}>動作</div>
-
-        {/* ── 功能連結：.html → KPI 報表中心 ──
-            嵌入是可逆的開關，取消嵌入不會刪檔（檔案還在 Drive）。 */}
-        {canEmbed && !embedded && (
-          <antd.Button type="primary" block onClick={function () { onToggleEmbed(file.id); }}>
-            嵌入 KPI 報表
-          </antd.Button>
-        )}
-        {canEmbed && embedded && (
-          <React.Fragment>
-            <antd.Button type="primary" block onClick={function () { onGoKpi(file.id); }}>
-              在 KPI 報表中心檢視
-            </antd.Button>
-            <antd.Button block onClick={function () { onToggleEmbed(file.id); }}>
-              取消嵌入
-            </antd.Button>
-          </React.Fragment>
-        )}
-        {!canEmbed && (
-          <div style={{
-            fontSize: fz(11), color: C.textMuted, lineHeight: 1.8,
-            padding: 8, background: C.bgPanel, borderRadius: 6, border: '1px solid ' + C.border,
-          }}>
-            只有 .html 的產出可以嵌進 KPI 報表中心。
-          </div>
-        )}
-
         <antd.Button block onClick={function () { onNotice('示意原型：本版不提供實際下載。'); }}>下載</antd.Button>
         <antd.Button block onClick={function () { onNotice('示意原型：分享設定尚未實作。'); }}>分享給課內成員</antd.Button>
       </div>
@@ -9274,7 +9404,7 @@ function DriveDetail({ file, embedded, onToggleEmbed, onGoKpi, onGoNav, onNotice
 /* ════════════════════════════════════════
    DrivePage — Main
    ════════════════════════════════════════ */
-function DrivePage({ p, embedIds, onToggleEmbed, onGoKpi, onGoNav }) {
+function DrivePage({ p, embedIds, onGoKpi, onGoNav }) {
   var { C, fz } = useTheme();
   var app = antd.App.useApp();
 
@@ -9327,7 +9457,7 @@ function DrivePage({ p, embedIds, onToggleEmbed, onGoKpi, onGoNav }) {
   /* 麵包屑：資料夾檢視走真路徑，虛擬檢視顯示這個檢視在看什麼 */
   var VIEW_TITLE = {
     agent:    { title: DRIVE_AGENT_FOLDER, sub: 'AI 產出的 artifact 一律落在這裡，不可改名、不可刪除' },
-    embedded: { title: '已嵌入 KPI',        sub: '這些 .html 產出正在 KPI 報表中心展示' },
+    embedded: { title: '已在 KPI 報表清單',  sub: '這些 .html 產出正在 KPI 報表中心展示；加入與移除在 KPI 頁' },
     recent:   { title: '最近更新',          sub: '課內最近有異動的檔案' },
   };
 
@@ -9423,7 +9553,7 @@ function DrivePage({ p, embedIds, onToggleEmbed, onGoKpi, onGoNav }) {
           }}>快速存取</div>
           <DriveNavRow icon="✦" label={DRIVE_AGENT_FOLDER} count={agentFileCount}
             active={view === 'agent'} onClick={function () { setView('agent'); setSelId(null); }} />
-          <DriveNavRow icon="◈" label="已嵌入 KPI" count={embeds.length}
+          <DriveNavRow icon="◈" label="已在 KPI 報表清單" count={embeds.length}
             active={view === 'embedded'} onClick={function () { setView('embedded'); setSelId(null); }} />
           <DriveNavRow icon="◷" label="最近更新"
             active={view === 'recent'} onClick={function () { setView('recent'); setSelId(null); }} />
@@ -9501,7 +9631,7 @@ function DrivePage({ p, embedIds, onToggleEmbed, onGoKpi, onGoNav }) {
               <antd.Empty
                 image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
                 description={<span style={{ fontSize: fz(12), color: C.textMuted }}>
-                  {view === 'embedded' ? '還沒有任何產出被嵌到 KPI 報表中心。' : '這個位置沒有檔案。'}
+                  {view === 'embedded' ? '還沒有任何產出加進 KPI 報表清單。可在 KPI 報表中心的「＋ AI 產出」加入。' : '這個位置沒有檔案。'}
                 </span>}
               />
             ) }}
@@ -9531,11 +9661,6 @@ function DrivePage({ p, embedIds, onToggleEmbed, onGoKpi, onGoNav }) {
         <DriveDetail
           file={selected}
           embedded={!!selected && embeds.indexOf(selected.id) >= 0}
-          onToggleEmbed={function (id) {
-            var was = embeds.indexOf(id) >= 0;
-            onToggleEmbed(id);
-            notice(was ? '已從 KPI 報表中心移除。' : '已嵌入 KPI 報表中心，可在 KPI 頁的「AI 產出報表」看到。');
-          }}
           onGoKpi={onGoKpi}
           onGoNav={onGoNav}
           onNotice={notice}
@@ -20817,30 +20942,35 @@ function App() {
     return true;
   }, [schedDecisions]);
 
-  /* ── Drive → KPI 的嵌入清單：{ [personaKey]: [fileId, ...] } ──
-     放在 App 而不是任何一頁，因為 Drive（設定嵌入）與 KPI（顯示嵌入）
-     兩邊要看到同一份真相；同 schedMounts 的作法。 */
+  /* ── KPI 報表清單裡的 Drive 產出：{ [personaKey]: [fileId, ...] } ──
+     放在 App 而不是任何一頁：KPI 頁管理這份清單（決議 25），
+     Drive 頁要據它顯示「在 KPI 清單」的狀態，兩邊要看到同一份真相。
+     同 schedMounts 的作法。 */
   const [driveEmbedIds, setDriveEmbedIds] = React.useState(
     typeof DEFAULT_DRIVE_EMBEDS !== 'undefined' ? DEFAULT_DRIVE_EMBEDS : { equipment: [], process: [], mfg: [] }
   );
-  const handleToggleDriveEmbed = React.useCallback(function (fileId) {
+  /* 整份取代而不是逐筆 toggle —— KPI 的加入 Modal 是「一次管理一份清單」，
+     按下確定才生效；逐筆 toggle 的話取消就取消不掉了。 */
+  const handleSetDriveEmbeds = React.useCallback(function (ids) {
     setDriveEmbedIds(function (prev) {
-      const cur = prev[persona] || [];
-      const next = cur.indexOf(fileId) >= 0
-        ? cur.filter(function (id) { return id !== fileId; })
-        : cur.concat([fileId]);
-      return Object.assign({}, prev, { [persona]: next });
+      return Object.assign({}, prev, { [persona]: ids });
     });
   }, [persona]);
 
-  /* 目前這一課已嵌入、且還真的存在的檔案（取消嵌入後 KPI 那邊要跟著消失） */
+  /* 目前這一課已加入、且還真的存在的檔案（從清單移除後 KPI 那邊要跟著消失） */
   const driveEmbedFiles = React.useMemo(function () {
     return (driveEmbedIds[persona] || [])
       .map(function (id) { return getDriveFileById(persona, id); })
       .filter(function (f) { return f && isDriveEmbeddable(f); });
   }, [persona, driveEmbedIds]);
 
-  /* Drive 詳情「在 KPI 報表中心檢視」→ 跳 KPI 並落在那份產出上（nonce 每次遞增以重觸發）*/
+  /* 這一課有哪些產出加得進 KPI —— 加入 Modal 的候選清單 */
+  const driveCandidates = React.useMemo(function () {
+    return getDriveEmbedCandidates(persona);
+  }, [persona]);
+
+  /* Drive 詳情 → 跳 KPI。帶 fileId 就落在那份產出上，帶 null 只是換頁
+     （nonce 每次遞增以重觸發）*/
   const [kpiJump, setKpiJump] = React.useState({ fileId: null, nonce: 0 });
   const handleGoKpiEmbed = React.useCallback(function (fileId) {
     setKpiJump(function (prev) { return { fileId: fileId, nonce: prev.nonce + 1 }; });
@@ -21193,9 +21323,9 @@ function App() {
 
         {nav === 'dashboard'  && <DashboardPage p={p} onAskAI={handleAskAI} handoverRecord={handoverRecord} onHandoverSubmit={handleHandoverSubmit} onGoTasks={(member, taskId) => { setTaskFilter(member || ''); setTaskOpenId(taskId || null); setNav('tasks'); }} pinnedAppIds={pinnedAppIds} onGoAppCenter={() => setNav('apps')} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} onOpenKpiSetting={handleOpenKpiSetting} onOpenBulletinSetting={handleOpenBulletinSetting} onOpenAppSetting={handleOpenAppSetting} onOpenLinkWidgetSetting={handleOpenLinkWidgetSetting} showHandoverModal={showHandoverModal} setShowHandoverModal={setShowHandoverModal} homeLayout={homeLayoutByPersona[persona] || []} />}
         {nav === 'apps'       && <AppCenterPage p={p} pinnedAppIds={pinnedAppIds} onTogglePin={handleTogglePin} functionTree={functionTree} legacyMode={legacyMode} />}
-        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} driveEmbeds={driveEmbedFiles} kpiJump={kpiJump} onGoDrive={handleGoDrive} />}
+        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} driveEmbeds={driveEmbedFiles} driveCandidates={driveCandidates} onSetEmbeds={handleSetDriveEmbeds} kpiJump={kpiJump} onGoDrive={handleGoDrive} />}
         {/* key={persona} 讓切課時重置頁內狀態：資料夾位置與選取的檔案不會跨課殘留 */}
-        {nav === 'drive'      && <DrivePage key={persona} p={p} embedIds={driveEmbedIds[persona] || []} onToggleEmbed={handleToggleDriveEmbed} onGoKpi={handleGoKpiEmbed} onGoNav={setNav} />}
+        {nav === 'drive'      && <DrivePage key={persona} p={p} embedIds={driveEmbedIds[persona] || []} onGoKpi={handleGoKpiEmbed} onGoNav={setNav} />}
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} schedMounts={schedMounts} onScheduleSkill={handleScheduleSkill} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}
