@@ -42,6 +42,12 @@ body.dark-mode .scrollbar-thin::-webkit-scrollbar-thumb { background: #3C3F41; }
 .tm-list .ant-table-tbody > tr.tm-row-selected > td:first-child { box-shadow: inset 3px 0 0 #2563EB; }
 body.dark-mode .tm-list .ant-table-tbody > tr.tm-row-selected > td { background: rgba(138,180,248,0.14) !important; }
 
+/* ── Drive：檔案列表選取列。沿用 tm-row-selected 的同一組語彙 ──
+   （三欄式的契約：右欄有內容 → 中欄一定有一列是選中的） */
+.dv-list .ant-table-tbody > tr.dv-row-selected > td { background: rgba(37,99,235,0.08) !important; }
+.dv-list .ant-table-tbody > tr.dv-row-selected > td:first-child { box-shadow: inset 3px 0 0 #2563EB; }
+body.dark-mode .dv-list .ant-table-tbody > tr.dv-row-selected > td { background: rgba(138,180,248,0.14) !important; }
+
 /* ── Scheduling：AntD Timeline 末項預設保留 48px 空白，步驟清單不需要（Phase 4）── */
 .sch-timeline .ant-timeline-item-last { padding-bottom: 0; }
 .sch-timeline .ant-timeline-item-last > .ant-timeline-item-content { min-height: 0; }

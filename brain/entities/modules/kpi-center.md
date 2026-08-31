@@ -1,16 +1,26 @@
 ---
 type: entity
 title: KPI 報表中心
-description: 趨勢與歷史深入分析 — 書籤清單 + 嵌入報表 + Ask AI；v3.9 新增後台報表管理
+description: 趨勢與歷史深入分析 — 書籤清單 + 嵌入報表 + Ask AI；v3.9 新增後台報表管理；2026-08-31 起承接 Drive 的 .html AI 產出
 tags: [module, kpi]
-updated: 2026-07-25
-sources: [PRODUCT_BASELINE.md §7.6, §13.15, scrum_teaming.md F-DB-03]
+updated: 2026-08-31
+sources: [PRODUCT_BASELINE.md §7.6, §13.15, scrum_teaming.md F-DB-03, PO×AI 討論 2026-08-31]
 status: current
 ---
 
 # KPI 報表中心
 
 **定位**：趨勢與歷史深入分析（Nav 第 2 位）。與 [Home](home-dashboard.md) 的切分：Home 看當前狀態（一眼），KPI 看趨勢（深入）。**Portal 不重做報表本身**——左側書籤清單（Seed 管理）+ 右側嵌入容器，提供「在原系統開啟」逃生出口，顯示資料來源與最後更新時間。
+
+## 2026-08-31：承接 Drive 的 AI 產出報表
+
+書籤清單**置頂多一組「AI 產出報表」**，來源標籤 `AI`（紫），內容是 [Drive](drive.md) 裡被嵌入的 `.html` artifact。它走與其他書籤同一條路（點左邊、右邊換內容），差別只在右欄渲染的是那份 html 本身（`iframe srcDoc`，帶 `sandbox=""`），不是外部系統的模擬畫面。
+
+這一組沒有東西時整組不出現 —— 空的分組會讓人以為功能壞了。
+
+**兩個框刻意長得不一樣**：外部報表框保留 mock 的系統 topbar（要看得出是「別人系統的畫面」，這是本頁「Portal 不重做報表本身」原則的視覺表現）；AI 產出框沒有那層 chrome，只有一條溯源列（來自哪個資料夾、哪一次執行產的）與「在 Drive 開啟」。
+
+**嵌入的開關不在本頁**，在 Drive 的檔案詳情 —— 決定「這份東西要不要給全課看」的地方，應該是看得到這份東西是誰在什麼時候產出的地方。嵌入狀態存在 `App.jsx`（`driveEmbedIds`，per-persona），兩頁共用同一份真相。
 
 ## v3.9：KPI 報表管理後台
 

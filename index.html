@@ -56,6 +56,12 @@ body.dark-mode .scrollbar-thin::-webkit-scrollbar-thumb { background: #3C3F41; }
 .tm-list .ant-table-tbody > tr.tm-row-selected > td:first-child { box-shadow: inset 3px 0 0 #2563EB; }
 body.dark-mode .tm-list .ant-table-tbody > tr.tm-row-selected > td { background: rgba(138,180,248,0.14) !important; }
 
+/* ── Drive：檔案列表選取列。沿用 tm-row-selected 的同一組語彙 ──
+   （三欄式的契約：右欄有內容 → 中欄一定有一列是選中的） */
+.dv-list .ant-table-tbody > tr.dv-row-selected > td { background: rgba(37,99,235,0.08) !important; }
+.dv-list .ant-table-tbody > tr.dv-row-selected > td:first-child { box-shadow: inset 3px 0 0 #2563EB; }
+body.dark-mode .dv-list .ant-table-tbody > tr.dv-row-selected > td { background: rgba(138,180,248,0.14) !important; }
+
 /* ── Scheduling：AntD Timeline 末項預設保留 48px 空白，步驟清單不需要（Phase 4）── */
 .sch-timeline .ant-timeline-item-last { padding-bottom: 0; }
 .sch-timeline .ant-timeline-item-last > .ant-timeline-item-content { min-height: 0; }
@@ -4914,6 +4920,351 @@ const NOTIFICATIONS_BY_PERSONA = {
 };
 
 
+/* ── data/drive.js ── */
+
+/* ════════════════════════════════════════
+   DRIVE — 課級雲端硬碟
+
+   定位：以「課（Section）」為邊界的檔案空間，形狀比照 Google Drive
+   （資料夾樹 + 檔案列表 + 詳情），但它不是通用網路硬碟：
+   它存在的理由是「AI 產出的東西要有一個落地的地方」。
+
+   兩條硬規則：
+   1. 每個課都預設有一個系統資料夾 `Agent_Artifacts`，不可改名、不可刪除。
+      Agent Portal 的 AI（Chat 呼叫 Codify、排程自動執行）產生的 artifact
+      一律落在這裡，並帶著「哪一次執行產出的」溯源資訊。
+   2. `.html` 的 artifact 可以被嵌進 KPI 報表中心展示 —— 這是 Drive 存在的
+      第一個功能連結，也是「AI 產出 → 課的日常看板」這條路徑的最後一哩。
+      嵌入狀態是跨頁狀態，放在 App.jsx（同 schedMounts 的作法），
+      不放在任何一頁裡面，否則兩頁會講不一樣的話。
+
+   本版為示意原型：檔案內容是 mock，html artifact 直接內嵌字串，
+   由 KPI 頁以 iframe srcDoc 渲染（不落地成真檔案）。
+   ════════════════════════════════════════ */
+
+/* 系統資料夾名稱 —— 只有這一個字串是產品契約，各處引用它不要自己打字 */
+const DRIVE_AGENT_FOLDER = 'Agent_Artifacts';
+
+/* 檔案類型：icon 用文字符號（沿用本專案不引外部 icon set 的作法） */
+const DRIVE_TYPE_CFG = {
+  folder: { label: '資料夾', icon: '▧', color: '#F59E0B', bg: 'rgba(245,158,11,0.08)' },
+  html:   { label: 'HTML',   icon: '◈', color: '#2563EB', bg: 'rgba(37,99,235,0.08)'   },
+  xlsx:   { label: 'Excel',  icon: '▤', color: '#16A34A', bg: 'rgba(22,163,74,0.08)'   },
+  csv:    { label: 'CSV',    icon: '▤', color: '#16A34A', bg: 'rgba(22,163,74,0.08)'   },
+  pdf:    { label: 'PDF',    icon: '▣', color: '#EF4444', bg: 'rgba(239,68,68,0.08)'   },
+  md:     { label: 'Markdown', icon: '▥', color: '#6B7280', bg: 'rgba(107,114,128,0.08)' },
+  pptx:   { label: 'PPT',    icon: '▦', color: '#C2410C', bg: 'rgba(194,65,12,0.08)'   },
+  png:    { label: '圖片',   icon: '▨', color: '#7C3AED', bg: 'rgba(124,58,237,0.08)'  },
+};
+
+/* 產出來源：決定詳情頁「這份東西哪來的」那一段要往哪一頁跳 */
+const DRIVE_ORIGIN_CFG = {
+  schedule: { label: '排程產出', color: '#2563EB', bg: 'rgba(37,99,235,0.08)',   nav: 'scheduling' },
+  chat:     { label: 'AI 對話產出', color: '#7C3AED', bg: 'rgba(124,58,237,0.08)', nav: 'chat' },
+  upload:   { label: '人工上傳', color: '#6B7280', bg: 'rgba(107,114,128,0.08)', nav: null },
+};
+
+/* ── 兩份示意用的 HTML artifact ──
+   刻意寫成「AI 產得出來、也真的能嵌進 KPI 頁」的樣子：
+   單檔、無外部依賴、無 script。用色與間距照 UI guideline 走。 */
+const DRIVE_HTML_UPTIME = [
+  '<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8">',
+  '<style>',
+  'body{margin:0;padding:24px;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:#FFFFFF;color:#222222}',
+  'h1{font-size:18px;font-weight:600;margin:0 0 8px}',
+  '.sub{font-size:12px;color:#9E9E9E;margin-bottom:24px}',
+  '.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}',
+  '.card{background:#F5F5F5;border:1px solid #E0E0E0;border-radius:6px;padding:16px}',
+  '.k{font-size:12px;color:#9E9E9E;margin-bottom:8px}',
+  '.v{font-size:24px;font-weight:700;line-height:1}',
+  '.u{font-size:13px;font-weight:400;color:#9E9E9E;margin-left:4px}',
+  '.bad{color:#EF4444}',
+  'table{width:100%;border-collapse:collapse;font-size:13px}',
+  'th{text-align:left;font-size:12px;color:#9E9E9E;font-weight:600;padding:8px;border-bottom:1px solid #E0E0E0}',
+  'td{padding:8px;border-bottom:1px solid #E0E0E0}',
+  '.dot{display:inline-block;width:10px;height:10px;border-radius:999px;margin-right:8px;vertical-align:-1px}',
+  '.mono{font-family:monospace}',
+  '</style></head><body>',
+  '<h1>ETC 設備課 · 週稼動率彙整</h1>',
+  '<div class="sub">由 Codify「設備稼動率週報」於 今日 06:00 產出 · 資料來源 FDC / 設備監控</div>',
+  '<div class="cards">',
+  '<div class="card"><div class="k">平均稼動率</div><div class="v bad">92.3<span class="u">%</span></div></div>',
+  '<div class="card"><div class="k">低於目標機台</div><div class="v bad">3<span class="u">台</span></div></div>',
+  '<div class="card"><div class="k">本週停機時數</div><div class="v">18.6<span class="u">h</span></div></div>',
+  '</div>',
+  '<table><thead><tr><th>機台</th><th>稼動率</th><th>停機時數</th><th>主要停機原因</th></tr></thead><tbody>',
+  '<tr><td class="mono">E-308</td><td><span class="dot" style="background:#EF4444"></span>86.4%</td><td>7.2 h</td><td>FDC 電流異常</td></tr>',
+  '<tr><td class="mono">E-502</td><td><span class="dot" style="background:#F59E0B"></span>90.1%</td><td>4.8 h</td><td>溫控警報</td></tr>',
+  '<tr><td class="mono">E-203</td><td><span class="dot" style="background:#F59E0B"></span>91.7%</td><td>3.1 h</td><td>預防性保養</td></tr>',
+  '<tr><td class="mono">E-117</td><td><span class="dot" style="background:#22C55E"></span>96.8%</td><td>1.5 h</td><td>換片等待</td></tr>',
+  '<tr><td class="mono">E-441</td><td><span class="dot" style="background:#22C55E"></span>97.2%</td><td>2.0 h</td><td>換片等待</td></tr>',
+  '</tbody></table>',
+  '</body></html>',
+].join('\n');
+
+const DRIVE_HTML_CASE = [
+  '<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8">',
+  '<style>',
+  'body{margin:0;padding:24px;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:#FFFFFF;color:#222222}',
+  'h1{font-size:18px;font-weight:600;margin:0 0 8px}',
+  '.sub{font-size:12px;color:#9E9E9E;margin-bottom:24px}',
+  '.row{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #E0E0E0}',
+  '.bar{height:16px;border-radius:2px;background:#2563EB}',
+  '.name{width:120px;font-size:13px}',
+  '.n{font-size:13px;color:#9E9E9E;width:48px;text-align:right}',
+  '.note{margin-top:24px;padding:16px;background:#F5F5F5;border:1px solid #E0E0E0;border-radius:6px;font-size:13px;line-height:1.8}',
+  '</style></head><body>',
+  '<h1>Unclose Case 逾期分佈</h1>',
+  '<div class="sub">由 Codify「Unclose Case 每日盤點」於 今日 08:00 產出 · 資料來源 Case Center</div>',
+  '<div class="row"><div class="name">逾期 &gt; 7 天</div><div class="bar" style="width:96px"></div><div class="n">2 件</div></div>',
+  '<div class="row"><div class="name">逾期 3–7 天</div><div class="bar" style="width:48px"></div><div class="n">1 件</div></div>',
+  '<div class="row"><div class="name">逾期 1–2 天</div><div class="bar" style="width:144px"></div><div class="n">3 件</div></div>',
+  '<div class="row"><div class="name">未逾期</div><div class="bar" style="width:48px"></div><div class="n">1 件</div></div>',
+  '<div class="note">共 7 件未結案，其中 <b>2 件逾期超過 7 天</b>（#UC-442、#UC-451），已超出課 KPI 目標值 ≤5 件。建議優先指派。</div>',
+  '</body></html>',
+].join('\n');
+
+const DRIVE_HTML_YIELD = [
+  '<!DOCTYPE html><html lang="zh-TW"><head><meta charset="utf-8">',
+  '<style>',
+  'body{margin:0;padding:24px;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;background:#FFFFFF;color:#222222}',
+  'h1{font-size:18px;font-weight:600;margin:0 0 8px}',
+  '.sub{font-size:12px;color:#9E9E9E;margin-bottom:24px}',
+  '.chart{display:flex;align-items:flex-end;gap:8px;height:160px;padding:16px;background:#F5F5F5;border:1px solid #E0E0E0;border-radius:6px}',
+  '.col{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px}',
+  '.b{width:100%;border-radius:2px 2px 0 0;background:#2563EB}',
+  '.l{font-size:12px;color:#9E9E9E}',
+  '</style></head><body>',
+  '<h1>ETC 製程課 · 站點良率比較</h1>',
+  '<div class="sub">由 AI 對話產出 於 今日 11:20 · 資料來源 SPC</div>',
+  '<div class="chart">',
+  '<div class="col"><div class="b" style="height:112px"></div><div class="l">CVD</div></div>',
+  '<div class="col"><div class="b" style="height:96px;background:#FCA5A5"></div><div class="l">ETCH</div></div>',
+  '<div class="col"><div class="b" style="height:120px"></div><div class="l">PHOTO</div></div>',
+  '<div class="col"><div class="b" style="height:104px"></div><div class="l">CMP</div></div>',
+  '<div class="col"><div class="b" style="height:88px;background:#FCA5A5"></div><div class="l">IMP</div></div>',
+  '</div>',
+  '</body></html>',
+].join('\n');
+
+/* ── 三個課各自的硬碟 ──
+   root 是一個陣列（同一層的節點），資料夾以 children 遞迴。
+   系統資料夾 system:true → 不可改名、不可刪除，UI 上不給那兩個動作。 */
+const DRIVE_DATA = {
+
+  /* ════════ ETC 設備課 ════════ */
+  equipment: {
+    quota: { usedLabel: '12.4 GB', totalLabel: '100 GB', percent: 12 },
+    root: [
+      {
+        id: 'dv-eq-agent', name: DRIVE_AGENT_FOLDER, type: 'folder', system: true,
+        updatedAt: '今日 15:30', owner: 'Agent Portal',
+        children: [
+          {
+            id: 'dv-eq-a1', name: '設備稼動率週報.html', type: 'html', size: '248 KB',
+            owner: 'AI 產出', updatedAt: '今日 06:00',
+            origin: { kind: 'schedule', label: '排程：設備稼動率週報', by: 'Codify · 每週一 06:00', at: '今日 06:00' },
+            html: DRIVE_HTML_UPTIME,
+          },
+          {
+            id: 'dv-eq-a2', name: 'Unclose_Case_逾期分佈.html', type: 'html', size: '96 KB',
+            owner: 'AI 產出', updatedAt: '今日 08:00',
+            origin: { kind: 'schedule', label: '排程：Unclose Case 每日盤點', by: 'Codify · 每日 08:00', at: '今日 08:00' },
+            html: DRIVE_HTML_CASE,
+          },
+          {
+            id: 'dv-eq-a3', name: '當班交接報告_0418日班.md', type: 'md', size: '18 KB',
+            owner: 'AI 產出', updatedAt: '今日 15:30',
+            origin: { kind: 'schedule', label: '排程：當班交接報告', by: 'Codify · 每日 15:30 / 23:30 / 07:30', at: '今日 15:30' },
+          },
+          {
+            id: 'dv-eq-a4', name: 'FDC異常明細_0418.csv', type: 'csv', size: '412 KB',
+            owner: 'AI 產出', updatedAt: '今日 08:00',
+            origin: { kind: 'schedule', label: '排程：Unclose Case 每日盤點', by: 'Codify · 每日 08:00', at: '今日 08:00' },
+          },
+          {
+            id: 'dv-eq-a5', name: 'E-308_電流波動分析.png', type: 'png', size: '1.2 MB',
+            owner: 'AI 產出', updatedAt: '今日 10:42',
+            origin: { kind: 'chat', label: 'AI 對話：E-308 異常怎麼看', by: '王志明 發問', at: '今日 10:42' },
+          },
+        ],
+      },
+      {
+        id: 'dv-eq-doc', name: '課共用文件', type: 'folder',
+        updatedAt: '04/16 14:20', owner: '王志明',
+        children: [
+          {
+            id: 'dv-eq-d1', name: 'ETC設備課_年度保養計畫.xlsx', type: 'xlsx', size: '1.8 MB',
+            owner: '王志明', updatedAt: '04/16 14:20',
+            origin: { kind: 'upload', label: '人工上傳', by: '王志明', at: '04/16 14:20' },
+          },
+          {
+            id: 'dv-eq-d2', name: '機台異常處理SOP_v4.pdf', type: 'pdf', size: '3.4 MB',
+            owner: '陳建宏', updatedAt: '04/11 09:05',
+            origin: { kind: 'upload', label: '人工上傳', by: '陳建宏', at: '04/11 09:05' },
+          },
+          {
+            id: 'dv-eq-sub', name: '教育訓練', type: 'folder',
+            updatedAt: '03/28 16:00', owner: '陳建宏',
+            children: [
+              {
+                id: 'dv-eq-d3', name: '新人上線訓練_2026Q1.pptx', type: 'pptx', size: '8.6 MB',
+                owner: '陳建宏', updatedAt: '03/28 16:00',
+                origin: { kind: 'upload', label: '人工上傳', by: '陳建宏', at: '03/28 16:00' },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'dv-eq-hand', name: '交接紀錄', type: 'folder',
+        updatedAt: '今日 15:30', owner: 'Agent Portal',
+        children: [
+          {
+            id: 'dv-eq-h1', name: '2026-04_交接彙整.xlsx', type: 'xlsx', size: '640 KB',
+            owner: '王志明', updatedAt: '04/18 07:35',
+            origin: { kind: 'upload', label: '人工上傳', by: '王志明', at: '04/18 07:35' },
+          },
+        ],
+      },
+    ],
+  },
+
+  /* ════════ ETC 製程課 ════════ */
+  process: {
+    quota: { usedLabel: '8.1 GB', totalLabel: '100 GB', percent: 8 },
+    root: [
+      {
+        id: 'dv-pr-agent', name: DRIVE_AGENT_FOLDER, type: 'folder', system: true,
+        updatedAt: '今日 11:20', owner: 'Agent Portal',
+        children: [
+          {
+            id: 'dv-pr-a1', name: '站點良率比較.html', type: 'html', size: '132 KB',
+            owner: 'AI 產出', updatedAt: '今日 11:20',
+            origin: { kind: 'chat', label: 'AI 對話：這週哪一站良率掉最多', by: '林佳蓉 發問', at: '今日 11:20' },
+            html: DRIVE_HTML_YIELD,
+          },
+          {
+            id: 'dv-pr-a2', name: 'SPC失控站點清單_0418.csv', type: 'csv', size: '86 KB',
+            owner: 'AI 產出', updatedAt: '今日 07:00',
+            origin: { kind: 'schedule', label: '排程：SPC 每日巡檢', by: 'Codify · 每日 07:00', at: '今日 07:00' },
+          },
+          {
+            id: 'dv-pr-a3', name: 'DCR待審摘要_0418.md', type: 'md', size: '12 KB',
+            owner: 'AI 產出', updatedAt: '今日 07:00',
+            origin: { kind: 'schedule', label: '排程：SPC 每日巡檢', by: 'Codify · 每日 07:00', at: '今日 07:00' },
+          },
+        ],
+      },
+      {
+        id: 'dv-pr-doc', name: '課共用文件', type: 'folder',
+        updatedAt: '04/14 10:00', owner: '林佳蓉',
+        children: [
+          {
+            id: 'dv-pr-d1', name: 'Recipe變更管制辦法_v2.pdf', type: 'pdf', size: '2.1 MB',
+            owner: '林佳蓉', updatedAt: '04/14 10:00',
+            origin: { kind: 'upload', label: '人工上傳', by: '林佳蓉', at: '04/14 10:00' },
+          },
+        ],
+      },
+    ],
+  },
+
+  /* ════════ 製造課 ════════ */
+  mfg: {
+    quota: { usedLabel: '5.6 GB', totalLabel: '100 GB', percent: 6 },
+    root: [
+      {
+        id: 'dv-mf-agent', name: DRIVE_AGENT_FOLDER, type: 'folder', system: true,
+        updatedAt: '今日 09:15', owner: 'Agent Portal',
+        children: [
+          {
+            id: 'dv-mf-a1', name: 'WIP分佈快照_0418.csv', type: 'csv', size: '204 KB',
+            owner: 'AI 產出', updatedAt: '今日 09:15',
+            origin: { kind: 'schedule', label: '排程：WIP 每日快照', by: 'Codify · 每日 09:15', at: '今日 09:15' },
+          },
+          {
+            id: 'dv-mf-a2', name: '急單批次追蹤_0418.md', type: 'md', size: '9 KB',
+            owner: 'AI 產出', updatedAt: '今日 09:15',
+            origin: { kind: 'schedule', label: '排程：WIP 每日快照', by: 'Codify · 每日 09:15', at: '今日 09:15' },
+          },
+        ],
+      },
+      {
+        id: 'dv-mf-doc', name: '課共用文件', type: 'folder',
+        updatedAt: '04/09 13:30', owner: '張美玲',
+        children: [
+          {
+            id: 'dv-mf-d1', name: '線體排班表_2026Q2.xlsx', type: 'xlsx', size: '520 KB',
+            owner: '張美玲', updatedAt: '04/09 13:30',
+            origin: { kind: 'upload', label: '人工上傳', by: '張美玲', at: '04/09 13:30' },
+          },
+        ],
+      },
+    ],
+  },
+};
+
+/* 開站就已經嵌在 KPI 的 artifact —— 讓「嵌入」不是只有空狀態可看，
+   進 KPI 頁第一眼就看得到 Drive 的產出已經在報表清單裡。 */
+const DEFAULT_DRIVE_EMBEDS = {
+  equipment: ['dv-eq-a1'],
+  process:   [],
+  mfg:       [],
+};
+
+/* ── 讀取層 ─────────────────────────────────────────────── */
+
+function getDriveRoot(personaKey) {
+  var d = DRIVE_DATA[personaKey] || DRIVE_DATA.equipment;
+  return d.root;
+}
+
+function getDriveQuota(personaKey) {
+  var d = DRIVE_DATA[personaKey] || DRIVE_DATA.equipment;
+  return d.quota;
+}
+
+/* 依 path（folder id 陣列）走進去，回傳該層的節點清單 */
+function getDriveChildren(personaKey, path) {
+  var nodes = getDriveRoot(personaKey);
+  for (var i = 0; i < (path || []).length; i++) {
+    var next = nodes.filter(function (n) { return n.id === path[i]; })[0];
+    if (!next || !next.children) return nodes;
+    nodes = next.children;
+  }
+  return nodes;
+}
+
+/* 攤平成單層檔案清單（不含資料夾），供「AI 產出」「最近更新」這類虛擬檢視用 */
+function flattenDriveFiles(personaKey) {
+  var out = [];
+  (function walk(nodes, trail) {
+    nodes.forEach(function (n) {
+      if (n.type === 'folder') {
+        walk(n.children || [], trail.concat([n]));
+      } else {
+        out.push(Object.assign({}, n, {
+          folderPath: trail.map(function (f) { return f.name; }).join(' / '),
+          folderIds: trail.map(function (f) { return f.id; }),
+        }));
+      }
+    });
+  })(getDriveRoot(personaKey), []);
+  return out;
+}
+
+function getDriveFileById(personaKey, id) {
+  return flattenDriveFiles(personaKey).filter(function (f) { return f.id === id; })[0] || null;
+}
+
+/* 可嵌入 KPI 的條件只有一條：是 .html。
+   邏輯集中在這裡，Drive 與 KPI 兩頁都問同一個函式，不各自判斷副檔名。 */
+function isDriveEmbeddable(file) {
+  return !!file && file.type === 'html' && !!file.html;
+}
+
+
 /* ── components/shared.jsx ── */
 
 /* ════════════════════════════════════════
@@ -8312,6 +8663,10 @@ const KPI_SRC_CFG = {
   spc:    { label: 'SPC',  bg: '#F0FDF4', color: '#166534' },
   mes:    { label: 'MES',  bg: '#FDF4FF', color: '#7E22CE' },
   custom: { label: '自建', bg: '#F3F4F6', color: '#374151' },
+  /* Drive 來的 AI 產出。它與上面五個不同：不是外部系統的報表，
+     而是本平台 AI 產出、存在課的 Drive 裡、被 Seed／課員嵌進來的 .html。
+     見 data/drive.js 與 DrivePage.jsx。 */
+  agent:  { label: 'AI',   bg: 'rgba(124,58,237,0.08)', color: '#7C3AED' },
 };
 
 /* AntD 遷移 Phase 4：來源標籤改 Tag，色系沿用上表（Tag 以 style 帶入以維持
@@ -8327,17 +8682,115 @@ function KpiSrcTag({ src, size }) {
   );
 }
 
-function KPIPage({ p, onAskAI}) {
+/* ════════════════════════════════════════
+   KpiEmbedView — Drive 的 .html 產出嵌在 KPI 頁的樣子
+
+   刻意與外部系統的報表框（下方 demo）長得不同：外部報表要看得出是「別人的畫面」，
+   AI 產出則是本平台的東西，只需要一條說明它從哪來、可以回到 Drive 的工具列。
+   iframe 帶 sandbox=""（不給 script、不給同源），產出物不能反過來動 portal。
+   ════════════════════════════════════════ */
+function KpiEmbedView({ item, onGoDrive, onAskAI }) {
+  var { C, fz } = useTheme();
+  var file = item.driveFile;
+
+  function handleAskAI() {
+    if (!onAskAI) return;
+    onAskAI({
+      text: '【報表名稱】' + file.name + '\n【來源】' + (file.origin ? file.origin.label : 'Drive') + '\n【更新時間】' + file.updatedAt,
+      label: file.name,
+    });
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{
+        background: C.bg, borderBottom: '1px solid ' + C.border,
+        padding: '0 24px', height: 48,
+        display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+      }}>
+        <span style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{file.name}</span>
+        <KpiSrcTag src="agent" size={10} />
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: fz(11), color: C.textMuted }}>更新 {file.updatedAt}</span>
+          {onAskAI && (
+            <antd.Button size="small" onClick={handleAskAI} style={{ color: '#2563EB', borderColor: 'rgba(37,99,235,0.4)' }}>
+              ✦ Ask AI
+            </antd.Button>
+          )}
+          <antd.Button size="small" onClick={function () { onGoDrive(file.id); }}>↗ 在 Drive 開啟</antd.Button>
+        </div>
+      </div>
+
+      {/* 溯源列：報表中心裡混進了一份 AI 產出，要一眼看得出是誰在什麼時候產的 */}
+      <div style={{
+        padding: '8px 24px', flexShrink: 0,
+        borderBottom: '1px solid ' + C.border, background: C.bgSub,
+        fontSize: fz(11), color: C.textMuted,
+      }}>
+        來自課的雲端硬碟 <span style={{ fontFamily: 'monospace' }}>{'/' + (file.folderPath || '').split(' / ').join('/') + '/' + file.name}</span>
+        {file.origin ? ' · ' + file.origin.label + ' · ' + file.origin.by : ''}
+      </div>
+
+      <div style={{
+        flex: 1, overflow: 'hidden', margin: 16, borderRadius: 8,
+        border: '1px solid ' + C.border, background: '#FFFFFF',
+      }}>
+        <iframe
+          title={file.name}
+          srcDoc={file.html}
+          sandbox=""
+          style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
   var { C, fz } = useTheme();
   const kpiData = KPI_BOOKMARKS[p.key] || KPI_BOOKMARKS.equipment;
-  const allItems = kpiData.groups.flatMap(g => g.items);
-  const [activeId, setActiveId] = React.useState(allItems[0]?.id);
+
+  /* ── Drive 嵌進來的 AI 產出 ──
+     書籤清單置頂多一組「AI 產出報表」。它與其他書籤走同一條路（點左邊、右邊換內容），
+     差別只在右邊渲染的是 Drive 裡那份 .html 本身，不是外部系統的模擬畫面。
+     嵌入狀態由 App 持有（Drive 與 KPI 兩頁共用同一份，不會兩邊講不一樣的話）。 */
+  const embedItems = React.useMemo(function () {
+    return (driveEmbeds || []).map(function (f) {
+      return {
+        id: f.id, name: f.name,
+        sub: f.origin ? f.origin.label : 'Drive 產出',
+        src: 'agent', driveFile: f,
+      };
+    });
+  }, [driveEmbeds]);
+
+  const groups = React.useMemo(function () {
+    if (embedItems.length === 0) return kpiData.groups;
+    return [{ label: 'AI 產出報表', items: embedItems }].concat(kpiData.groups);
+  }, [kpiData, embedItems]);
+
+  const allItems = groups.flatMap(g => g.items);
+  const [activeId, setActiveId] = React.useState(kpiData.groups[0].items[0]?.id);
   const [searchVal, setSearchVal] = React.useState('');
   const demo = kpiData.demo;
 
+  /* Drive 詳情頁「在 KPI 報表中心檢視」→ 直接落在那份產出上 */
+  React.useEffect(function () {
+    if (kpiJump && kpiJump.nonce > 0 && kpiJump.fileId) setActiveId(kpiJump.fileId);
+  }, [kpiJump && kpiJump.nonce]);
+
+  /* 取消嵌入之後那份產出就不在清單裡了，選取要退回第一個真的存在的書籤 */
+  React.useEffect(function () {
+    if (!allItems.some(function (it) { return it.id === activeId; })) {
+      setActiveId(allItems[0] && allItems[0].id);
+    }
+  }, [allItems, activeId]);
+
+  const activeEmbed = embedItems.filter(function (it) { return it.id === activeId; })[0];
+
   const filteredGroups = searchVal.trim()
     ? [{ label: '搜尋結果', items: allItems.filter(it => it.name.includes(searchVal) || it.sub.includes(searchVal)) }]
-    : kpiData.groups;
+    : groups;
 
   const maxBar = Math.max(...demo.bars);
   const minBar = Math.min(...demo.bars);
@@ -8426,7 +8879,12 @@ function KPIPage({ p, onAskAI}) {
           </div>
         </div>
 
-        {/* RIGHT — Report view */}
+        {/* RIGHT — Report view.
+             選中的是 Drive 嵌進來的 AI 產出 → 直接渲染那份 .html；
+             否則走原本的外部系統報表模擬畫面。 */}
+        {activeEmbed ? (
+          <KpiEmbedView item={activeEmbed} onGoDrive={onGoDrive} onAskAI={onAskAI} />
+        ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Report toolbar */}
@@ -8576,6 +9034,512 @@ function KPIPage({ p, onAskAI}) {
             </div>
           </div>
         </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/* ── components/DrivePage.jsx ── */
+
+/* ════════════════════════════════════════
+   DRIVE PAGE — 課的雲端硬碟
+
+   三欄式（guideline 硬性規定）：
+     左｜導覽   ：快速存取（虛擬檢視）＋ 課的資料夾樹
+     中｜列表   ：麵包屑 + 工具列 + 檔案表格
+     右｜詳情   ：預覽、溯源、動作（.html 的「嵌入 KPI」在這裡）
+
+   左欄只放導覽、不放警示（沿用 2026-08-02 決議 22 的規則）。
+   「已嵌入 KPI」放在左欄是因為它是一種檢視（看得到哪些東西被嵌出去了），
+   不是狀態告警。
+
+   資料與讀取層見 data/drive.js。
+   ════════════════════════════════════════ */
+
+const DRIVE_COL_W = { origin: 148, owner: 104, updated: 104, size: 88 };
+
+/* 檔案類型的方形 icon —— 列表與詳情共用同一顆 */
+function DriveTypeIcon({ type, size }) {
+  var { fz } = useTheme();
+  var cfg = DRIVE_TYPE_CFG[type] || DRIVE_TYPE_CFG.md;
+  var s = size || 24;
+  return (
+    <div style={{
+      width: s, height: s, borderRadius: 6, flexShrink: 0,
+      background: cfg.bg, color: cfg.color,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: fz(Math.round(s * 0.5)), lineHeight: 1,
+    }}>{cfg.icon}</div>
+  );
+}
+
+function DriveOriginTag({ origin }) {
+  var { fz } = useTheme();
+  if (!origin) return null;
+  var cfg = DRIVE_ORIGIN_CFG[origin.kind] || DRIVE_ORIGIN_CFG.upload;
+  return (
+    <antd.Tag bordered={false} style={{
+      marginInlineEnd: 0, borderRadius: 999,
+      color: cfg.color, background: cfg.bg,
+      fontSize: fz(10), fontWeight: 600, lineHeight: '18px', paddingInline: 8,
+    }}>{cfg.label}</antd.Tag>
+  );
+}
+
+/* 已嵌入 KPI 的徽章 —— 列表與詳情共用，語彙一致 */
+function DriveEmbedTag() {
+  var { fz } = useTheme();
+  return (
+    <antd.Tag bordered={false} style={{
+      marginInlineEnd: 0, borderRadius: 999,
+      color: '#2563EB', background: 'rgba(37,99,235,0.08)',
+      fontSize: fz(10), fontWeight: 600, lineHeight: '18px', paddingInline: 8,
+    }}>已嵌入 KPI</antd.Tag>
+  );
+}
+
+/* ── 左欄的一列（快速存取與資料夾共用同一個形狀＝選中語彙一致） ── */
+function DriveNavRow({ icon, label, count, active, indent, onClick }) {
+  var { C, fz } = useTheme();
+  var [hover, setHover] = React.useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={function () { setHover(true); }}
+      onMouseLeave={function () { setHover(false); }}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 8,
+        padding: '8px 16px', paddingLeft: 16 + (indent || 0) * 16,
+        cursor: 'pointer',
+        background: active ? C.hoverAccent : hover ? C.hover : 'transparent',
+        borderLeft: active ? '3px solid #2563EB' : '3px solid transparent',
+      }}
+    >
+      <span style={{ fontSize: fz(13), color: active ? '#2563EB' : C.textMuted, width: 16, flexShrink: 0 }}>{icon}</span>
+      <span style={{
+        flex: 1, minWidth: 0, fontSize: fz(13),
+        fontWeight: active ? 600 : 400,
+        color: active ? '#2563EB' : C.textSub,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+      }}>{label}</span>
+      {typeof count === 'number' && (
+        <span style={{ fontSize: fz(11), color: C.textMuted, flexShrink: 0 }}>{count}</span>
+      )}
+    </div>
+  );
+}
+
+/* ── 右欄：沒選東西時的空狀態 ── */
+function DriveDetailEmpty() {
+  var { C, fz } = useTheme();
+  return (
+    <div style={{ padding: 24, fontSize: fz(12), color: C.textMuted, lineHeight: 1.8 }}>
+      左邊選一個檔案，這裡會顯示它的預覽、是哪一次執行產出的，以及可以對它做什麼。
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   右欄詳情
+   ════════════════════════════════════════ */
+function DriveDetail({ file, embedded, onToggleEmbed, onGoKpi, onGoNav, onNotice }) {
+  var { C, fz } = useTheme();
+  if (!file) return <DriveDetailEmpty />;
+
+  var cfg = DRIVE_TYPE_CFG[file.type] || DRIVE_TYPE_CFG.md;
+  var canEmbed = isDriveEmbeddable(file);
+  var originCfg = file.origin ? (DRIVE_ORIGIN_CFG[file.origin.kind] || DRIVE_ORIGIN_CFG.upload) : null;
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-thin">
+
+      {/* 標題區 */}
+      <div style={{ padding: 16, borderBottom: '1px solid ' + C.border }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+          <DriveTypeIcon type={file.type} size={32} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: fz(14), fontWeight: 600, color: C.text, wordBreak: 'break-all', lineHeight: 1.5 }}>
+              {file.name}
+            </div>
+            <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>
+              {cfg.label} · {file.size || '—'}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
+          <DriveOriginTag origin={file.origin} />
+          {embedded && <DriveEmbedTag />}
+        </div>
+      </div>
+
+      {/* 預覽 —— html 直接以 iframe 渲染真的那份檔案（與 KPI 頁嵌的是同一份） */}
+      <div style={{ padding: 16, borderBottom: '1px solid ' + C.border }}>
+        <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', marginBottom: 8 }}>預覽</div>
+        {canEmbed ? (
+          <div style={{
+            height: 176, border: '1px solid ' + C.border, borderRadius: 6,
+            overflow: 'hidden', background: '#FFFFFF', position: 'relative',
+          }}>
+            <iframe
+              title={file.name}
+              srcDoc={file.html}
+              sandbox=""
+              style={{
+                border: 'none', width: 576, height: 440,
+                transform: 'scale(0.4833)', transformOrigin: 'top left',
+                pointerEvents: 'none',
+              }}
+            />
+          </div>
+        ) : (
+          <div style={{
+            height: 88, border: '1px solid ' + C.border, borderRadius: 6,
+            background: C.bgPanel, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 8,
+            fontSize: fz(12), color: C.textMuted,
+          }}>
+            <DriveTypeIcon type={file.type} size={24} />
+            {cfg.label} 檔案，本版不提供站內預覽
+          </div>
+        )}
+      </div>
+
+      {/* 這份東西哪來的 —— Drive 與其他模組的接縫，AI 產出一定看得到出處 */}
+      <div style={{ padding: 16, borderBottom: '1px solid ' + C.border }}>
+        <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em', marginBottom: 8 }}>來源</div>
+        <antd.Descriptions
+          column={1} size="small" colon={false}
+          labelStyle={{ fontSize: fz(11), color: C.textMuted, width: 64 }}
+          contentStyle={{ fontSize: fz(12), color: C.text }}
+          items={[
+            { key: 'from',  label: '產出於', children: file.origin ? file.origin.label : '—' },
+            { key: 'by',    label: '產出者', children: file.origin ? file.origin.by : (file.owner || '—') },
+            { key: 'at',    label: '時間',   children: file.updatedAt || '—' },
+            { key: 'where', label: '位置',   children: (
+              <span style={{ fontFamily: 'monospace', fontSize: fz(11), wordBreak: 'break-all' }}>
+                {'/' + (file.folderPath || '').split(' / ').join('/')}
+              </span>
+            ) },
+          ]}
+        />
+        {originCfg && originCfg.nav && (
+          <antd.Button
+            size="small" block style={{ marginTop: 8 }}
+            onClick={function () { onGoNav(originCfg.nav); }}
+          >
+            ↗ 看這次執行紀錄
+          </antd.Button>
+        )}
+      </div>
+
+      {/* 動作 */}
+      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ fontSize: fz(11), fontWeight: 700, color: C.textMuted, letterSpacing: '0.08em' }}>動作</div>
+
+        {/* ── 功能連結：.html → KPI 報表中心 ──
+            嵌入是可逆的開關，取消嵌入不會刪檔（檔案還在 Drive）。 */}
+        {canEmbed && !embedded && (
+          <antd.Button type="primary" block onClick={function () { onToggleEmbed(file.id); }}>
+            嵌入 KPI 報表
+          </antd.Button>
+        )}
+        {canEmbed && embedded && (
+          <React.Fragment>
+            <antd.Button type="primary" block onClick={function () { onGoKpi(file.id); }}>
+              在 KPI 報表中心檢視
+            </antd.Button>
+            <antd.Button block onClick={function () { onToggleEmbed(file.id); }}>
+              取消嵌入
+            </antd.Button>
+          </React.Fragment>
+        )}
+        {!canEmbed && (
+          <div style={{
+            fontSize: fz(11), color: C.textMuted, lineHeight: 1.8,
+            padding: 8, background: C.bgPanel, borderRadius: 6, border: '1px solid ' + C.border,
+          }}>
+            只有 .html 的產出可以嵌進 KPI 報表中心。
+          </div>
+        )}
+
+        <antd.Button block onClick={function () { onNotice('示意原型：本版不提供實際下載。'); }}>下載</antd.Button>
+        <antd.Button block onClick={function () { onNotice('示意原型：分享設定尚未實作。'); }}>分享給課內成員</antd.Button>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════
+   DrivePage — Main
+   ════════════════════════════════════════ */
+function DrivePage({ p, embedIds, onToggleEmbed, onGoKpi, onGoNav }) {
+  var { C, fz } = useTheme();
+  var app = antd.App.useApp();
+
+  /* view: 'folder'（真的在資料夾裡）｜其餘為虛擬檢視（攤平後篩選） */
+  var [view, setView]     = React.useState('agent');
+  var [path, setPath]     = React.useState([]);
+  var [selId, setSelId]   = React.useState(null);
+  var [search, setSearch] = React.useState('');
+
+  var embeds = embedIds || [];
+  var allFiles = React.useMemo(function () { return flattenDriveFiles(p.key); }, [p.key]);
+  var quota = getDriveQuota(p.key);
+  var rootFolders = getDriveRoot(p.key).filter(function (n) { return n.type === 'folder'; });
+  var agentFolder = rootFolders.filter(function (n) { return n.name === DRIVE_AGENT_FOLDER; })[0];
+
+  var agentFileCount = allFiles.filter(function (f) {
+    return agentFolder && f.folderIds.indexOf(agentFolder.id) >= 0;
+  }).length;
+
+  function notice(msg) {
+    if (app && app.message) app.message.info(msg);
+  }
+
+  /* 進資料夾 */
+  function openFolder(folderIds) {
+    setView('folder');
+    setPath(folderIds);
+    setSelId(null);
+  }
+
+  /* 本層要顯示的列 —— 資料夾檢視含子資料夾，虛擬檢視只有檔案 */
+  var rows = React.useMemo(function () {
+    var list;
+    if (view === 'folder') {
+      list = getDriveChildren(p.key, path);
+    } else if (view === 'agent') {
+      list = allFiles.filter(function (f) { return agentFolder && f.folderIds.indexOf(agentFolder.id) >= 0; });
+    } else if (view === 'embedded') {
+      list = allFiles.filter(function (f) { return embeds.indexOf(f.id) >= 0; });
+    } else {
+      list = allFiles.slice(0, 8);
+    }
+    var q = search.trim().toLowerCase();
+    if (q) list = list.filter(function (n) { return n.name.toLowerCase().indexOf(q) >= 0; });
+    return list;
+  }, [view, path, p.key, search, allFiles, embeds, agentFolder]);
+
+  var selected = selId ? getDriveFileById(p.key, selId) : null;
+
+  /* 麵包屑：資料夾檢視走真路徑，虛擬檢視顯示這個檢視在看什麼 */
+  var VIEW_TITLE = {
+    agent:    { title: DRIVE_AGENT_FOLDER, sub: 'AI 產出的 artifact 一律落在這裡，不可改名、不可刪除' },
+    embedded: { title: '已嵌入 KPI',        sub: '這些 .html 產出正在 KPI 報表中心展示' },
+    recent:   { title: '最近更新',          sub: '課內最近有異動的檔案' },
+  };
+
+  function breadcrumbItems() {
+    var items = [{ title: (<span style={{ cursor: 'pointer' }} onClick={function () { openFolder([]); }}>{p.name}</span>) }];
+    var nodes = getDriveRoot(p.key);
+    var acc = [];
+    path.forEach(function (fid) {
+      var node = nodes.filter(function (n) { return n.id === fid; })[0];
+      if (!node) return;
+      acc = acc.concat([fid]);
+      var here = acc.slice();
+      items.push({ title: (<span style={{ cursor: 'pointer' }} onClick={function () { openFolder(here); }}>{node.name}</span>) });
+      nodes = node.children || [];
+    });
+    return items;
+  }
+
+  var columns = [
+    {
+      title: '名稱', dataIndex: 'name', key: 'name', ellipsis: true,
+      render: function (name, row) {
+        var isFolder = row.type === 'folder';
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <DriveTypeIcon type={row.type} size={24} />
+            <span
+              onClick={function (e) {
+                if (!isFolder) return;
+                e.stopPropagation();
+                openFolder(view === 'folder' ? path.concat([row.id]) : (row.folderIds || []).concat([row.id]));
+              }}
+              style={{
+                fontSize: fz(13),
+                color: selId === row.id ? '#2563EB' : C.text,
+                fontWeight: (isFolder || selId === row.id) ? 600 : 400,
+                cursor: isFolder ? 'pointer' : 'default',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}
+            >{name}</span>
+            {row.system && (
+              <antd.Tag bordered={false} style={{
+                marginInlineEnd: 0, borderRadius: 999, flexShrink: 0,
+                fontSize: fz(10), lineHeight: '18px', paddingInline: 8,
+                color: C.textMuted, background: C.bgPanel,
+              }}>系統資料夾</antd.Tag>
+            )}
+            {embeds.indexOf(row.id) >= 0 && <DriveEmbedTag />}
+          </div>
+        );
+      },
+    },
+    {
+      title: '來源', key: 'origin', width: DRIVE_COL_W.origin,
+      render: function (_, row) {
+        if (row.type === 'folder') return <span style={{ fontSize: fz(12), color: C.textMuted }}>—</span>;
+        return <DriveOriginTag origin={row.origin} />;
+      },
+    },
+    {
+      title: '擁有者', dataIndex: 'owner', key: 'owner', width: DRIVE_COL_W.owner,
+      render: function (v) { return <span style={{ fontSize: fz(12), color: C.textSub }}>{v || '—'}</span>; },
+    },
+    {
+      title: '修改時間', dataIndex: 'updatedAt', key: 'updatedAt', width: DRIVE_COL_W.updated,
+      render: function (v) { return <span style={{ fontSize: fz(12), color: C.textMuted }}>{v || '—'}</span>; },
+    },
+    {
+      title: '大小', dataIndex: 'size', key: 'size', width: DRIVE_COL_W.size, align: 'right',
+      render: function (v, row) {
+        return <span style={{ fontSize: fz(12), color: C.textMuted }}>{row.type === 'folder' ? '—' : (v || '—')}</span>;
+      },
+    },
+  ];
+
+  return (
+    <div style={{ flex: 1, display: 'flex', minHeight: 0, overflow: 'hidden' }}>
+
+      {/* ════ 左｜導覽 ════ */}
+      <div style={{
+        width: 240, borderRight: '1px solid ' + C.border, flexShrink: 0,
+        display: 'flex', flexDirection: 'column', background: C.bg,
+      }}>
+        <div style={{ padding: 16, borderBottom: '1px solid ' + C.border, flexShrink: 0 }}>
+          <div style={{ fontSize: fz(13), fontWeight: 700, color: C.text }}>課的雲端硬碟</div>
+          <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 2 }}>{p.name}</div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 0' }} className="scrollbar-thin">
+          <div style={{
+            fontSize: fz(10), fontWeight: 700, color: C.textMuted,
+            letterSpacing: '0.08em', padding: '8px 16px 4px',
+          }}>快速存取</div>
+          <DriveNavRow icon="✦" label={DRIVE_AGENT_FOLDER} count={agentFileCount}
+            active={view === 'agent'} onClick={function () { setView('agent'); setSelId(null); }} />
+          <DriveNavRow icon="◈" label="已嵌入 KPI" count={embeds.length}
+            active={view === 'embedded'} onClick={function () { setView('embedded'); setSelId(null); }} />
+          <DriveNavRow icon="◷" label="最近更新"
+            active={view === 'recent'} onClick={function () { setView('recent'); setSelId(null); }} />
+
+          <div style={{
+            fontSize: fz(10), fontWeight: 700, color: C.textMuted,
+            letterSpacing: '0.08em', padding: '16px 16px 4px',
+          }}>資料夾</div>
+          <DriveNavRow icon="▤" label={p.name}
+            active={view === 'folder' && path.length === 0}
+            onClick={function () { openFolder([]); }} />
+          {rootFolders.map(function (f) {
+            return (
+              <DriveNavRow
+                key={f.id} icon="▧" label={f.name} indent={1}
+                active={view === 'folder' && path[0] === f.id}
+                onClick={function () { openFolder([f.id]); }}
+              />
+            );
+          })}
+        </div>
+
+        {/* 容量 —— 硬碟該有的東西，也順便說明「以課為單位」的配額 */}
+        <div style={{ padding: 16, borderTop: '1px solid ' + C.border, flexShrink: 0 }}>
+          <div style={{ fontSize: fz(11), color: C.textMuted, marginBottom: 8 }}>
+            已使用 {quota.usedLabel} / {quota.totalLabel}
+          </div>
+          <antd.Progress percent={quota.percent} showInfo={false} size="small" strokeColor="#2563EB" />
+          <div style={{ fontSize: fz(11), color: C.textMuted, marginTop: 8 }}>配額以課為單位計算</div>
+        </div>
+      </div>
+
+      {/* ════ 中｜列表 ════ */}
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, overflow: 'hidden' }}>
+
+        {/* 工具列 */}
+        <div style={{
+          height: 48, flexShrink: 0, padding: '0 16px',
+          borderBottom: '1px solid ' + C.border,
+          display: 'flex', alignItems: 'center', gap: 8,
+        }}>
+          {view === 'folder' ? (
+            <antd.Breadcrumb items={breadcrumbItems()} style={{ fontSize: fz(13) }} />
+          ) : (
+            <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>{VIEW_TITLE[view].title}</span>
+          )}
+          <div style={{ flex: 1 }} />
+          <antd.Input
+            size="small" value={search} allowClear
+            onChange={function (e) { setSearch(e.target.value); }}
+            aria-label="搜尋檔案" placeholder="檔案名稱"
+            style={{ width: 176 }}
+          />
+          <antd.Button size="small" onClick={function () { notice('示意原型：本版不提供新增資料夾。'); }}>新增資料夾</antd.Button>
+          <antd.Button size="small" type="primary" onClick={function () { notice('示意原型：本版不提供上傳。'); }}>上傳</antd.Button>
+        </div>
+
+        {/* 檢視說明：只有虛擬檢視需要一句話講清楚在看什麼 */}
+        {view !== 'folder' && (
+          <div style={{
+            padding: '8px 16px', flexShrink: 0,
+            borderBottom: '1px solid ' + C.border, background: C.bgSub,
+            fontSize: fz(11), color: C.textMuted,
+          }}>{VIEW_TITLE[view].sub}</div>
+        )}
+
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }} className="scrollbar-thin dv-list">
+          <antd.Table
+            columns={columns}
+            dataSource={rows}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            locale={{ emptyText: (
+              <antd.Empty
+                image={antd.Empty.PRESENTED_IMAGE_SIMPLE}
+                description={<span style={{ fontSize: fz(12), color: C.textMuted }}>
+                  {view === 'embedded' ? '還沒有任何產出被嵌到 KPI 報表中心。' : '這個位置沒有檔案。'}
+                </span>}
+              />
+            ) }}
+            rowClassName={function (row) { return selId === row.id ? 'dv-row-selected' : ''; }}
+            onRow={function (row) {
+              return {
+                onClick: function () { if (row.type !== 'folder') setSelId(row.id); },
+                style: { cursor: row.type === 'folder' ? 'default' : 'pointer' },
+              };
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ════ 右｜詳情 ════ */}
+      <div style={{
+        width: 320, flexShrink: 0, borderLeft: '1px solid ' + C.border,
+        background: C.bgPanel, display: 'flex', flexDirection: 'column', minHeight: 0,
+      }}>
+        <div style={{
+          height: 48, flexShrink: 0, padding: '0 16px',
+          borderBottom: '1px solid ' + C.border,
+          display: 'flex', alignItems: 'center',
+        }}>
+          <span style={{ fontSize: fz(13), fontWeight: 600, color: C.text }}>詳情</span>
+        </div>
+        <DriveDetail
+          file={selected}
+          embedded={!!selected && embeds.indexOf(selected.id) >= 0}
+          onToggleEmbed={function (id) {
+            var was = embeds.indexOf(id) >= 0;
+            onToggleEmbed(id);
+            notice(was ? '已從 KPI 報表中心移除。' : '已嵌入 KPI 報表中心，可在 KPI 頁的「AI 產出報表」看到。');
+          }}
+          onGoKpi={onGoKpi}
+          onGoNav={onGoNav}
+          onNotice={notice}
+        />
       </div>
     </div>
   );
@@ -19486,6 +20450,12 @@ const NavIcons = {
       <rect x="12" y="12" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.9"/>
     </svg>
   ),
+  drive: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <path d="M2 6a1.5 1.5 0 011.5-1.5h3.4l1.6 2H16.5A1.5 1.5 0 0118 8v7a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 15V6z" fill="currentColor" opacity="0.9"/>
+      <path d="M6.5 12.5h7" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.75"/>
+    </svg>
+  ),
 };
 
 const NAV_BASE = [
@@ -19495,6 +20465,8 @@ const NAV_BASE = [
   { key: 'tasks',      label: 'Task' },
   { key: 'chat',       label: 'AI' },
   { key: 'scheduling', label: 'Schedule' },
+  /* Drive 掛在最後：Nav 前六項的順序是 v3.6 大老闆決議，不動它，新頁往後接。 */
+  { key: 'drive',      label: 'Drive' },
 ];
 const NAV_SEED = [
   { key: 'setting',   label: 'Setting' },
@@ -19845,6 +20817,39 @@ function App() {
     return true;
   }, [schedDecisions]);
 
+  /* ── Drive → KPI 的嵌入清單：{ [personaKey]: [fileId, ...] } ──
+     放在 App 而不是任何一頁，因為 Drive（設定嵌入）與 KPI（顯示嵌入）
+     兩邊要看到同一份真相；同 schedMounts 的作法。 */
+  const [driveEmbedIds, setDriveEmbedIds] = React.useState(
+    typeof DEFAULT_DRIVE_EMBEDS !== 'undefined' ? DEFAULT_DRIVE_EMBEDS : { equipment: [], process: [], mfg: [] }
+  );
+  const handleToggleDriveEmbed = React.useCallback(function (fileId) {
+    setDriveEmbedIds(function (prev) {
+      const cur = prev[persona] || [];
+      const next = cur.indexOf(fileId) >= 0
+        ? cur.filter(function (id) { return id !== fileId; })
+        : cur.concat([fileId]);
+      return Object.assign({}, prev, { [persona]: next });
+    });
+  }, [persona]);
+
+  /* 目前這一課已嵌入、且還真的存在的檔案（取消嵌入後 KPI 那邊要跟著消失） */
+  const driveEmbedFiles = React.useMemo(function () {
+    return (driveEmbedIds[persona] || [])
+      .map(function (id) { return getDriveFileById(persona, id); })
+      .filter(function (f) { return f && isDriveEmbeddable(f); });
+  }, [persona, driveEmbedIds]);
+
+  /* Drive 詳情「在 KPI 報表中心檢視」→ 跳 KPI 並落在那份產出上（nonce 每次遞增以重觸發）*/
+  const [kpiJump, setKpiJump] = React.useState({ fileId: null, nonce: 0 });
+  const handleGoKpiEmbed = React.useCallback(function (fileId) {
+    setKpiJump(function (prev) { return { fileId: fileId, nonce: prev.nonce + 1 }; });
+    setNav('kpi');
+  }, []);
+
+  /* KPI「在 Drive 開啟」→ 回 Drive（本版只跳頁，不帶選取，Drive 進去預設就在 Agent_Artifacts）*/
+  const handleGoDrive = React.useCallback(function () { setNav('drive'); }, []);
+
   /* ── Home Layout（Seed 可設定，per-persona 獨立） ── */
   const [homeLayoutByPersona, setHomeLayoutByPersona] = React.useState(
     typeof DEFAULT_HOME_LAYOUT !== 'undefined' ? DEFAULT_HOME_LAYOUT : { equipment: [], process: [], mfg: [] }
@@ -20131,6 +21136,12 @@ function App() {
               <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.name}</div>
             </div>
           )}
+          {nav === 'drive' && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>Drive</div>
+              <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.name} · 課的雲端硬碟</div>
+            </div>
+          )}
           {nav === 'setting' && (
             <div>
               <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>設定</div>
@@ -20182,7 +21193,9 @@ function App() {
 
         {nav === 'dashboard'  && <DashboardPage p={p} onAskAI={handleAskAI} handoverRecord={handoverRecord} onHandoverSubmit={handleHandoverSubmit} onGoTasks={(member, taskId) => { setTaskFilter(member || ''); setTaskOpenId(taskId || null); setNav('tasks'); }} pinnedAppIds={pinnedAppIds} onGoAppCenter={() => setNav('apps')} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} onOpenKpiSetting={handleOpenKpiSetting} onOpenBulletinSetting={handleOpenBulletinSetting} onOpenAppSetting={handleOpenAppSetting} onOpenLinkWidgetSetting={handleOpenLinkWidgetSetting} showHandoverModal={showHandoverModal} setShowHandoverModal={setShowHandoverModal} homeLayout={homeLayoutByPersona[persona] || []} />}
         {nav === 'apps'       && <AppCenterPage p={p} pinnedAppIds={pinnedAppIds} onTogglePin={handleTogglePin} functionTree={functionTree} legacyMode={legacyMode} />}
-        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} />}
+        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} driveEmbeds={driveEmbedFiles} kpiJump={kpiJump} onGoDrive={handleGoDrive} />}
+        {/* key={persona} 讓切課時重置頁內狀態：資料夾位置與選取的檔案不會跨課殘留 */}
+        {nav === 'drive'      && <DrivePage key={persona} p={p} embedIds={driveEmbedIds[persona] || []} onToggleEmbed={handleToggleDriveEmbed} onGoKpi={handleGoKpiEmbed} onGoNav={setNav} />}
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} schedMounts={schedMounts} onScheduleSkill={handleScheduleSkill} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}

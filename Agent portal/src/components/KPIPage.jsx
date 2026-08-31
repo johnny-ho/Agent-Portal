@@ -102,6 +102,10 @@ const KPI_SRC_CFG = {
   spc:    { label: 'SPC',  bg: '#F0FDF4', color: '#166534' },
   mes:    { label: 'MES',  bg: '#FDF4FF', color: '#7E22CE' },
   custom: { label: '自建', bg: '#F3F4F6', color: '#374151' },
+  /* Drive 來的 AI 產出。它與上面五個不同：不是外部系統的報表，
+     而是本平台 AI 產出、存在課的 Drive 裡、被 Seed／課員嵌進來的 .html。
+     見 data/drive.js 與 DrivePage.jsx。 */
+  agent:  { label: 'AI',   bg: 'rgba(124,58,237,0.08)', color: '#7C3AED' },
 };
 
 /* AntD 遷移 Phase 4：來源標籤改 Tag，色系沿用上表（Tag 以 style 帶入以維持
@@ -117,17 +121,115 @@ function KpiSrcTag({ src, size }) {
   );
 }
 
-function KPIPage({ p, onAskAI}) {
+/* ════════════════════════════════════════
+   KpiEmbedView — Drive 的 .html 產出嵌在 KPI 頁的樣子
+
+   刻意與外部系統的報表框（下方 demo）長得不同：外部報表要看得出是「別人的畫面」，
+   AI 產出則是本平台的東西，只需要一條說明它從哪來、可以回到 Drive 的工具列。
+   iframe 帶 sandbox=""（不給 script、不給同源），產出物不能反過來動 portal。
+   ════════════════════════════════════════ */
+function KpiEmbedView({ item, onGoDrive, onAskAI }) {
+  var { C, fz } = useTheme();
+  var file = item.driveFile;
+
+  function handleAskAI() {
+    if (!onAskAI) return;
+    onAskAI({
+      text: '【報表名稱】' + file.name + '\n【來源】' + (file.origin ? file.origin.label : 'Drive') + '\n【更新時間】' + file.updatedAt,
+      label: file.name,
+    });
+  }
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{
+        background: C.bg, borderBottom: '1px solid ' + C.border,
+        padding: '0 24px', height: 48,
+        display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0,
+      }}>
+        <span style={{ fontSize: fz(15), fontWeight: 600, color: C.text }}>{file.name}</span>
+        <KpiSrcTag src="agent" size={10} />
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: fz(11), color: C.textMuted }}>更新 {file.updatedAt}</span>
+          {onAskAI && (
+            <antd.Button size="small" onClick={handleAskAI} style={{ color: '#2563EB', borderColor: 'rgba(37,99,235,0.4)' }}>
+              ✦ Ask AI
+            </antd.Button>
+          )}
+          <antd.Button size="small" onClick={function () { onGoDrive(file.id); }}>↗ 在 Drive 開啟</antd.Button>
+        </div>
+      </div>
+
+      {/* 溯源列：報表中心裡混進了一份 AI 產出，要一眼看得出是誰在什麼時候產的 */}
+      <div style={{
+        padding: '8px 24px', flexShrink: 0,
+        borderBottom: '1px solid ' + C.border, background: C.bgSub,
+        fontSize: fz(11), color: C.textMuted,
+      }}>
+        來自課的雲端硬碟 <span style={{ fontFamily: 'monospace' }}>{'/' + (file.folderPath || '').split(' / ').join('/') + '/' + file.name}</span>
+        {file.origin ? ' · ' + file.origin.label + ' · ' + file.origin.by : ''}
+      </div>
+
+      <div style={{
+        flex: 1, overflow: 'hidden', margin: 16, borderRadius: 8,
+        border: '1px solid ' + C.border, background: '#FFFFFF',
+      }}>
+        <iframe
+          title={file.name}
+          srcDoc={file.html}
+          sandbox=""
+          style={{ border: 'none', width: '100%', height: '100%', display: 'block' }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function KPIPage({ p, onAskAI, driveEmbeds, kpiJump, onGoDrive }) {
   var { C, fz } = useTheme();
   const kpiData = KPI_BOOKMARKS[p.key] || KPI_BOOKMARKS.equipment;
-  const allItems = kpiData.groups.flatMap(g => g.items);
-  const [activeId, setActiveId] = React.useState(allItems[0]?.id);
+
+  /* ── Drive 嵌進來的 AI 產出 ──
+     書籤清單置頂多一組「AI 產出報表」。它與其他書籤走同一條路（點左邊、右邊換內容），
+     差別只在右邊渲染的是 Drive 裡那份 .html 本身，不是外部系統的模擬畫面。
+     嵌入狀態由 App 持有（Drive 與 KPI 兩頁共用同一份，不會兩邊講不一樣的話）。 */
+  const embedItems = React.useMemo(function () {
+    return (driveEmbeds || []).map(function (f) {
+      return {
+        id: f.id, name: f.name,
+        sub: f.origin ? f.origin.label : 'Drive 產出',
+        src: 'agent', driveFile: f,
+      };
+    });
+  }, [driveEmbeds]);
+
+  const groups = React.useMemo(function () {
+    if (embedItems.length === 0) return kpiData.groups;
+    return [{ label: 'AI 產出報表', items: embedItems }].concat(kpiData.groups);
+  }, [kpiData, embedItems]);
+
+  const allItems = groups.flatMap(g => g.items);
+  const [activeId, setActiveId] = React.useState(kpiData.groups[0].items[0]?.id);
   const [searchVal, setSearchVal] = React.useState('');
   const demo = kpiData.demo;
 
+  /* Drive 詳情頁「在 KPI 報表中心檢視」→ 直接落在那份產出上 */
+  React.useEffect(function () {
+    if (kpiJump && kpiJump.nonce > 0 && kpiJump.fileId) setActiveId(kpiJump.fileId);
+  }, [kpiJump && kpiJump.nonce]);
+
+  /* 取消嵌入之後那份產出就不在清單裡了，選取要退回第一個真的存在的書籤 */
+  React.useEffect(function () {
+    if (!allItems.some(function (it) { return it.id === activeId; })) {
+      setActiveId(allItems[0] && allItems[0].id);
+    }
+  }, [allItems, activeId]);
+
+  const activeEmbed = embedItems.filter(function (it) { return it.id === activeId; })[0];
+
   const filteredGroups = searchVal.trim()
     ? [{ label: '搜尋結果', items: allItems.filter(it => it.name.includes(searchVal) || it.sub.includes(searchVal)) }]
-    : kpiData.groups;
+    : groups;
 
   const maxBar = Math.max(...demo.bars);
   const minBar = Math.min(...demo.bars);
@@ -216,7 +318,12 @@ function KPIPage({ p, onAskAI}) {
           </div>
         </div>
 
-        {/* RIGHT — Report view */}
+        {/* RIGHT — Report view.
+             選中的是 Drive 嵌進來的 AI 產出 → 直接渲染那份 .html；
+             否則走原本的外部系統報表模擬畫面。 */}
+        {activeEmbed ? (
+          <KpiEmbedView item={activeEmbed} onGoDrive={onGoDrive} onAskAI={onAskAI} />
+        ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
           {/* Report toolbar */}
@@ -366,6 +473,7 @@ function KPIPage({ p, onAskAI}) {
             </div>
           </div>
         </div>
+        )}
       </div>
     </div>
   );

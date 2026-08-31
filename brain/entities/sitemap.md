@@ -21,6 +21,7 @@ flowchart TD
     Shell --> T["4 Task 派工管理"]
     Shell --> AI["5 AI Chat"]
     Shell --> S["6 Schedule 排程中心"]
+    Shell --> D["7 Drive 課的雲端硬碟"]
     Shell --> ST["⚙ Setting（底部）"]
     Shell -.-> KB["Knowledge Base（未掛）"]
 
@@ -32,8 +33,12 @@ flowchart TD
     T --> T1["成員總覽 / 快速派工 / 列表+Drawer / 歷史7天"]
     AI --> AI1["課上下文對話 / 歷史 / Context Badge"]
     S --> S1["排程清單 / 執行紀錄+產出物 / HITL Banner"]
+    D --> D1["Agent_Artifacts（AI 產出落地）/ 課的資料夾 / 詳情+溯源"]
+    D1 -. ".html 嵌入" .-> K1
     ST --> ST1["Personal 區(全員) / Section 七 tabs(Seed) / IT 區(IT Admin)"]
 ```
+
+> **2026-08-31**：新增 Drive（Nav 第 7 項，掛在 Schedule 之後；前六項順序是 v3.6 大老闆決議，不動）。它是 AI 產出的落地處，並把 `.html` 產出接到 KPI 報表中心，見 [drive](modules/drive.md)。
 
 > **2026-07-25**：交班中心已廢除（PO 決議），節點自地圖移除。交班改為一個 SOP 的排程產出，在 Schedule 檢視、Home 佈告欄觸達，見 [handover](modules/handover.md)。
 
@@ -42,10 +47,10 @@ flowchart TD
 | 層 | 內容 | 由誰決定 |
 |----|------|---------|
 | Shell | Nav、Header、Search App、persona 切換 | Platform |
-| Page | 上表 9 個頁面 | Platform（Nav 順序 = 大老闆決議） |
+| Page | 上表 10 個頁面 | Platform（Nav 順序 = 大老闆決議） |
 | Zone | Home 的 Section / Personal Zone | Platform 定框架 |
 | Widget | bulletin、kpi-summary、priority-feed… | Seed 排列（homeLayout）；AI 生成 priority-feed |
-| Data | `src/data/` 5 份 mock，以 persona（課）為範圍 | 未來接真實系統 |
+| Data | `src/data/` 9 份 mock（含 `drive.js`），以 persona（課）為範圍 | 未來接真實系統 |
 
 技術堆疊（build、CDN）另見 [architecture](architecture.md)。
 

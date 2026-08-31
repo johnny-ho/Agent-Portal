@@ -57,6 +57,12 @@ const NavIcons = {
       <rect x="12" y="12" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.9"/>
     </svg>
   ),
+  drive: (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+      <path d="M2 6a1.5 1.5 0 011.5-1.5h3.4l1.6 2H16.5A1.5 1.5 0 0118 8v7a1.5 1.5 0 01-1.5 1.5h-13A1.5 1.5 0 012 15V6z" fill="currentColor" opacity="0.9"/>
+      <path d="M6.5 12.5h7" stroke="white" strokeWidth="1.4" strokeLinecap="round" opacity="0.75"/>
+    </svg>
+  ),
 };
 
 const NAV_BASE = [
@@ -66,6 +72,8 @@ const NAV_BASE = [
   { key: 'tasks',      label: 'Task' },
   { key: 'chat',       label: 'AI' },
   { key: 'scheduling', label: 'Schedule' },
+  /* Drive 掛在最後：Nav 前六項的順序是 v3.6 大老闆決議，不動它，新頁往後接。 */
+  { key: 'drive',      label: 'Drive' },
 ];
 const NAV_SEED = [
   { key: 'setting',   label: 'Setting' },
@@ -416,6 +424,39 @@ function App() {
     return true;
   }, [schedDecisions]);
 
+  /* ── Drive → KPI 的嵌入清單：{ [personaKey]: [fileId, ...] } ──
+     放在 App 而不是任何一頁，因為 Drive（設定嵌入）與 KPI（顯示嵌入）
+     兩邊要看到同一份真相；同 schedMounts 的作法。 */
+  const [driveEmbedIds, setDriveEmbedIds] = React.useState(
+    typeof DEFAULT_DRIVE_EMBEDS !== 'undefined' ? DEFAULT_DRIVE_EMBEDS : { equipment: [], process: [], mfg: [] }
+  );
+  const handleToggleDriveEmbed = React.useCallback(function (fileId) {
+    setDriveEmbedIds(function (prev) {
+      const cur = prev[persona] || [];
+      const next = cur.indexOf(fileId) >= 0
+        ? cur.filter(function (id) { return id !== fileId; })
+        : cur.concat([fileId]);
+      return Object.assign({}, prev, { [persona]: next });
+    });
+  }, [persona]);
+
+  /* 目前這一課已嵌入、且還真的存在的檔案（取消嵌入後 KPI 那邊要跟著消失） */
+  const driveEmbedFiles = React.useMemo(function () {
+    return (driveEmbedIds[persona] || [])
+      .map(function (id) { return getDriveFileById(persona, id); })
+      .filter(function (f) { return f && isDriveEmbeddable(f); });
+  }, [persona, driveEmbedIds]);
+
+  /* Drive 詳情「在 KPI 報表中心檢視」→ 跳 KPI 並落在那份產出上（nonce 每次遞增以重觸發）*/
+  const [kpiJump, setKpiJump] = React.useState({ fileId: null, nonce: 0 });
+  const handleGoKpiEmbed = React.useCallback(function (fileId) {
+    setKpiJump(function (prev) { return { fileId: fileId, nonce: prev.nonce + 1 }; });
+    setNav('kpi');
+  }, []);
+
+  /* KPI「在 Drive 開啟」→ 回 Drive（本版只跳頁，不帶選取，Drive 進去預設就在 Agent_Artifacts）*/
+  const handleGoDrive = React.useCallback(function () { setNav('drive'); }, []);
+
   /* ── Home Layout（Seed 可設定，per-persona 獨立） ── */
   const [homeLayoutByPersona, setHomeLayoutByPersona] = React.useState(
     typeof DEFAULT_HOME_LAYOUT !== 'undefined' ? DEFAULT_HOME_LAYOUT : { equipment: [], process: [], mfg: [] }
@@ -702,6 +743,12 @@ function App() {
               <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.name}</div>
             </div>
           )}
+          {nav === 'drive' && (
+            <div>
+              <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>Drive</div>
+              <div style={{ color: C.textMuted, fontSize: fz(11) }}>{p.name} · 課的雲端硬碟</div>
+            </div>
+          )}
           {nav === 'setting' && (
             <div>
               <div style={{ fontWeight: 600, fontSize: fz(14), color: C.text, lineHeight: 1.2 }}>設定</div>
@@ -753,7 +800,9 @@ function App() {
 
         {nav === 'dashboard'  && <DashboardPage p={p} onAskAI={handleAskAI} handoverRecord={handoverRecord} onHandoverSubmit={handleHandoverSubmit} onGoTasks={(member, taskId) => { setTaskFilter(member || ''); setTaskOpenId(taskId || null); setNav('tasks'); }} pinnedAppIds={pinnedAppIds} onGoAppCenter={() => setNav('apps')} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} onOpenKpiSetting={handleOpenKpiSetting} onOpenBulletinSetting={handleOpenBulletinSetting} onOpenAppSetting={handleOpenAppSetting} onOpenLinkWidgetSetting={handleOpenLinkWidgetSetting} showHandoverModal={showHandoverModal} setShowHandoverModal={setShowHandoverModal} homeLayout={homeLayoutByPersona[persona] || []} />}
         {nav === 'apps'       && <AppCenterPage p={p} pinnedAppIds={pinnedAppIds} onTogglePin={handleTogglePin} functionTree={functionTree} legacyMode={legacyMode} />}
-        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} />}
+        {nav === 'kpi'        && <KPIPage p={p} onAskAI={handleAskAI} driveEmbeds={driveEmbedFiles} kpiJump={kpiJump} onGoDrive={handleGoDrive} />}
+        {/* key={persona} 讓切課時重置頁內狀態：資料夾位置與選取的檔案不會跨課殘留 */}
+        {nav === 'drive'      && <DrivePage key={persona} p={p} embedIds={driveEmbedIds[persona] || []} onToggleEmbed={handleToggleDriveEmbed} onGoKpi={handleGoKpiEmbed} onGoNav={setNav} />}
         {nav === 'chat'       && <ChatPage p={p} aiDraft={aiDraft} clearAiDraft={clearAiDraft} />}
         {nav === 'setting'    && <SettingPage p={p} kpiConfig={kpiWidgetConfig[persona]} onKpiConfigChange={handleKpiConfigChange} settingJump={settingJump} isSeedUser={isSeed(persona)} isITUser={isIT(persona)} functionTree={functionTree} onFunctionTreeChange={setFunctionTree} homeLayout={homeLayoutByPersona[persona] || []} onHomeLayoutChange={handleHomeLayoutChange} notifPrefs={currentNotifPrefs} onNotifPrefChange={handleNotifPrefChange} schedMounts={schedMounts} onScheduleSkill={handleScheduleSkill} />}
         {nav === 'tasks'      && <TaskManagementPage p={p} initialFilter={taskFilter} initialOpenId={taskOpenId} />}

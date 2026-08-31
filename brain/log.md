@@ -602,3 +602,24 @@ PO 先要一份「總覽與左欄互動」的摘要拿去 Claude Design 出樣�
 **瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：4a–4g 七個狀態逐一比對，另 20 項互動全過、無 console error。實測抓到三個自己的 bug：失敗卡寫「中止在 0/5 步驟」（doneSteps 不等於卡在第幾步）、平均時長被等待時間污染、決定完的執行在時長欄位仍寫「暫停中」。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[decisions.md](decisions.md)、index.md。
+
+## [2026-08-31] ingest+decision | 新增 Drive（課的雲端硬碟）與 Drive → KPI 的嵌入路徑
+
+PO 指定兩件事：以課為單位的雲端硬碟、每課預設 `Agent_Artifacts` 承接 AI 產出；`.html` 產出可嵌進 KPI 頁展示。做成可操作的示意原型。
+
+**架構**：`src/data/drive.js`（三課資料 + 讀取層）、`src/components/DrivePage.jsx`（三欄）、`KPIPage.jsx` 補 `KpiEmbedView` 與 `AI 產出報表` 分組、`App.jsx` 補 Nav 第 7 項與 `driveEmbedIds` 跨頁狀態、`styles.css` 補 `.dv-row-selected`。build.py 的 `JS_MODULES` 已加兩個模組。
+
+**三個判斷**：
+1. **`Agent_Artifacts` 是系統資料夾**（`system: true`，不可改名／刪除）——它是產品契約不是使用者的資料夾。AI 落地路徑會被改掉的話，Drive 與排程／對話的接縫就不成立。
+2. **「能不能嵌」只看副檔名，判定集中在 `isDriveEmbeddable()`** ——Drive（設定嵌入）與 KPI（顯示嵌入）問同一個函式，不各自判斷。同決議 19「`getSkillScheduleMap` 成為兩邊的單一真相」的模式。
+3. **嵌入開關放 Drive 不放 KPI**，嵌入狀態提到 `App.jsx`。決定「這份東西要不要給全課看」的地方，該是看得到它是誰在什麼時候產出的地方。
+
+**產品面的收穫**：Drive 補上的是「**依檔案找產出**」這個入口。排程頁的執行紀錄一直看得到產出物（決議 17 之後的重點之一），但那份東西只活在那一次執行紀錄裡——要找它得先記得是哪個排程哪一天跑的。
+
+**沿用未推翻的**：決議 22 的「左欄只放導覽、警示不進左欄、選中語彙一套」；Task 管理 Phase 2 立的選取列 CSS 慣例（`tm-row-selected` → `dv-row-selected` 同一組值）。
+
+**安全**：兩處 `iframe` 皆帶 `sandbox=""`（不給 script、不給同源）——AI 產出物不能反過來動 portal。
+
+**瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：Drive 進入／Agent_Artifacts 列表／選檔詳情／非 html 的限制說明／嵌入／取消嵌入後 KPI 分組消失且選取退回／KPI 端 iframe 真的渲染出內容／「在 Drive 開啟」回跳／資料夾與子資料夾麵包屑／換課後檔案與嵌入清單各自獨立／深色模式，全過，無 page error。實測抓到一個 bug：AntD Table 的選取列底色用 inline `onRow.style` 吃不到（被 `td` 蓋掉），改用既有的 `rowClassName` + CSS 慣例。
+
+受影響 wiki 頁：新增 [drive](entities/modules/drive.md)；更新 [kpi-center](entities/modules/kpi-center.md)、[sitemap](entities/sitemap.md)、[architecture](entities/architecture.md)、[decisions.md](decisions.md)、index.md。
