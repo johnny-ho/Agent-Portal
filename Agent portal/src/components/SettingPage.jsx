@@ -904,7 +904,7 @@ function KnowledgeDocTab({ p }) {
 /* ═══════════════════════════════════
    Personal Tab：個人偏好設定
    ═══════════════════════════════════ */
-function PersonalSettingTab({ notifPrefs, onNotifPrefChange }) {
+function PersonalSettingTab() {
   var themeCtx = useTheme();
   var fz = themeCtx.fz || function(n){ return n; };
   var C = themeCtx.C;
@@ -913,14 +913,9 @@ function PersonalSettingTab({ notifPrefs, onNotifPrefChange }) {
   var fontSize = themeCtx.fontSize || 'normal';
   var setFontSize = themeCtx.setFontSize || function(){};
 
-  /* 通知偏好：站內 / 同步 Teams（逐則），見 brain/entities/modules/notification.md */
-  var prefs = notifPrefs || (typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : { N1:{}, N2:{}, N3:{} });
-  var handlePref = onNotifPrefChange || function(){};
   var Switch = (typeof antd !== 'undefined' && antd.Switch) ? antd.Switch : null;
   var Segmented = (typeof antd !== 'undefined' && antd.Segmented) ? antd.Segmented : null;
   var Select = (typeof antd !== 'undefined' && antd.Select) ? antd.Select : null;
-  /* 從預設值推導，新增通知類型（如 N4 執行失敗）不必再回來改這一行 */
-  var NOTIF_TYPE_LIST = Object.keys(typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {});
 
   /* ── 語言選擇（未來用）── */
   var [lang, setLang] = React.useState('zh-TW');
@@ -1066,9 +1061,59 @@ function PersonalSettingTab({ notifPrefs, onNotifPrefChange }) {
           ) : null}
         </SettingRow>
       </div>
+    </div>
+  );
+}
 
-      {/* ── 通知 ── */}
-      <SectionTitle>通知</SectionTitle>
+/* ═══════════════════════════════════
+   Notification Tab：通知接收管道（Personal 層，但範圍以課為單位）
+   2026-09-21 從「個人偏好」拆出獨立項目；內容不變，只多一列適用範圍提示。
+   語意是「你個人在這個課的通知設定」，不是「本課全員的設定」——
+   文案不能被誤讀成 Seed 代管（見 brain/concepts/widget-governance.md Personal 層）。
+   ═══════════════════════════════════ */
+function NotificationSettingTab({ p, notifPrefs, onNotifPrefChange }) {
+  var themeCtx = useTheme();
+  var fz = themeCtx.fz || function(n){ return n; };
+  var C = themeCtx.C;
+
+  var prefs = notifPrefs || (typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {});
+  var handlePref = onNotifPrefChange || function(){};
+  var Switch = (typeof antd !== 'undefined' && antd.Switch) ? antd.Switch : null;
+  /* 從預設值推導，新增通知類型（如 N4 執行失敗）不必再回來改這一行 */
+  var NOTIF_TYPE_LIST = Object.keys(typeof DEFAULT_NOTIF_PREFS !== 'undefined' ? DEFAULT_NOTIF_PREFS : {});
+  var sectionName = (p && p.name) || '本課';
+
+  function SectionTitle({ children }) {
+    return (
+      <div style={{
+        fontSize: fz(11), fontWeight: 700, color: C.textMuted,
+        letterSpacing: '0.08em', textTransform: 'uppercase',
+        marginBottom: 8, marginTop: 24,
+      }}>{children}</div>
+    );
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: 24 }}>
+
+      {/* ── 適用範圍：平述不警示（決議 18/22 資訊層級收斂）── */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        padding: 16, border: '1px solid ' + C.border, borderRadius: 8,
+        background: C.bgPanel,
+      }}>
+        <span style={{ fontSize: fz(12), color: C.textMuted }}>適用範圍</span>
+        <span style={{
+          fontSize: fz(12), fontWeight: 600, color: '#2563EB',
+          background: 'rgba(37,99,235,0.08)', borderRadius: 999,
+          padding: '4px 8px', lineHeight: 1.2,
+        }}>{sectionName}</span>
+        <span style={{ fontSize: fz(12), color: C.textSub, lineHeight: 1.5 }}>
+          以下是你個人在本課的通知設定。切換右上角課別後，看到的是該課各自的設定。
+        </span>
+      </div>
+
+      <SectionTitle>接收管道</SectionTitle>
       <div style={{ fontSize: fz(12), color: C.textMuted, marginBottom: 8, lineHeight: 1.5 }}>
         選擇每類通知的接收管道。站內通知顯示於右上角鈴鐺；Teams 為逐則同步推送。
       </div>
@@ -2457,11 +2502,13 @@ function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser,
 
   /* 若非 Seed 且 activeTab 是 Seed 管理類 tab，重置到 personal */
   React.useEffect(function() {
-    if (!isSeedUser && !isITUser && activeTab !== 'personal') setActiveTab('personal');
+    if (!isSeedUser && !isITUser && !personalTabs.includes(activeTab)) setActiveTab('personal');
     if (!isSeedUser && isSeedOnlyTabs.includes(activeTab)) setActiveTab('personal');
     if (!isITUser && activeTab === 'app-management') setActiveTab('personal');
   }, [isSeedUser, isITUser]);
 
+  /* Personal 分類：所有用戶都看得到，不受 Seed／IT 重置影響 */
+  var personalTabs = ['personal', 'notification', 'quickprompt'];
   var seedOnlyTabs = ['permissions', 'home', 'kpi-report', 'knowledge', 'knowledge-doc', 'qna'];
   var isSeedOnlyTabs = seedOnlyTabs;
 
@@ -2506,6 +2553,7 @@ function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser,
           Personal
         </div>
         <NavBtn tabKey="personal" label="個人偏好" />
+        <NavBtn tabKey="notification" label="Notification" />
         <NavBtn tabKey="quickprompt" label="Quick Prompt" />
 
         {/* ── Section 管理區塊（僅 Seed 可見）── */}
@@ -2542,7 +2590,8 @@ function SettingPage({ p, kpiConfig, onKpiConfigChange, settingJump, isSeedUser,
 
       {/* ── Right content ── */}
       <div style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: C.bg }}>
-        {activeTab === 'personal'       && <PersonalSettingTab notifPrefs={notifPrefs} onNotifPrefChange={onNotifPrefChange} />}
+        {activeTab === 'personal'       && <PersonalSettingTab />}
+        {activeTab === 'notification'   && <NotificationSettingTab p={p} notifPrefs={notifPrefs} onNotifPrefChange={onNotifPrefChange} />}
         {activeTab === 'quickprompt'    && <WIPSettingTab title="Quick Prompt" />}
         {activeTab === 'permissions'    && <PermissionsTab p={p} />}
         {activeTab === 'kpi-report'     && <KpiReportSettingTab p={p} isSeedUser={isSeedUser} />}
