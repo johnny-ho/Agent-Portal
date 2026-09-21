@@ -602,3 +602,22 @@ PO 先要一份「總覽與左欄互動」的摘要拿去 Claude Design 出樣�
 **瀏覽器實測**（vendor + Playwright，`shell.html` 未動）：4a–4g 七個狀態逐一比對，另 20 項互動全過、無 console error。實測抓到三個自己的 bug：失敗卡寫「中止在 0/5 步驟」（doneSteps 不等於卡在第幾步）、平均時長被等待時間污染、決定完的執行在時長欄位仍寫「暫停中」。
 
 受影響 wiki 頁：[scheduling](entities/modules/scheduling.md)、[decisions.md](decisions.md)、index.md。
+
+## [2026-09-21] decision | 通知設定搬家成 Setting → Personal → Notification 獨立項目（決議 24）
+
+PO 要求把通知設定從「個人偏好」頁裡的一個區塊，改成 Personal 分類底下的獨立項目「Notification」，內容不變，並在 UI 上講清楚「這組設定只適用當前右上角選的課，切課會換」。
+
+**評估時的關鍵發現**：`notifPrefsByPersona` 與 `notifByPersona` 從 v1 就是 per-persona，**切課本來就會換一組設定** —— PO 要的行為早就在了。真正缺的是**畫面上一個字都沒說**，使用者合理會讀成全域個人設定，切課後看到開關變了會當成 bug。所以這輪做的是「把既有行為說出來」，不是加功能。
+
+**三個實作前定調、PO 認可的取捨**：
+1. **文案的主詞**：寫「**你個人在本課的通知設定**」而不是「本課的通知設定」。少了「你個人」會被讀成 Seed 替全課配置，直接撞 Personal 層治理原則（Seed／課長不可代管、不可查閱他人通知）。
+2. **平述不警示**：適用範圍用一列灰底平述（課名走藍色膠囊），不用黃底／紅框橫幅。依決議 18／22 的資訊層級收斂——這是穩定狀態的事實陳述，不是異常。
+3. **不做跨課對照**：不列「你在另外兩課設了什麼」。一列出來就從 Personal 偏好變成跨課管理介面。
+
+**順手修掉的既有缺陷**：非 Seed／非 IT 用戶的 tab 重置條件原本是「activeTab 不是 `personal` 就彈回」，連既有的 Quick Prompt 都待不住（新項目更會中槍）。改成 Personal 分類白名單 `['personal','notification','quickprompt']`。
+
+**區塊小標**：搬進去後分頁本身已叫 Notification，原本的 `SectionTitle 通知` 改為「接收管道」，避免父子同名（與決議 16「Skill 管理／Skill」那種父子同名的已知代價，能避就避）。
+
+**瀏覽器實測 12 項全過**（沿用 vendor + Playwright，`shell.html` 未動），無 console error：左欄新項目在位、個人偏好頁無殘留、適用範圍列與課名膠囊正確（設備／製程／製造／IT 四課都對）、在設備課改 N1 Teams → 切製程課仍是預設 → 改製程課 N1 站內 → 切回設備課改動仍在（per-課互不污染）、IT 課鈴鐺空狀態正常、鈴鐺面板與 deep-link 未受影響、深色模式正常。
+
+受影響 wiki 頁：[notification](entities/modules/notification.md)、index.md。

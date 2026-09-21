@@ -37,7 +37,7 @@
 | [handover](entities/modules/handover.md) | ❌ **已廢除、`HandoverPage.jsx` 已刪（2026-07-25）**；交班改為 SOP 排程產出，Schedule 檢視＋Home 佈告欄觸達；`ShiftHandoverModal` 入口已改掛佈告欄那則 SOP 產出 | — |
 | [knowledge-base](entities/modules/knowledge-base.md) | **知識管理：2026-07-26 從 Skill 管理拆出獨立**（Setting 新 tab）；Vector/RAG/知識圖譜為後續方向 | — |
 | [setting](entities/modules/setting.md) | 後台：Personal + Seed 八 tabs（含新的知識管理）+ IT 區 | 底部 |
-| [notification](entities/modules/notification.md) | 通知中心 v1 已實作（**四類通知**：N1 完成／N2 需人工決定／N3 P1 指派／**N4 執行失敗（2026-08-01 補上）** + 鈴鐺 + Teams 設定），AntD 試點 | Header |
+| [notification](entities/modules/notification.md) | 通知中心 v1 已實作（**四類通知**：N1 完成／N2 需人工決定／N3 P1 指派／**N4 執行失敗（2026-08-01 補上）** + 鈴鐺 + Teams 設定），AntD 試點；**2026-09-21 決議 24**：設定從「個人偏好」區塊升為 **Setting → Personal → Notification 獨立項目**，並補**適用範圍提示列**（課名膠囊 + 「你個人在本課的設定、切課即換一組」）——per-persona 資料本來就成立，缺的是看得見的範圍宣告；平述不警示、不做跨課對照 | Header |
 
 ## Concepts
 
